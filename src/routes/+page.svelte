@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { currentUser } from '$lib/stores.js';
   import { apiCall, getToken, API } from '$lib/api.js';
   import { showToast } from '$lib/stores.js';
@@ -7,7 +7,6 @@
   let user;
   currentUser.subscribe(v => user = v);
 
-  // State
   let allMessages = [];
   let currentFolder = 'alle';
   let selectedMsgId = null;
@@ -39,7 +38,6 @@
     { key: 'geloescht',   icon: '🗑️', label: 'Gelöscht', danger: true },
   ];
 
-  // Lifecycle
   onMount(() => {
     deletedIds = JSON.parse(sessionStorage.getItem('deleted_ids') || '[]');
     loadNachrichten();
@@ -63,9 +61,7 @@
       });
     } catch (e) {
       showToast('Verbindungsfehler', 'error');
-    } finally {
-      loading = false;
-    }
+    } finally { loading = false; }
   }
 
   async function fetchNachrichten() {
@@ -85,21 +81,18 @@
     finally { refreshing = false; }
   }
 
-  // ---- FOLDER LOGIC ----
-  function setFolder(folder) {
-    currentFolder = folder;
-    selectedMsgId = null;
-  }
+  // ---- FOLDER ----
+  function setFolder(folder) { currentFolder = folder; selectedMsgId = null; }
 
   function getFolderMessages(msgs) {
     switch (currentFolder) {
       case 'alle':        return msgs.filter(m => m._folder !== 'archiv' && m._folder !== 'geloescht');
-      case 'mitglieder':  return msgs.filter(m => m.direction !== 'outgoing' && !(m.sender || '').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht');
-      case 'ebay-system': return msgs.filter(m => (m.sender || '').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht');
+      case 'mitglieder':  return msgs.filter(m => m.direction !== 'outgoing' && !(m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht');
+      case 'ebay-system': return msgs.filter(m => (m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht');
       case 'bearbeitet':  return msgs.filter(m => m.direction === 'outgoing');
       case 'archiv':      return msgs.filter(m => m._folder === 'archiv');
       case 'geloescht':   return msgs.filter(m => m._folder === 'geloescht');
-      default:            return msgs;
+      default: return msgs;
     }
   }
 
@@ -107,8 +100,8 @@
     const msgs = allMessages;
     switch (folder) {
       case 'alle':        return msgs.filter(m => m._folder !== 'archiv' && m._folder !== 'geloescht').length;
-      case 'mitglieder':  return new Set(msgs.filter(m => m.direction !== 'outgoing' && !(m.sender || '').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht').map(m => m.sender)).size;
-      case 'ebay-system': return msgs.filter(m => (m.sender || '').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht').length;
+      case 'mitglieder':  return new Set(msgs.filter(m => m.direction !== 'outgoing' && !(m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht').map(m => m.sender)).size;
+      case 'ebay-system': return msgs.filter(m => (m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht').length;
       case 'bearbeitet':  return msgs.filter(m => m.direction === 'outgoing').length;
       case 'archiv':      return msgs.filter(m => m._folder === 'archiv').length;
       case 'geloescht':   return msgs.filter(m => m._folder === 'geloescht').length;
@@ -116,41 +109,33 @@
     }
   }
 
-  // ---- FILTERED MESSAGES ----
   $: filteredMessages = (() => {
     let msgs = getFolderMessages(allMessages);
-    if (currentFolder !== 'bearbeitet') {
-      msgs = msgs.filter(m => m.direction !== 'outgoing');
-    }
+    if (currentFolder !== 'bearbeitet') msgs = msgs.filter(m => m.direction !== 'outgoing');
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      msgs = msgs.filter(m => (m.sender || '').toLowerCase().includes(q) || (m.body || '').toLowerCase().includes(q));
+      msgs = msgs.filter(m => (m.sender||'').toLowerCase().includes(q) || (m.body||'').toLowerCase().includes(q));
     }
-    // Group by buyer
     const seen = new Map();
     msgs.forEach(m => {
-      const isEbay = (m.sender || '').toLowerCase() === 'ebay';
-      if (isEbay) {
-        seen.set('ebay|' + m.id, m);
-      } else {
-        const buyer = m.direction === 'outgoing' ? (m.recipient || '') : (m.sender || '');
+      const isEbay = (m.sender||'').toLowerCase() === 'ebay';
+      if (isEbay) { seen.set('ebay|' + m.id, m); }
+      else {
+        const buyer = m.direction === 'outgoing' ? (m.recipient||'') : (m.sender||'');
         const itemKey = (m.item_id && m.item_id !== 'null') ? m.item_id : '';
         const key = buyer + '|' + itemKey;
-        if (!seen.has(key) || new Date(m.received_at) > new Date(seen.get(key).received_at)) {
-          seen.set(key, m);
-        }
+        if (!seen.has(key) || new Date(m.received_at) > new Date(seen.get(key).received_at)) seen.set(key, m);
       }
     });
     return Array.from(seen.values()).sort((a, b) => new Date(b.received_at) - new Date(a.received_at));
   })();
 
-  // ---- SELECTED MESSAGE ----
   $: selectedMsg = allMessages.find(m => m.id === selectedMsgId);
 
   $: thread = (() => {
     if (!selectedMsg) return [];
-    const isEbaySystem = (selectedMsg.sender || '').toLowerCase() === 'ebay';
-    if (isEbaySystem) return [selectedMsg];
+    const isEbay = (selectedMsg.sender||'').toLowerCase() === 'ebay';
+    if (isEbay) return [selectedMsg];
     const buyerName = selectedMsg.direction === 'outgoing'
       ? (selectedMsg.recipient === 'null' ? null : selectedMsg.recipient)
       : (selectedMsg.sender === 'null' ? null : selectedMsg.sender);
@@ -164,11 +149,9 @@
 
   $: isOutgoingOnly = thread.every(t => t.direction === 'outgoing');
 
-  // ---- THREAD COUNT ----
   function getThreadCount(m) {
-    const buyer = m.direction === 'outgoing' ? (m.recipient || '') : (m.sender || '');
-    const isEbay = (m.sender || '').toLowerCase() === 'ebay';
-    if (isEbay) return 1;
+    const buyer = m.direction === 'outgoing' ? (m.recipient||'') : (m.sender||'');
+    if ((m.sender||'').toLowerCase() === 'ebay') return 1;
     return allMessages.filter(t => {
       const tb = t.direction === 'outgoing' ? (t.recipient === 'null' ? null : t.recipient) : (t.sender === 'null' ? null : t.sender);
       return tb === buyer;
@@ -185,19 +168,16 @@
 
   $: if (selectedMsg) {
     replyText = (selectedMsg.status === 'gesendet' || selectedMsg._sent_reply) ? '' : (selectedMsg.ai_reply || '');
-    reviseOpen = false;
-    reviseInput = '';
+    reviseOpen = false; reviseInput = '';
   }
 
   async function generateKiReply() {
     if (!selectedMsg) return;
-    kiGenerating = true;
-    replyText = '⏳ KI generiert...';
+    kiGenerating = true; replyText = '⏳ KI generiert...';
     try {
       const token = getToken();
       const res = await fetch(API + '/ki-antwort', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: selectedMsg.id, body: selectedMsg.body, user_id: user?.id, ebay_username: user?.ebay_user_id })
       });
       const data = await res.json();
@@ -206,14 +186,9 @@
         const msg = allMessages.find(m => m.id === selectedMsg.id);
         if (msg) msg.ai_reply = data.reply;
         showToast('KI-Antwort generiert ✓', 'success');
-      } else {
-        replyText = '';
-        showToast('KI: keine Antwort', 'error');
-      }
-    } catch (e) {
-      replyText = '';
-      showToast('Verbindungsfehler', 'error');
-    } finally { kiGenerating = false; }
+      } else { replyText = ''; showToast('KI: keine Antwort', 'error'); }
+    } catch (e) { replyText = ''; showToast('Verbindungsfehler', 'error'); }
+    finally { kiGenerating = false; }
   }
 
   async function saveReply() {
@@ -237,30 +212,27 @@
       if (data.success) {
         const msg = allMessages.find(m => m.id === selectedMsg.id);
         if (msg) { msg.status = 'gesendet'; msg.ai_reply = cleaned; msg._sent_reply = true; }
-        allMessages = [...allMessages];
-        replyText = '';
+        allMessages = [...allMessages]; replyText = '';
         showToast('Antwort gesendet ✓', 'success');
-      } else showToast('Fehler: ' + (data.message || ''), 'error');
+      } else showToast('Fehler: ' + (data.message||''), 'error');
     } catch (e) { showToast('Verbindungsfehler', 'error'); }
   }
 
   async function moveMessage(targetFolder) {
     if (!selectedMsg) return;
     showMoveModal = false;
-    const statusMap = { alle: 'posteingang', 'ebay-system': 'posteingang', bearbeitet: 'bearbeitet', archiv: 'archiv', geloescht: 'geloescht' };
+    const statusMap = { alle: 'posteingang', archiv: 'archiv', geloescht: 'geloescht' };
     try {
       const data = await apiCall('/nachricht-verschieben', { id: selectedMsg.id, status: statusMap[targetFolder] || targetFolder, user_id: user?.id });
       if (data.success) {
-        showToast('Verschoben: ' + (folderLabels[targetFolder] || targetFolder) + ' ✓', 'success');
-        selectedMsgId = null;
-        await loadNachrichten();
+        showToast('Verschoben: ' + (folderLabels[targetFolder]||targetFolder) + ' ✓', 'success');
+        selectedMsgId = null; await loadNachrichten();
       } else showToast('Fehler beim Verschieben', 'error');
     } catch (e) { showToast('Fehler beim Verschieben', 'error'); }
   }
 
   async function deleteMessage() {
-    if (!selectedMsg) return;
-    if (!confirm('Nachricht wirklich löschen?')) return;
+    if (!selectedMsg || !confirm('Nachricht wirklich löschen?')) return;
     try {
       const data = await apiCall('/nachricht-loeschen', { id: selectedMsg.id, user_id: user?.id });
       if (data.success) {
@@ -269,7 +241,7 @@
         allMessages = allMessages.filter(m => m.id !== selectedMsg.id);
         selectedMsgId = null;
         showToast('Nachricht gelöscht ✓', 'success');
-      } else showToast('Fehler beim Löschen', 'error');
+      }
     } catch (e) { showToast('Verbindungsfehler', 'error'); }
   }
 
@@ -277,23 +249,14 @@
     if (!selectedMsg || !reviseInput.trim()) return;
     const id = selectedMsg.id;
     const anweisung = reviseInput.trim();
-    reviseInput = '';
-    reviseSending = true;
+    reviseInput = ''; reviseSending = true;
     if (!reviseHistory[id]) reviseHistory[id] = [];
     reviseHistory[id] = [...reviseHistory[id], { role: 'user', content: anweisung }];
     try {
       const token = getToken();
       const res = await fetch(API + '/ki-ueberarbeiten', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kundennachricht: selectedMsg.body || '',
-          aktuelle_antwort: replyText || selectedMsg.ai_reply || '',
-          anweisung,
-          verlauf: reviseHistory[id].slice(0, -1),
-          user_id: user?.id,
-          ebay_username: user?.ebay_user_id
-        })
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kundennachricht: selectedMsg.body||'', aktuelle_antwort: replyText||selectedMsg.ai_reply||'', anweisung, verlauf: reviseHistory[id].slice(0,-1), user_id: user?.id, ebay_username: user?.ebay_user_id })
       });
       const data = await res.json();
       if (data.success && data.reply) {
@@ -302,36 +265,69 @@
         if (msg) msg.ai_reply = data.reply;
         reviseHistory[id] = [...reviseHistory[id], { role: 'assistant', content: '✓ Überarbeitet' }];
         showToast('Antwort überarbeitet ✓', 'success');
-      } else {
-        reviseHistory[id] = [...reviseHistory[id], { role: 'assistant', content: '❌ Fehler' }];
-      }
-    } catch (e) {
-      reviseHistory[id] = [...reviseHistory[id], { role: 'assistant', content: '❌ Verbindungsfehler' }];
-    } finally { reviseSending = false; }
+      } else { reviseHistory[id] = [...reviseHistory[id], { role: 'assistant', content: '❌ Fehler' }]; }
+    } catch (e) { reviseHistory[id] = [...reviseHistory[id], { role: 'assistant', content: '❌ Verbindungsfehler' }]; }
+    finally { reviseSending = false; }
   }
 
-  // ---- UTILITIES ----
-  function escHtml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // ---- RENDER BODY ----
+  // FIX #7: eBay-System als HTML/iframe, Mitglieder als Text
+  function isEbayMsg(msg) { return (msg.sender||'').toLowerCase() === 'ebay'; }
+
+  function renderMemberText(body) {
+    if (!body) return '—';
+    // Extract text from HTML if present
+    if (/<html[\s>]/i.test(body) || /<!DOCTYPE/i.test(body) || /<table/i.test(body)) {
+      // Try UserInputtedText div
+      const utm = body.match(/id=["']UserInputtedText["'][^>]*>([\s\S]*?)<\/div>/i);
+      if (utm && utm[1].replace(/<[^>]*>/g,'').trim().length > 1) {
+        return utm[1].replace(/<[^>]*>/g,'').trim();
+      }
+      // Try "Neue Nachricht:" pattern
+      const nm = body.match(/Neue Nachricht:\s*([\s\S]*?)<\/p>/i);
+      if (nm && nm[1].replace(/<[^>]*>/g,'').trim().length > 3) {
+        return nm[1].replace(/<[^>]*>/g,'').trim();
+      }
+      // Fallback: strip all HTML
+      let t = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
+      t = t.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'');
+      t = t.replace(/<[^>]*>/g,' ');
+      t = t.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+      t = t.replace(/\s{2,}/g,' ').trim();
+      return t.length > 500 ? t.slice(0,500) + '...' : t;
+    }
+    // Plain text
+    let t = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
+    t = t.replace(/<[^>]*>/g,' ');
+    t = t.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&');
+    t = t.replace(/\s{2,}/g,' ').trim();
+    return t || '—';
+  }
+
+  // For eBay system: inject HTML into iframe after mount
+  function setupIframe(node, body) {
+    let htmlContent = body;
+    if (!/<html[\s>]/i.test(body)) {
+      htmlContent = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#333;}</style></head><body>' + body + '</body></html>';
+    }
+    const doc = node.contentDocument || node.contentWindow.document;
+    doc.open(); doc.write(htmlContent); doc.close();
+    setTimeout(() => {
+      try { node.style.height = Math.min(Math.max(doc.body.scrollHeight + 20, 100), 600) + 'px'; } catch(e){}
+    }, 300);
+  }
+
+  function escHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function formatDate(str) {
     if (!str) return '—';
     const d = new Date(str);
-    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
   }
   function stripPreview(str) {
     if (!str) return '';
-    let s = str.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-    s = s.replace(/<[^>]*>/g, ' ');
-    s = s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-    s = s.replace(/\s{2,}/g, ' ').trim();
-    return s.slice(0, 100);
-  }
-  function renderBody(body) {
-    if (!body) return '—';
-    let text = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-    text = text.replace(/<[^>]*>/g, ' ');
-    text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
-    text = text.replace(/\s{2,}/g, ' ').trim();
-    return text || '—';
+    let s = str.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
+    s = s.replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&');
+    return s.replace(/\s{2,}/g,' ').trim().slice(0,100);
   }
 </script>
 
@@ -345,53 +341,46 @@
   </button>
 </div>
 
-<div class="messages-layout">
-  <!-- FOLDER SIDEBAR -->
-  <div class="folder-sidebar">
+<div class="msg-layout">
+  <!-- FOLDERS -->
+  <div class="folders">
     {#each folders as f}
-      {#if f.key.startsWith('_divider')}
-        <div class="folder-divider"></div>
+      {#if f.key.startsWith('_')}
+        <div class="f-divider"></div>
       {:else}
-        <button class="folder-item" class:active={currentFolder === f.key} on:click={() => setFolder(f.key)}>
-          <span class="folder-icon">{f.icon}</span>
-          <span class="folder-name">{f.label}</span>
-          <span class="folder-count" class:active-count={currentFolder === f.key}>{getFolderCount(f.key)}</span>
+        <button class="f-item" class:f-active={currentFolder === f.key} on:click={() => setFolder(f.key)}>
+          <span class="f-icon">{f.icon}</span>
+          <span class="f-name">{f.label}</span>
+          <span class="f-count" class:f-count-active={currentFolder === f.key}>{getFolderCount(f.key)}</span>
         </button>
       {/if}
     {/each}
   </div>
 
-  <!-- MESSAGE LIST -->
-  <div class="messages-list">
-    <div class="list-header">
-      <input class="search-box" placeholder="Suchen..." bind:value={searchQuery} />
-      <span class="msg-count">{filteredMessages.length}</span>
+  <!-- LIST -->
+  <div class="list">
+    <div class="list-top">
+      <input class="list-search" placeholder="Suchen..." bind:value={searchQuery} />
+      <span class="list-num">{filteredMessages.length}</span>
     </div>
-    <div class="messages-scroll">
+    <div class="list-scroll">
       {#if loading}
-        <div class="loading"><div class="spinner"></div> Lade Nachrichten...</div>
+        <div class="loading"><div class="spinner"></div> Lade...</div>
       {:else if filteredMessages.length === 0}
-        <div class="empty-state" style="padding:40px 20px;">
-          <div style="font-size:32px;opacity:0.3;">✉️</div>
-          <p>Keine Nachrichten</p>
-        </div>
+        <div class="empty-state" style="padding:40px 20px;"><p>Keine Nachrichten</p></div>
       {:else}
         {#each filteredMessages as m}
           {@const count = getThreadCount(m)}
-          {@const displayName = m.direction === 'outgoing' ? (m.recipient || m.sender || '—') : (m.sender || '—')}
-          <button class="msg-item" class:active={m.id === selectedMsgId} on:click={() => selectedMsgId = m.id}>
-            <div class="msg-item-top">
-              <div class="msg-sender">
-                {displayName}
-                {#if count > 1}<span class="thread-badge">{count}</span>{/if}
-              </div>
-              <div class="msg-time">{formatDate(m.received_at)}</div>
+          {@const name = m.direction === 'outgoing' ? (m.recipient||m.sender||'—') : (m.sender||'—')}
+          <button class="li" class:li-active={m.id === selectedMsgId} on:click={() => selectedMsgId = m.id}>
+            <div class="li-top">
+              <span class="li-name">{name}{#if count > 1}<span class="li-badge">{count}</span>{/if}</span>
+              <span class="li-time">{formatDate(m.received_at)}</span>
             </div>
-            <div class="msg-preview">{stripPreview(m.body || '')}</div>
-            <div class="msg-tags">
-              <span class="tag tag-{m.status}">{m.status === 'bearbeitet' ? 'gesendet' : m.status}</span>
-              {#if m.ai_category}<span class="tag tag-{m.ai_category.toLowerCase()}">{m.ai_category}</span>{/if}
-              {#if m.is_high_priority}<span class="tag tag-priority">⚡ Priorität</span>{/if}
+            <div class="li-preview">{stripPreview(m.body||'')}</div>
+            <div class="li-tags">
+              <span class="t t-{m.status}">{m.status === 'bearbeitet' ? 'gesendet' : m.status}</span>
+              {#if m.ai_category}<span class="t t-{m.ai_category.toLowerCase()}">{m.ai_category}</span>{/if}
             </div>
           </button>
         {/each}
@@ -400,83 +389,90 @@
   </div>
 
   <!-- DETAIL -->
-  <div class="msg-detail">
+  <div class="detail">
     {#if !selectedMsg}
       <div class="detail-empty">
-        <div class="detail-empty-icon">✉</div>
-        <div class="detail-empty-text">Nachricht auswählen</div>
+        <div style="font-size:48px;opacity:0.3;">✉</div>
+        <div style="font-size:13px;color:var(--text3);">Nachricht auswählen</div>
       </div>
     {:else}
-      <div class="msg-detail-header">
-        <div class="detail-top-row">
-          <div class="detail-sender-block">
-            <div class="msg-detail-sender">{selectedMsg.sender || '—'}</div>
-            <div class="msg-detail-subject">{selectedMsg.subject || ''}</div>
+      <!-- HEADER -->
+      <div class="d-header">
+        <div class="d-header-row">
+          <div style="min-width:0;flex:1;">
+            <div class="d-sender">{selectedMsg.sender||'—'}</div>
+            <div class="d-subject">{selectedMsg.subject||''}</div>
           </div>
-          <div class="detail-actions">
-            <button class="btn-move-msg" on:click={() => showMoveModal = true}>📂 Verschieben</button>
-            <button class="btn-delete-msg" on:click={deleteMessage}>🗑️ Löschen</button>
+          <div class="d-btns">
+            <button class="d-btn" on:click={() => showMoveModal = true}>📂 Verschieben</button>
+            <button class="d-btn d-btn-danger" on:click={deleteMessage}>🗑️ Löschen</button>
           </div>
         </div>
-        <div class="msg-detail-meta">
-          <div class="meta-chip">Status: <span>{selectedMsg.status === 'bearbeitet' ? 'gesendet' : selectedMsg.status}</span></div>
-          {#if selectedMsg.item_id}<div class="meta-chip">Artikel: <span>{selectedMsg.item_id}</span></div>{/if}
-          <div class="meta-chip">Eingang: <span>{formatDate(selectedMsg.received_at)}</span></div>
+        <div class="d-meta">
+          <span class="d-chip">Status: <b>{selectedMsg.status === 'bearbeitet' ? 'gesendet' : selectedMsg.status}</b></span>
+          {#if selectedMsg.item_id && selectedMsg.item_id !== 'null'}<span class="d-chip">Artikel: <b>{selectedMsg.item_id}</b></span>{/if}
+          <span class="d-chip">Eingang: <b>{formatDate(selectedMsg.received_at)}</b></span>
         </div>
       </div>
 
-      <div class="msg-detail-body">
+      <!-- THREAD BODY (scrollable) -->
+      <div class="d-body">
         {#each thread as t}
           {@const isOut = t.direction === 'outgoing'}
-          {@const isEbay = (t.sender || '').toLowerCase() === 'ebay'}
+          {@const isEbay = (t.sender||'').toLowerCase() === 'ebay'}
           <div class="bubble-label">
             {isOut ? '✅' : isEbay ? '🔔' : '✉️'}
-            {isOut ? (user?.ebay_user_id || 'Shop') : t.sender || '—'} · {formatDate(t.received_at)}
+            {isOut ? (user?.ebay_user_id||'Shop') : (t.sender||'—')} · {formatDate(t.received_at)}
           </div>
-          <div class="bubble" class:bubble-sent={isOut}>
-            {renderBody(t.body || '')}
-          </div>
+          {#if isEbay && (/<html[\s>]/i.test(t.body||'') || /<!DOCTYPE/i.test(t.body||'') || /<table/i.test(t.body||''))}
+            <div class="bubble">
+              <iframe class="ebay-iframe" use:setupIframe={t.body||''} sandbox="allow-same-origin" title="eBay"></iframe>
+            </div>
+          {:else if isEbay}
+            <div class="bubble">{@html escHtml(t.body||'—').replace(/\n/g,'<br>')}</div>
+          {:else}
+            <div class="bubble" class:bubble-sent={isOut}>
+              {renderMemberText(t.body||'')}
+            </div>
+          {/if}
           {#if !isOut && t.ai_reply && (t.status === 'gesendet' || t.status === 'bearbeitet')}
-            <div class="bubble-label">✅ {user?.ebay_user_id || 'Shop'} (KI) · {formatDate(t.updated_at || t.received_at)}</div>
-            <div class="bubble bubble-sent">{renderBody(t.ai_reply)}</div>
+            <div class="bubble-label">✅ {user?.ebay_user_id||'Shop'} (KI) · {formatDate(t.updated_at||t.received_at)}</div>
+            <div class="bubble bubble-sent">{renderMemberText(t.ai_reply)}</div>
           {/if}
         {/each}
       </div>
 
+      <!-- AI SECTION (fixed bottom) -->
       {#if !isOutgoingOnly}
-        <div class="ai-section">
-          <div class="ai-section-header">
-            <div class="ai-label"><div class="ai-dot"></div> KI-Antwort</div>
+        <div class="d-ai">
+          <div class="d-ai-top">
+            <div class="d-ai-label"><span class="d-ai-dot"></span> KI-ANTWORT</div>
             <div style="display:flex;gap:8px;">
-              <button class="btn-revise" on:click={() => reviseOpen = !reviseOpen}>✏️ Überarbeiten</button>
-              <button class="btn-ki-generate" on:click={generateKiReply} disabled={kiGenerating}>
-                {kiGenerating ? '⏳ Generiere...' : '✨ KI generieren'}
+              <button class="btn-rev" on:click={() => reviseOpen = !reviseOpen}>✏️ Überarbeiten</button>
+              <button class="btn-ki" on:click={generateKiReply} disabled={kiGenerating}>
+                {kiGenerating ? '⏳ ...' : '✨ KI generieren'}
               </button>
             </div>
           </div>
-          <textarea class="ai-textarea" bind:value={replyText} placeholder="KI-Antwort bearbeiten..."></textarea>
-
+          <textarea class="d-ai-text" bind:value={replyText} placeholder="KI-Antwort bearbeiten..." rows="5"></textarea>
           {#if reviseOpen}
-            <div class="chat-revise-box open">
-              <div class="chat-revise-messages">
+            <div class="rev-box">
+              <div class="rev-msgs">
                 {#if reviseHistory[selectedMsg?.id]}
                   {#each reviseHistory[selectedMsg.id] as msg}
-                    <div class={msg.role === 'user' ? 'chat-msg-user' : 'chat-msg-ki'}>{msg.content}</div>
+                    <div class={msg.role === 'user' ? 'rev-user' : 'rev-ki'}>{msg.content}</div>
                   {/each}
                 {/if}
               </div>
-              <div class="chat-revise-input-row">
-                <input class="chat-revise-input" bind:value={reviseInput}
-                  placeholder="z.B. Mach die Antwort kürzer..."
-                  on:keydown={(e) => e.key === 'Enter' && sendRevise()} />
-                <button class="chat-revise-send" on:click={sendRevise} disabled={reviseSending}>Senden</button>
+              <div class="rev-input-row">
+                <input class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer..." on:keydown={(e) => e.key === 'Enter' && sendRevise()} />
+                <button class="rev-send" on:click={sendRevise} disabled={reviseSending}>Senden</button>
               </div>
             </div>
           {/if}
-
-          <div class="reply-actions">
-            <button class="btn-save-reply" on:click={saveReply}>💾 Speichern</button>
-            <button class="btn-send-reply" on:click={sendReply}>→ An eBay senden</button>
+          <div class="d-ai-actions">
+            <button class="d-ai-save" on:click={saveReply}>💾 Speichern</button>
+            <button class="d-ai-send" on:click={sendReply}>→ An eBay senden</button>
           </div>
         </div>
       {/if}
@@ -484,131 +480,132 @@
   </div>
 </div>
 
-<!-- MOVE MODAL -->
+<!-- FIX #1: MODAL als fixed overlay mit z-index -->
 {#if showMoveModal}
-  <div class="modal-overlay" on:click|self={() => showMoveModal = false}>
-    <div class="modal-box" style="max-width:340px;">
-      <div class="modal-title">📂 Nachricht verschieben</div>
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <div class="move-overlay" on:click|self={() => showMoveModal = false}>
+    <div class="move-box">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px;">📂 Nachricht verschieben</div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:20px;">Zielordner auswählen</p>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        {#each moveFolders as f}
-          <button class="move-folder-btn" class:move-folder-btn--danger={f.danger} on:click={() => moveMessage(f.key)}>
-            <span style="font-size:20px">{f.icon}</span> {f.label}
-          </button>
-        {/each}
-      </div>
-      <button class="btn btn-ghost" style="width:100%;margin-top:12px;" on:click={() => showMoveModal = false}>Abbrechen</button>
+      {#each moveFolders as f}
+        <button class="move-btn" class:move-btn-danger={f.danger} on:click={() => moveMessage(f.key)}>
+          <span style="font-size:20px;">{f.icon}</span> {f.label}
+        </button>
+      {/each}
+      <button class="move-cancel" on:click={() => showMoveModal = false}>Abbrechen</button>
     </div>
   </div>
 {/if}
 
 <style>
-  /* LAYOUT */
-  .messages-layout { display: flex; height: calc(100vh - 130px); min-height: 500px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-top: 16px; }
+  /* FIX #2/#3: Layout fills viewport width */
+  .msg-layout {
+    display: flex; height: calc(100vh - 130px); min-height: 400px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden; margin-top: 16px;
+  }
 
-  /* FOLDER SIDEBAR */
-  .folder-sidebar { width: 190px; min-width: 150px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--surface2); display: flex; flex-direction: column; padding: 10px 8px; gap: 2px; overflow-y: auto; }
-  .folder-item { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s; font-size: 13px; font-weight: 500; color: var(--text2); border: none; background: none; font-family: var(--font); width: 100%; text-align: left; }
-  .folder-item:hover { background: var(--border); color: var(--text); }
-  .folder-item.active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
-  :global([data-theme="dark"]) .folder-item.active { background: rgba(255,255,255,0.08); color: #fff; }
-  .folder-icon { font-size: 14px; flex-shrink: 0; width: 18px; text-align: center; }
-  .folder-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .folder-count { background: var(--border); color: var(--text2); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
-  .active-count { background: var(--primary); color: white; }
-  :global([data-theme="dark"]) .active-count { background: rgba(255,255,255,0.2); color: #fff; }
-  .folder-divider { height: 1px; background: var(--border); margin: 5px 4px; }
+  /* FOLDERS */
+  .folders { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--surface2); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .f-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); border: none; background: none; font-family: var(--font); width: 100%; text-align: left; transition: all 0.12s; }
+  .f-item:hover { background: var(--border); color: var(--text); }
+  .f-active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
+  :global([data-theme="dark"]) .f-active { background: rgba(255,255,255,0.08); color: #fff; }
+  .f-icon { font-size: 14px; width: 18px; text-align: center; }
+  .f-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .f-count { background: var(--border); color: var(--text2); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+  .f-count-active { background: var(--primary); color: white; }
+  :global([data-theme="dark"]) .f-count-active { background: rgba(255,255,255,0.2); color: #fff; }
+  .f-divider { height: 1px; background: var(--border); margin: 4px; }
 
-  /* MESSAGE LIST */
-  .messages-list { width: 320px; min-width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
-  .list-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-  .search-box { flex: 1; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
-  .search-box:focus { border-color: var(--primary); }
-  .msg-count { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
-  .messages-scroll { flex: 1; overflow-y: auto; }
+  /* LIST */
+  .list { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .list-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .list-search { flex: 1; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
+  .list-search:focus { border-color: var(--primary); }
+  .list-num { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
+  .list-scroll { flex: 1; overflow-y: auto; }
 
-  /* MSG ITEMS */
-  .msg-item { display: block; width: 100%; padding: 14px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; background: none; border-left: 3px solid transparent; text-align: left; font-family: var(--font); }
-  .msg-item:hover { background: var(--surface2); }
-  .msg-item.active { background: var(--primary-light); border-left-color: var(--primary); }
-  :global([data-theme="dark"]) .msg-item.active { background: rgba(255,255,255,0.05); border-left-color: #fff; }
-  .msg-item-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .msg-sender { font-size: 13px; font-weight: 700; color: var(--text); }
-  .msg-time { font-size: 10px; color: var(--text3); flex-shrink: 0; }
-  .msg-preview { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .msg-tags { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
-  .thread-badge { font-size: 10px; background: var(--primary); color: white; border-radius: 10px; padding: 1px 6px; margin-left: 4px; }
-  :global([data-theme="dark"]) .thread-badge { background: rgba(255,255,255,0.2); }
-  .tag { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
-  .tag-neu { background: rgba(15,46,147,0.08); color: var(--primary); }
-  .tag-gesendet, .tag-bearbeitet { background: #f0fdf4; color: #16a34a; }
-  .tag-frage { background: #f5f3ff; color: #7c3aed; }
-  .tag-beschwerde, .tag-rueckgabe, .tag-priority { background: #fef2f2; color: #dc2626; }
-  .tag-bestellung { background: #fffbeb; color: #d97706; }
-  :global([data-theme="dark"]) .tag-neu { background: rgba(15,46,147,0.2); color: #93a8e8; }
-  :global([data-theme="dark"]) .tag-gesendet, :global([data-theme="dark"]) .tag-bearbeitet { background: rgba(34,197,94,0.15); color: #86efac; }
+  /* LIST ITEMS */
+  .li { display: block; width: 100%; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; background: none; border-left: 3px solid transparent; text-align: left; font-family: var(--font); transition: background 0.1s; }
+  .li:hover { background: var(--surface2); }
+  .li-active { background: var(--primary-light); border-left-color: var(--primary); }
+  :global([data-theme="dark"]) .li-active { background: rgba(255,255,255,0.05); border-left-color: #fff; }
+  .li-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+  .li-name { font-size: 13px; font-weight: 700; color: var(--text); }
+  .li-time { font-size: 10px; color: var(--text3); }
+  .li-preview { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .li-tags { display: flex; gap: 4px; margin-top: 5px; }
+  .li-badge { font-size: 10px; background: var(--primary); color: white; border-radius: 10px; padding: 1px 6px; margin-left: 4px; }
+  .t { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .t-neu { background: rgba(15,46,147,0.08); color: var(--primary); }
+  .t-gesendet, .t-bearbeitet { background: #f0fdf4; color: #16a34a; }
+  .t-new { background: rgba(15,46,147,0.08); color: var(--primary); }
+  :global([data-theme="dark"]) .t-neu, :global([data-theme="dark"]) .t-new { background: rgba(15,46,147,0.2); color: #93a8e8; }
+  :global([data-theme="dark"]) .t-gesendet, :global([data-theme="dark"]) .t-bearbeitet { background: rgba(34,197,94,0.15); color: #86efac; }
 
-  /* DETAIL */
-  .msg-detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
-  .detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text3); }
-  .detail-empty-icon { font-size: 48px; opacity: 0.35; }
-  .detail-empty-text { font-size: 13px; }
-  .msg-detail-header { padding: 18px 26px; border-bottom: 1px solid var(--border); }
-  .detail-top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-  .detail-sender-block { min-width: 0; }
-  .msg-detail-sender { font-size: 17px; font-weight: 800; }
-  .msg-detail-subject { font-size: 13px; color: var(--text2); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .detail-actions { display: flex; gap: 6px; flex-shrink: 0; }
-  .msg-detail-meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  .meta-chip { font-size: 11px; font-weight: 500; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; }
-  .meta-chip span { color: var(--text); font-weight: 600; }
-  .msg-detail-body { flex: 1; overflow-y: auto; padding: 22px 26px; min-height: 0; }
+  /* DETAIL - FIX #3: flex-1 fills remaining width */
+  .detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+  .detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+  .d-header { padding: 16px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .d-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .d-sender { font-size: 17px; font-weight: 800; }
+  .d-subject { font-size: 13px; color: var(--text2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-btns { display: flex; gap: 6px; flex-shrink: 0; }
+  .d-btn { background: var(--surface2); border: 1.5px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+  .d-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .d-btn-danger { border-color: #fca5a5; color: var(--danger); }
+  .d-btn-danger:hover { background: #fef2f2; border-color: var(--danger); }
+  :global([data-theme="dark"]) .d-btn-danger:hover { background: rgba(239,68,68,0.1); }
+  .d-meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .d-chip { font-size: 11px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; }
+  .d-chip b { color: var(--text); }
+
+  /* FIX #5: no black border on body */
+  .d-body { flex: 1; overflow-y: auto; padding: 20px 24px; min-height: 0; }
   .bubble-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
-  .bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 22px; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px; }
+  .bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px; }
   .bubble-sent { border-color: #86efac; background: rgba(34,197,94,0.05); }
   :global([data-theme="dark"]) .bubble-sent { background: rgba(34,197,94,0.08); }
 
-  /* AI SECTION */
-  .ai-section { padding: 18px 26px; border-top: 1px solid var(--border); flex-shrink: 0; }
-  .ai-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
-  .ai-dot { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: pulse 2s infinite; }
+  /* FIX #7: eBay iframe */
+  .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
+
+  /* AI SECTION - FIX #6: larger textarea */
+  .d-ai { padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .d-ai-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .d-ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  .d-ai-dot { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
-  .btn-ki-generate { background: linear-gradient(135deg, #6c63ff, #a855f7); border: none; color: white; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-  .btn-ki-generate:hover { opacity: 0.85; }
-  .btn-ki-generate:disabled { opacity: 0.5; cursor: not-allowed; }
-  .ai-textarea { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 13px 15px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: vertical; min-height: 100px; outline: none; }
-  .ai-textarea:focus { border-color: var(--primary); }
-  .reply-actions { display: flex; gap: 10px; margin-top: 12px; }
-  .btn-save-reply { background: var(--surface); border: 1.5px solid var(--border); border-radius: 9px; padding: 10px 18px; color: var(--text2); font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-  .btn-save-reply:hover { border-color: var(--primary); color: var(--primary); }
-  .btn-send-reply { flex: 1; background: var(--primary); border: none; border-radius: 9px; padding: 10px; color: white; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; }
-  .btn-send-reply:hover { background: var(--primary-dark); }
-  .btn-revise { background: var(--surface); border: 1.5px solid #a855f7; border-radius: 9px; padding: 6px 14px; color: #a855f7; font-size: 12px; font-weight: 600; cursor: pointer; }
-  .btn-revise:hover { background: #f5f3ff; }
-  :global([data-theme="dark"]) .btn-revise:hover { background: rgba(168,85,247,0.1); }
+  .btn-ki { background: linear-gradient(135deg, #6c63ff, #a855f7); border: none; color: white; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .btn-ki:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-rev { background: var(--surface); border: 1.5px solid #a855f7; border-radius: 8px; padding: 6px 14px; color: #a855f7; font-size: 12px; font-weight: 600; cursor: pointer; }
+  /* FIX #6: min-height 150px statt 100px */
+  .d-ai-text { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: vertical; min-height: 150px; outline: none; }
+  .d-ai-text:focus { border-color: var(--primary); }
+  .d-ai-actions { display: flex; gap: 10px; margin-top: 10px; }
+  .d-ai-save { background: var(--surface); border: 1.5px solid var(--border); border-radius: 9px; padding: 10px 18px; color: var(--text2); font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .d-ai-save:hover { border-color: var(--primary); color: var(--primary); }
+  .d-ai-send { flex: 1; background: var(--primary); border: none; border-radius: 9px; padding: 10px; color: white; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; }
+  .d-ai-send:hover { background: var(--primary-dark); }
 
-  /* REVISE CHAT */
-  .chat-revise-box { margin-top: 10px; border: 1.5px solid #a855f7; border-radius: 12px; overflow: hidden; background: var(--surface2); }
-  .chat-revise-messages { max-height: 200px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .chat-msg-user { align-self: flex-end; background: #a855f7; color: white; border-radius: 10px 10px 2px 10px; padding: 8px 12px; font-size: 12px; max-width: 80%; }
-  .chat-msg-ki { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 10px 2px; padding: 8px 12px; font-size: 12px; max-width: 80%; color: var(--text2); }
-  .chat-revise-input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
-  .chat-revise-input { flex: 1; border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 12px; font-family: var(--font); font-size: 12px; color: var(--text); background: var(--surface2); outline: none; }
-  .chat-revise-input:focus { border-color: #a855f7; }
-  .chat-revise-send { background: #a855f7; border: none; border-radius: 8px; padding: 8px 14px; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
-  .chat-revise-send:disabled { opacity: 0.5; }
+  /* FIX #6: Revise box larger */
+  .rev-box { margin-top: 10px; border: 1.5px solid #a855f7; border-radius: 12px; overflow: hidden; background: var(--surface2); }
+  .rev-msgs { max-height: 200px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .rev-user { align-self: flex-end; background: #a855f7; color: white; border-radius: 10px 10px 2px 10px; padding: 8px 12px; font-size: 12px; max-width: 80%; }
+  .rev-ki { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 10px 2px; padding: 8px 12px; font-size: 12px; max-width: 80%; color: var(--text2); }
+  .rev-input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
+  .rev-input { flex: 1; border: 1.5px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; }
+  .rev-input:focus { border-color: #a855f7; }
+  .rev-send { background: #a855f7; border: none; border-radius: 8px; padding: 10px 16px; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .rev-send:disabled { opacity: 0.5; }
 
-  /* MOVE/DELETE BTNS */
-  .btn-move-msg { background: var(--surface); border: 1.5px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); }
-  .btn-move-msg:hover { background: var(--surface2); }
-  .btn-delete-msg { background: none; border: 1.5px solid #fca5a5; color: var(--danger); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); }
-  .btn-delete-msg:hover { background: #fef2f2; }
-  :global([data-theme="dark"]) .btn-delete-msg:hover { background: rgba(239,68,68,0.1); }
-
-  /* MOVE MODAL */
-  .move-folder-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
-  .move-folder-btn:hover { background: var(--surface2); border-color: var(--primary); color: var(--primary); }
-  .move-folder-btn--danger { border-color: #fca5a5; color: var(--danger); }
-  .move-folder-btn--danger:hover { background: rgba(239,68,68,0.07); border-color: var(--danger); }
+  /* FIX #1: Modal as FIXED overlay */
+  .move-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+  .move-box { background: var(--surface); border-radius: 16px; padding: 28px 24px; max-width: 340px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 8px; }
+  .move-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+  .move-btn:hover { background: var(--surface2); border-color: var(--primary); color: var(--primary); }
+  .move-btn-danger { border-color: #fca5a5; color: var(--danger); }
+  .move-btn-danger:hover { background: rgba(239,68,68,0.07); border-color: var(--danger); color: var(--danger); }
+  .move-cancel { margin-top: 8px; width: 100%; padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: none; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
 </style>
