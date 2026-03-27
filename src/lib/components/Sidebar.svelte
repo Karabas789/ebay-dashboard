@@ -18,10 +18,7 @@
   ];
 
   const settingsNav = [
-    { path: '/einstellungen/firma',    icon: '🏢', label: 'Firmendaten' },
-    { path: '/einstellungen/nummern',  icon: '🔢', label: 'Nummerierung' },
-    { path: '/einstellungen/smtp',     icon: '📧', label: 'E-Mail / SMTP' },
-    { path: '/einstellungen/ki',       icon: '🤖', label: 'KI-Konfiguration' },
+    { path: '/einstellungen', icon: '⚙️', label: 'Einstellungen' },
   ];
 
   function toggleTheme() {
@@ -59,10 +56,9 @@
     {/each}
   </nav>
 
-  <nav class="sidebar-nav">
-    <div class="nav-section-label">EINSTELLUNGEN</div>
+  <nav class="sidebar-nav sidebar-nav-bottom">
     {#each settingsNav as item}
-      <a href={item.path} class="nav-item" class:active={currentPath === item.path}>
+      <a href={item.path} class="nav-item" class:active={currentPath.startsWith('/einstellungen')}>
         <span class="nav-icon">{item.icon}</span>
         <span class="nav-label">{item.label}</span>
       </a>
@@ -108,6 +104,7 @@
     flex: 0 0 auto; padding: 12px 10px 4px;
     display: flex; flex-direction: column; gap: 2px;
   }
+  .sidebar-nav-bottom { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); }
   .nav-section-label {
     font-size: 10px; font-weight: 700; color: var(--text3);
     letter-spacing: 1.5px; padding: 8px 12px 6px; text-transform: uppercase;
@@ -118,11 +115,20 @@
     text-decoration: none; transition: all 0.12s; cursor: pointer;
   }
   .nav-item:hover { background: var(--surface2); color: var(--text); }
-  .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 700; }
+  .nav-item.active {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 700;
+  }
+  :global([data-theme="dark"]) .nav-item.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-weight: 700;
+  }
   .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
   .nav-label { flex: 1; }
   .sidebar-footer {
-    margin-top: auto; padding: 12px 14px 16px; border-top: 1px solid var(--border);
+    padding: 12px 14px 16px; border-top: 1px solid var(--border);
   }
   .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 6px; }
   .user-avatar {

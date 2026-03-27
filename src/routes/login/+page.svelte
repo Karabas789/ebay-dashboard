@@ -68,11 +68,11 @@
 <style>
   .login-screen {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
+    background: linear-gradient(135deg, #071A52 0%, #0F2E93 50%, #1a3fad 100%);
   }
   .login-card {
     background: var(--surface); border-radius: 20px; padding: 48px 40px;
-    width: 420px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    width: 420px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   }
   .login-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .login-logo { width: 36px; height: 36px; border-radius: 8px; }
