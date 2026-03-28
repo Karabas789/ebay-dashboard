@@ -57,5 +57,5 @@
     flex: 1; margin-left: var(--sidebar-width);
     overflow-y: auto; overflow-x: hidden; height: 100vh;
   }
-  .page-container { padding: 28px 32px; max-width: 1400px; }
+  .page-container { padding: 28px 32px; }
 </style>

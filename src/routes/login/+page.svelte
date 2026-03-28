@@ -68,19 +68,19 @@
 <style>
   .login-screen {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, #071A52 0%, #0F2E93 50%, #1a3fad 100%);
+    background: linear-gradient(135deg, #0a0a1a 0%, #1a2560 50%, #2D43A8 100%);
   }
   .login-card {
-    background: var(--surface); border-radius: 20px; padding: 48px 40px;
+    background: white; border-radius: 20px; padding: 48px 40px;
     width: 420px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   }
   .login-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .login-logo { width: 36px; height: 36px; border-radius: 8px; }
-  .login-brand { font-size: 12px; font-weight: 600; color: var(--text2); letter-spacing: 2px; text-transform: uppercase; }
-  .login-title { font-size: 28px; font-weight: 800; margin: 16px 0 6px; }
-  .login-subtitle { font-size: 13px; color: var(--text2); margin-bottom: 32px; }
+  .login-brand { font-size: 12px; font-weight: 600; color: #737373; letter-spacing: 2px; text-transform: uppercase; }
+  .login-title { font-size: 28px; font-weight: 800; margin: 16px 0 6px; color: #171717; }
+  .login-subtitle { font-size: 13px; color: #737373; margin-bottom: 32px; }
   .field { margin-bottom: 16px; }
   .login-btn { width: 100%; justify-content: center; padding: 13px; font-size: 15px; margin-top: 8px; }
   .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-  .error { color: var(--danger); font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
+  .error { color: #ef4444; font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
 </style>

@@ -17,10 +17,6 @@
     { path: '/rechnungen',    icon: '🧾', label: 'Rechnungen' },
   ];
 
-  const settingsNav = [
-    { path: '/einstellungen', icon: '⚙️', label: 'Einstellungen' },
-  ];
-
   function toggleTheme() {
     const next = isDark ? 'light' : 'dark';
     theme.set(next);
@@ -47,7 +43,6 @@
   </div>
 
   <nav class="sidebar-nav">
-    <div class="nav-section-label">HAUPTMENÜ</div>
     {#each nav as item}
       <a href={item.path} class="nav-item" class:active={currentPath === item.path || (item.path !== '/' && currentPath.startsWith(item.path))}>
         <span class="nav-icon">{item.icon}</span>
@@ -56,14 +51,12 @@
     {/each}
   </nav>
 
-  <nav class="sidebar-nav sidebar-nav-bottom">
-    {#each settingsNav as item}
-      <a href={item.path} class="nav-item" class:active={currentPath.startsWith('/einstellungen')}>
-        <span class="nav-icon">{item.icon}</span>
-        <span class="nav-label">{item.label}</span>
-      </a>
-    {/each}
-  </nav>
+  <div class="sidebar-bottom">
+    <a href="/einstellungen" class="nav-item" class:active={currentPath.startsWith('/einstellungen')}>
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Einstellungen</span>
+    </a>
+  </div>
 
   <div class="sidebar-footer">
     <div class="sidebar-user">
@@ -90,7 +83,7 @@
   .sidebar {
     width: var(--sidebar-width); height: 100vh; background: var(--surface);
     border-right: 1px solid var(--border); display: flex; flex-direction: column;
-    position: fixed; left: 0; top: 0; z-index: 50; overflow: hidden;
+    position: fixed; left: 0; top: 0; z-index: 50;
   }
   .sidebar-logo {
     display: flex; align-items: center; gap: 12px;
@@ -101,30 +94,19 @@
   .logo-title { font-size: 15px; font-weight: 800; color: var(--text); }
   .logo-version { font-size: 11px; color: var(--text3); font-weight: 500; }
   .sidebar-nav {
-    flex: 0 0 auto; padding: 12px 10px 4px;
+    flex: 1; padding: 12px 10px;
     display: flex; flex-direction: column; gap: 2px;
   }
-  .sidebar-nav-bottom { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--border); }
-  .nav-section-label {
-    font-size: 10px; font-weight: 700; color: var(--text3);
-    letter-spacing: 1.5px; padding: 8px 12px 6px; text-transform: uppercase;
+  .sidebar-bottom {
+    padding: 0 10px 8px; border-top: 1px solid var(--border); padding-top: 8px;
   }
   .nav-item {
     display: flex; align-items: center; gap: 12px; padding: 10px 14px;
     border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--text2);
-    text-decoration: none; transition: all 0.12s; cursor: pointer;
+    text-decoration: none; transition: all 0.1s; cursor: pointer;
   }
   .nav-item:hover { background: var(--surface2); color: var(--text); }
-  .nav-item.active {
-    background: var(--primary-light);
-    color: var(--primary);
-    font-weight: 700;
-  }
-  :global([data-theme="dark"]) .nav-item.active {
-    background: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
-    font-weight: 700;
-  }
+  .nav-item.active { background: var(--surface2); color: var(--text); font-weight: 700; }
   .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
   .nav-label { flex: 1; }
   .sidebar-footer {
@@ -133,8 +115,8 @@
   .sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 6px; }
   .user-avatar {
     width: 34px; height: 34px; border-radius: 10px;
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    color: white; display: flex; align-items: center; justify-content: center;
+    background: #3777CF; color: white;
+    display: flex; align-items: center; justify-content: center;
     font-size: 14px; font-weight: 800; flex-shrink: 0;
   }
   .user-info { display: flex; flex-direction: column; min-width: 0; }
@@ -150,7 +132,7 @@
   .sidebar-action {
     flex: 1; display: flex; align-items: center; justify-content: center;
     padding: 8px; border-radius: 8px; font-size: 16px; background: var(--surface2);
-    border: none; cursor: pointer; transition: all 0.15s;
+    border: 1px solid var(--border); cursor: pointer; transition: all 0.15s;
   }
   .sidebar-action:hover { background: var(--border); }
 </style>
