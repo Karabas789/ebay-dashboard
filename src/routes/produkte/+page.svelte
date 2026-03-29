@@ -135,10 +135,22 @@
     error = '';
     try {
       const data = await apiCall('/produkte-laden', {
-        method: 'POST',
-        body: { user_id: $currentUser?.id, ebay_username: $currentUser?.ebay_user_id }
+        user_id: $currentUser?.id,
+        ebay_username: $currentUser?.ebay_user_id
       });
       allProdukte = data.data || [];
+      // Init inline edits for single products
+      const newEdits = {};
+      for (const p of allProdukte) {
+        if (!p.varianten || p.varianten.length === 0) {
+          newEdits[p.id] = {
+            lager: p.lagerbestand ?? 0,
+            ebayMenge: p.min_lagerbestand ?? (p.lagerbestand ?? 0),
+            preis: p.preis ? parseFloat(p.preis).toFixed(2) : '0.00'
+          };
+        }
+      }
+      inlineEdits = newEdits;
     } catch (e) {
       error = 'Verbindungsfehler beim Laden der Produkte';
       console.error(e);
@@ -154,16 +166,13 @@
 
     try {
       const data = await apiCall('/produkte-bestand-update', {
-        method: 'POST',
-        body: {
-          id: productId,
-          lagerbestand: parseInt(edits.lager) || 0,
-          min_lagerbestand: parseInt(edits.ebayMenge) || 0,
-          ebay_menge: parseInt(edits.ebayMenge) || 0,
-          preis: parseFloat(edits.preis) || 0,
-          user_id: $currentUser?.id,
-          ebay_username: $currentUser?.ebay_user_id
-        }
+        id: productId,
+        lagerbestand: parseInt(edits.lager) || 0,
+        min_lagerbestand: parseInt(edits.ebayMenge) || 0,
+        ebay_menge: parseInt(edits.ebayMenge) || 0,
+        preis: parseFloat(edits.preis) || 0,
+        user_id: $currentUser?.id,
+        ebay_username: $currentUser?.ebay_user_id
       });
       if (data.success) {
         showToast('Bestand gespeichert ✓', 'success');
@@ -176,15 +185,13 @@
     }
   }
 
-  // Init inline edits for a product
-  function initInlineEdit(p) {
-    if (!inlineEdits[p.id]) {
-      inlineEdits[p.id] = {
-        lager: p.lagerbestand ?? 0,
-        ebayMenge: p.min_lagerbestand ?? (p.lagerbestand ?? 0),
-        preis: p.preis ? parseFloat(p.preis).toFixed(2) : '0.00'
-      };
-    }
+  // Get inline edit values for a product (read-only, no state mutation)
+  function getInlineEdit(p) {
+    return inlineEdits[p.id] || {
+      lager: p.lagerbestand ?? 0,
+      ebayMenge: p.min_lagerbestand ?? (p.lagerbestand ?? 0),
+      preis: p.preis ? parseFloat(p.preis).toFixed(2) : '0.00'
+    };
   }
 
   // ─── Varianten Modal ───────────────────────────────────
@@ -212,13 +219,10 @@
       const inputs = variantenInputs[v.id] || {};
       try {
         const data = await apiCall('/variante-bestand-update', {
-          method: 'POST',
-          body: {
-            id: v.id,
-            lagerbestand: parseInt(inputs.lager) || 0,
-            preis: parseFloat(inputs.preis) || 0,
-            ebay_menge: parseInt(inputs.ebayMenge) || 0
-          }
+          id: v.id,
+          lagerbestand: parseInt(inputs.lager) || 0,
+          preis: parseFloat(inputs.preis) || 0,
+          ebay_menge: parseInt(inputs.ebayMenge) || 0
         });
         if (data.success && data.variante?.id) {
           v.lagerbestand = parseInt(inputs.lager) || 0;
@@ -273,14 +277,11 @@
     }
     try {
       const data = await apiCall('/produkte-bestand-update', {
-        method: 'POST',
-        body: {
-          id: editProduct?.id || null,
-          ...productForm,
-          preis: parseFloat(productForm.preis) || 0,
-          lagerbestand: parseInt(productForm.lagerbestand) || 0,
-          user_id: $currentUser?.id
-        }
+        id: editProduct?.id || null,
+        ...productForm,
+        preis: parseFloat(productForm.preis) || 0,
+        lagerbestand: parseInt(productForm.lagerbestand) || 0,
+        user_id: $currentUser?.id
       });
       if (data.success) {
         showToast(editProduct ? 'Produkt aktualisiert ✓' : 'Produkt gespeichert ✓', 'success');
@@ -300,14 +301,11 @@
     showToast('📦 Produkte werden importiert...', 'success');
     try {
       const data = await apiCall('/ebay-produkte-importieren', {
-        method: 'POST',
-        body: {
-          nur_neu: importOptions.nur_neu,
-          update_preis: !importOptions.nur_neu && importOptions.update_preis,
-          update_lager: !importOptions.nur_neu && importOptions.update_lager,
-          update_name: !importOptions.nur_neu && importOptions.update_name,
-          update_bild: !importOptions.nur_neu && importOptions.update_bild
-        }
+        nur_neu: importOptions.nur_neu,
+        update_preis: !importOptions.nur_neu && importOptions.update_preis,
+        update_lager: !importOptions.nur_neu && importOptions.update_lager,
+        update_name: !importOptions.nur_neu && importOptions.update_name,
+        update_bild: !importOptions.nur_neu && importOptions.update_bild
       });
       if (data.success) {
         showToast(`✅ ${data.importiert} Produkte importiert!`, 'success');
@@ -325,13 +323,10 @@
     showToast('🔄 Varianten werden geladen...', 'success');
     try {
       const data = await apiCall('/varianten-importieren', {
-        method: 'POST',
-        body: {
-          nur_neu: variantenImportOptions.nur_neu,
-          update_preis: variantenImportOptions.update_preis,
-          update_lager: variantenImportOptions.update_lager,
-          update_bild: variantenImportOptions.update_bild
-        }
+        nur_neu: variantenImportOptions.nur_neu,
+        update_preis: variantenImportOptions.update_preis,
+        update_lager: variantenImportOptions.update_lager,
+        update_bild: variantenImportOptions.update_bild
       });
       if (data.success) {
         showToast('✅ Varianten importiert!', 'success');
@@ -542,8 +537,8 @@
 
       try {
         const d = await apiCall('/varianten-sku-bulk', {
-          method: 'POST',
-          body: { ebay_artikel_id: gruppe.ebay_artikel_id, varianten: gruppe.varianten }
+          ebay_artikel_id: gruppe.ebay_artikel_id,
+          varianten: gruppe.varianten
         });
         if (d.success) {
           for (const v of gruppe.varianten) {
@@ -674,7 +669,7 @@
     {@const lagerColor = getStockColor(lager)}
     {@const statusLabel = getStockLabel(lager)}
     {@const bild = getProductImage(p)}
-    {@const _ = initInlineEdit(p)}
+    {@const edit = getInlineEdit(p)}
     <div class="product-card">
       {#if bild}
         <img src={bild} alt="" class="product-image" onerror={(e) => e.target.style.display = 'none'} />
@@ -697,6 +692,7 @@
       </div>
 
       <div class="product-actions">
+        {#if inlineEdits[p.id]}
         <div class="inline-edit-grid">
           <div class="inline-field">
             <label class="inline-label">Lager neu</label>
@@ -712,6 +708,7 @@
           </div>
           <button class="btn-save-inline" onclick={() => saveBestand(p.id)} title="Speichern">💾</button>
         </div>
+        {/if}
       </div>
     </div>
   {/each}
