@@ -43,7 +43,6 @@
     loadNachrichten();
   });
 
-  // ---- DATA ----
   async function loadNachrichten() {
     loading = true;
     try {
@@ -81,7 +80,6 @@
     finally { refreshing = false; }
   }
 
-  // ---- FOLDER ----
   function setFolder(folder) { currentFolder = folder; selectedMsgId = null; }
 
   function getFolderMessages(msgs) {
@@ -158,13 +156,32 @@
     }).length;
   }
 
-  // ---- ACTIONS ----
   let replyText = '';
   let kiGenerating = false;
   let showMoveModal = false;
   let reviseOpen = false;
   let reviseInput = '';
   let reviseSending = false;
+  let textareaEl;
+  let aiHeight = 150;
+
+  function startResize(e) {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = textareaEl ? textareaEl.offsetHeight : aiHeight;
+    function onMove(ev) {
+      const delta = startY - ev.clientY;
+      const newH = Math.max(80, Math.min(startH + delta, window.innerHeight * 0.6));
+      aiHeight = newH;
+      if (textareaEl) textareaEl.style.height = newH + 'px';
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
 
   $: if (selectedMsg) {
     replyText = (selectedMsg.status === 'gesendet' || selectedMsg._sent_reply) ? '' : (selectedMsg.ai_reply || '');
@@ -270,7 +287,6 @@
     finally { reviseSending = false; }
   }
 
-  // ---- RENDER BODY ----
   function isEbayMsg(msg) { return (msg.sender||'').toLowerCase() === 'ebay'; }
 
   function renderMemberText(body) {
@@ -422,8 +438,7 @@
       </div>
 
       {#key selectedMsgId}
-      <div class="d-scroll">
-      <!-- THREAD BODY -->
+      <!-- THREAD BODY (scrollable) -->
       <div class="d-body">
         {#each thread as t}
           {@const isOut = t.direction === 'outgoing'}
@@ -449,10 +464,14 @@
           {/if}
         {/each}
       </div>
+      {/key}
 
-      <!-- AI SECTION -->
+      <!-- AI SECTION (fixed bottom) -->
       {#if !isOutgoingOnly}
         <div class="d-ai">
+          <div class="d-ai-resize-handle" on:mousedown={startResize}>
+            <div class="d-ai-resize-dots">⋯</div>
+          </div>
           <div class="d-ai-top">
             <div class="d-ai-label"><span class="d-ai-dot"></span> KI-ANTWORT</div>
             <div style="display:flex;gap:8px;">
@@ -462,7 +481,7 @@
               </button>
             </div>
           </div>
-          <textarea class="d-ai-text" bind:value={replyText} placeholder="KI-Antwort bearbeiten..." rows="5"></textarea>
+          <textarea class="d-ai-text" bind:value={replyText} bind:this={textareaEl} placeholder="KI-Antwort bearbeiten..." rows="5"></textarea>
           {#if reviseOpen}
             <div class="rev-box">
               <div class="rev-msgs">
@@ -484,8 +503,6 @@
           </div>
         </div>
       {/if}
-      </div><!-- /d-scroll -->
-      {/key}
     {/if}
   </div>
 </div>
@@ -510,11 +527,10 @@
 <style>
   .msg-layout {
     display: flex; height: calc(100vh - 130px); min-height: 400px;
-    background: var(--surface); 
+    background: var(--surface);
     border-radius: var(--radius); overflow: hidden; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-color: var(--border);
   }
 
-  /* FOLDERS */
   .folders { width: 180px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--surface2); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
   .f-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); border: none; background: none; font-family: var(--font); width: 100%; text-align: left; transition: all 0.12s; }
   .f-item:hover { background: var(--border); color: var(--text); }
@@ -527,7 +543,6 @@
   :global([data-theme="dark"]) .f-count-active { background: rgba(255,255,255,0.2); color: #fff; }
   .f-divider { height: 1px; background: var(--border); margin: 4px; }
 
-  /* LIST */
   .list { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   .list-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
   .list-search { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
@@ -535,8 +550,7 @@
   .list-num { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
   .list-scroll { flex: 1; overflow-y: auto; }
 
-  /* LIST ITEMS */
-  .li { display: block; width: 100%; padding: 12px 16px; border: none; outline: none; border-bottom: 1px solid var(--border); cursor: pointer; background: none;  text-align: left; font-family: var(--font); transition: background 0.1s; }
+  .li { display: block; width: 100%; padding: 12px 16px; border: none; outline: none; border-bottom: 1px solid var(--border); cursor: pointer; background: none; text-align: left; font-family: var(--font); transition: background 0.1s; }
   .li:hover { background: var(--surface2); }
   .li-active { background: var(--border); }
   :global([data-theme="dark"]) .li-active { background: rgba(255,255,255,0.05); border-left-color: #fff; }
@@ -553,7 +567,6 @@
   :global([data-theme="dark"]) .t-neu, :global([data-theme="dark"]) .t-new { background: rgba(15,46,147,0.2); color: #93a8e8; }
   :global([data-theme="dark"]) .t-gesendet, :global([data-theme="dark"]) .t-bearbeitet { background: rgba(34,197,94,0.15); color: #86efac; }
 
-  /* DETAIL */
   .detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
   .detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
   .d-header { padding: 16px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -570,10 +583,7 @@
   .d-chip { font-size: 11px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; }
   .d-chip b { color: var(--text); }
 
-  /* Scrollable container for body + AI */
-  .d-scroll { flex: 1; overflow-y: auto; min-height: 0; }
-
-  .d-body { padding: 20px 24px; }
+  .d-body { flex: 1; overflow-y: auto; padding: 20px 24px; min-height: 0; }
   .bubble-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
   .bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px; }
   .bubble-sent { border-color: #86efac; background: rgba(34,197,94,0.05); }
@@ -581,8 +591,10 @@
 
   .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
 
-  /* AI SECTION */
-  .d-ai { padding: 16px 24px; border-top: 1px solid var(--border); }
+  .d-ai { padding: 0 24px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .d-ai-resize-handle { display: flex; justify-content: center; padding: 4px 0 2px; cursor: ns-resize; user-select: none; }
+  .d-ai-resize-dots { color: var(--text3); font-size: 16px; letter-spacing: 3px; line-height: 1; transition: color 0.15s; }
+  .d-ai-resize-handle:hover .d-ai-resize-dots { color: var(--primary); }
   .d-ai-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .d-ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
   .d-ai-dot { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: pulse 2s infinite; }
@@ -590,7 +602,7 @@
   .btn-ki { background: linear-gradient(135deg, #6c63ff, #a855f7); border: none; color: white; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .btn-ki:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-rev { background: var(--surface); border: 1.5px solid #a855f7; border-radius: 8px; padding: 6px 14px; color: #a855f7; font-size: 12px; font-weight: 600; cursor: pointer; }
-  .d-ai-text { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: vertical; min-height: 150px; outline: none; }
+  .d-ai-text { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: none; min-height: 80px; outline: none; }
   .d-ai-text:focus { border-color: var(--primary); }
   .d-ai-actions { display: flex; gap: 10px; margin-top: 10px; }
   .d-ai-save { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 10px 18px; color: var(--text2); font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; }
