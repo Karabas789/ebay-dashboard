@@ -15,6 +15,10 @@
   let refreshing = false;
   let deletedIds = [];
   let reviseHistory = {};
+  let customFolders = [];
+  let showNewFolderModal = false;
+  let newFolderName = '';
+  let newFolderIcon = '📂';
 
   const folderLabels = {
     alle: 'Posteingang', mitglieder: 'Mitglieder', 'ebay-system': 'eBay-System',
@@ -41,6 +45,7 @@
   onMount(() => {
     deletedIds = JSON.parse(sessionStorage.getItem('deleted_ids') || '[]');
     loadNachrichten();
+    loadCustomFolders();
   });
 
   async function loadNachrichten() {
@@ -55,6 +60,7 @@
       allMessages = (data.data || []).filter(m => !deletedIds.includes(m.id)).map(m => {
         if (m.deleted || m.status === 'geloescht') m._folder = 'geloescht';
         else if (m.status === 'archiv' || m.status === 'archiviert') m._folder = 'archiv';
+        else if (m.folder_id) m._folder = 'custom_' + m.folder_id;
         else m._folder = null;
         return m;
       });
@@ -90,22 +96,48 @@
       case 'bearbeitet':  return msgs.filter(m => m.direction === 'outgoing');
       case 'archiv':      return msgs.filter(m => m._folder === 'archiv');
       case 'geloescht':   return msgs.filter(m => m._folder === 'geloescht');
-      default: return msgs;
+      default:
+        if (currentFolder.startsWith('custom_')) {
+          const fid = parseInt(currentFolder.replace('custom_', ''));
+          return msgs.filter(m => m.folder_id === fid);
+        }
+        return msgs;
     }
   }
 
-  function getFolderCount(folder) {
+
+  $: unreadCounts = (() => {
+    const counts = {};
+    const unread = m => m.is_read === false;
     const msgs = allMessages;
-    switch (folder) {
-      case 'alle':        return msgs.filter(m => m._folder !== 'archiv' && m._folder !== 'geloescht').length;
-      case 'mitglieder':  return new Set(msgs.filter(m => m.direction !== 'outgoing' && !(m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht').map(m => m.sender)).size;
-      case 'ebay-system': return msgs.filter(m => (m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht').length;
-      case 'bearbeitet':  return msgs.filter(m => m.direction === 'outgoing').length;
-      case 'archiv':      return msgs.filter(m => m._folder === 'archiv').length;
-      case 'geloescht':   return msgs.filter(m => m._folder === 'geloescht').length;
-      default: return 0;
+
+    function countUnreadThreads(filtered) {
+      const seen = new Set();
+      filtered.filter(unread).forEach(m => {
+        const isEbay = (m.sender||'').toLowerCase() === 'ebay';
+        if (isEbay) { seen.add('ebay_' + m.id); }
+        else {
+          const buyer = m.direction === 'outgoing' ? (m.recipient||'') : (m.sender||'');
+          seen.add(buyer);
+        }
+      });
+      return seen.size;
     }
-  }
+
+    counts.alle = countUnreadThreads(msgs.filter(m => m.direction !== 'outgoing' && m._folder !== 'archiv' && m._folder !== 'geloescht'));
+    counts.mitglieder = countUnreadThreads(msgs.filter(m => m.direction !== 'outgoing' && !(m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht'));
+    counts.ebay_system = countUnreadThreads(msgs.filter(m => (m.sender||'').toLowerCase().includes('ebay') && m._folder !== 'archiv' && m._folder !== 'geloescht'));
+    counts.bearbeitet = countUnreadThreads(msgs.filter(m => m.direction === 'outgoing'));
+    counts.archiv = countUnreadThreads(msgs.filter(m => m._folder === 'archiv'));
+    counts.geloescht = countUnreadThreads(msgs.filter(m => m._folder === 'geloescht'));
+
+    if (customFolders) {
+      customFolders.forEach(cf => {
+        counts['custom_' + cf.id] = msgs.filter(m => m.folder_id === cf.id && unread(m)).length;
+      });
+    }
+    return counts;
+  })();
 
   $: filteredMessages = (() => {
     let msgs = getFolderMessages(allMessages);
@@ -129,6 +161,7 @@
   })();
 
   $: selectedMsg = allMessages.find(m => m.id === selectedMsgId);
+
 
   $: thread = (() => {
     if (!selectedMsg) return [];
@@ -165,22 +198,10 @@
   let textareaEl;
   let aiHeight = 150;
 
-  function startResize(e) {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = textareaEl ? textareaEl.offsetHeight : aiHeight;
-    function onMove(ev) {
-      const delta = startY - ev.clientY;
-      const newH = Math.max(80, Math.min(startH + delta, window.innerHeight * 0.6));
-      aiHeight = newH;
-      if (textareaEl) textareaEl.style.height = newH + 'px';
-    }
-    function onUp() {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+  function autoGrow(e) {
+    const el = e.target;
+    el.style.height = "auto";
+    el.style.height = Math.max(80, Math.min(el.scrollHeight, window.innerHeight * 0.5)) + "px";
   }
 
   $: if (selectedMsg) {
@@ -287,6 +308,113 @@
     finally { reviseSending = false; }
   }
 
+  // ---- CUSTOM FOLDERS ----
+  async function loadCustomFolders() {
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'list', user_id: user?.id });
+      if (data.success) customFolders = data.folders || [];
+    } catch(e) {}
+  }
+
+  async function createFolder() {
+    if (!newFolderName.trim()) return;
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'create', user_id: user?.id, name: newFolderName.trim(), icon: newFolderIcon });
+      if (data.success) {
+        showNewFolderModal = false; newFolderName = ''; newFolderIcon = '📂';
+        await loadCustomFolders();
+        showToast('Ordner erstellt', 'success');
+      }
+    } catch(e) { showToast('Fehler beim Erstellen', 'error'); }
+  }
+
+  async function deleteFolder(folderId) {
+    if (!confirm('Ordner löschen? Nachrichten werden in den Posteingang verschoben.')) return;
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'delete', user_id: user?.id, folder_id: folderId });
+      if (data.success) {
+        if (currentFolder === 'custom_' + folderId) { currentFolder = 'alle'; selectedMsgId = null; }
+        await loadCustomFolders(); await loadNachrichten();
+        showToast('Ordner gelöscht', 'success');
+      }
+    } catch(e) { showToast('Fehler', 'error'); }
+  }
+
+  async function renameFolder(folderId) {
+    const folder = customFolders.find(f => f.id === folderId);
+    const newName = prompt('Neuer Name:', folder?.name || '');
+    if (!newName || !newName.trim()) return;
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'rename', user_id: user?.id, folder_id: folderId, name: newName.trim() });
+      if (data.success) { await loadCustomFolders(); showToast('Umbenannt', 'success'); }
+    } catch(e) { showToast('Fehler', 'error'); }
+  }
+
+  async function moveToFolder(target) {
+    if (!selectedMsg) return;
+    showMoveModal = false;
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'move', user_id: user?.id, message_id: selectedMsg.id, target: target });
+      if (data.success) {
+        selectedMsgId = null; await loadNachrichten();
+        showToast('Verschoben', 'success');
+      } else showToast('Fehler', 'error');
+    } catch(e) { showToast('Fehler', 'error'); }
+  }
+
+
+  async function markAsRead(msgId) {
+    const msg = allMessages.find(m => m.id === msgId);
+    if (!msg || msg.is_read) return;
+    const isEbay = (msg.sender||'').toLowerCase() === 'ebay';
+    let threadIds;
+    if (isEbay) {
+      threadIds = [msg.id];
+    } else {
+      const buyer = msg.direction === 'outgoing' ? msg.recipient : msg.sender;
+      threadIds = allMessages.filter(m => {
+        const b = m.direction === 'outgoing' ? m.recipient : m.sender;
+        return b === buyer && b !== null && b !== 'null';
+      }).filter(m => !m.is_read).map(m => m.id);
+    }
+    if (threadIds.length === 0) return;
+    try {
+      await apiCall('/nachricht-ordner', { action: 'read', user_id: user?.id, message_ids: threadIds, set_read: true });
+      threadIds.forEach(id => {
+        const m = allMessages.find(x => x.id === id);
+        if (m) m.is_read = true;
+      });
+      allMessages = [...allMessages];
+    } catch(e) {}
+  }
+
+  async function toggleRead(msgId) {
+    const msg = allMessages.find(m => m.id === msgId);
+    if (!msg) return;
+    const newState = !(msg.is_read === true);
+    const isEbay = (msg.sender||'').toLowerCase() === 'ebay';
+    let threadIds;
+    if (isEbay) {
+      threadIds = [msg.id];
+    } else {
+      const buyer = msg.direction === 'outgoing' ? msg.recipient : msg.sender;
+      threadIds = allMessages.filter(m => {
+        const b = m.direction === 'outgoing' ? m.recipient : m.sender;
+        return b === buyer && b !== null && b !== 'null';
+      }).map(m => m.id);
+    }
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'read', user_id: user?.id, message_ids: threadIds, set_read: newState });
+      if (data.success) {
+        threadIds.forEach(id => {
+          const m = allMessages.find(x => x.id === id);
+          if (m) m.is_read = newState;
+        });
+        allMessages = [...allMessages];
+      }
+    } catch(e) {}
+  }
+
   function isEbayMsg(msg) { return (msg.sender||'').toLowerCase() === 'ebay'; }
 
   function renderMemberText(body) {
@@ -369,11 +497,26 @@
     {#each folders as f}
       {#if f.key.startsWith('_')}
         <div class="f-divider"></div>
+        {#if f.key === '_divider2'}
+          {#each customFolders as cf}
+            <button class="f-item" class:f-active={currentFolder === 'custom_' + cf.id}
+              on:click={() => setFolder('custom_' + cf.id)}
+              on:contextmenu|preventDefault={() => { const a = prompt(cf.name + ': 1=Umbenennen, 2=L\u00f6schen'); if(a==='1') renameFolder(cf.id); else if(a==='2') deleteFolder(cf.id); }}>
+              <span class="f-icon">{cf.icon}</span>
+              <span class="f-name">{cf.name}</span>
+              <span class="f-count" class:f-count-active={currentFolder === 'custom_' + cf.id}>{unreadCounts['custom_' + cf.id] || 0}</span>
+            </button>
+          {/each}
+          <button class="f-item f-add" on:click={() => showNewFolderModal = true}>
+            <span class="f-icon">+</span>
+            <span class="f-name" style="font-size:12px;color:var(--text3)">Neuer Ordner</span>
+          </button>
+        {/if}
       {:else}
         <button class="f-item" class:f-active={currentFolder === f.key} on:click={() => setFolder(f.key)}>
           <span class="f-icon">{f.icon}</span>
           <span class="f-name">{f.label}</span>
-          <span class="f-count" class:f-count-active={currentFolder === f.key}>{getFolderCount(f.key)}</span>
+          <span class="f-count" class:f-count-active={currentFolder === f.key}>{unreadCounts[f.key] || 0}</span>
         </button>
       {/if}
     {/each}
@@ -392,11 +535,10 @@
         <div class="empty-state" style="padding:40px 20px;"><p>Keine Nachrichten</p></div>
       {:else}
         {#each filteredMessages as m}
-          {@const count = getThreadCount(m)}
           {@const name = m.direction === 'outgoing' ? (m.recipient||m.sender||'—') : (m.sender||'—')}
-          <button class="li" class:li-active={m.id === selectedMsgId} on:click={() => selectedMsgId = m.id}>
+          <button class="li" class:li-active={m.id === selectedMsgId} class:li-unread={m.is_read === false} on:click={() => { selectedMsgId = m.id; markAsRead(m.id); }}>
             <div class="li-top">
-              <span class="li-name">{name}{#if count > 1}<span class="li-badge">{count}</span>{/if}</span>
+              <span class="li-name">{name}</span>
               <span class="li-time">{formatDate(m.received_at)}</span>
             </div>
             <div class="li-preview">{stripPreview(m.body||'')}</div>
@@ -426,6 +568,7 @@
             <div class="d-subject">{selectedMsg.subject||''}</div>
           </div>
           <div class="d-btns">
+            <button class="d-btn" on:click={() => { if(selectedMsg) toggleRead(selectedMsg.id); }} title="Gelesen/Ungelesen">{selectedMsg?.is_read ? "✉️" : "📨"}</button>
             <button class="d-btn" on:click={() => showMoveModal = true}>📂 Verschieben</button>
             <button class="d-btn d-btn-danger" on:click={deleteMessage}>🗑️ Löschen</button>
           </div>
@@ -469,9 +612,6 @@
       <!-- AI SECTION (fixed bottom) -->
       {#if !isOutgoingOnly}
         <div class="d-ai">
-          <div class="d-ai-resize-handle" on:mousedown={startResize}>
-            <div class="d-ai-resize-dots">⋯</div>
-          </div>
           <div class="d-ai-top">
             <div class="d-ai-label"><span class="d-ai-dot"></span> KI-ANTWORT</div>
             <div style="display:flex;gap:8px;">
@@ -481,7 +621,7 @@
               </button>
             </div>
           </div>
-          <textarea class="d-ai-text" bind:value={replyText} bind:this={textareaEl} placeholder="KI-Antwort bearbeiten..." rows="5"></textarea>
+          <textarea class="d-ai-text" bind:value={replyText} bind:this={textareaEl} placeholder="KI-Antwort bearbeiten..." rows="5" on:input={autoGrow}></textarea>
           {#if reviseOpen}
             <div class="rev-box">
               <div class="rev-msgs">
@@ -492,7 +632,7 @@
                 {/if}
               </div>
               <div class="rev-input-row">
-                <input class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer..." on:keydown={(e) => e.key === 'Enter' && sendRevise()} />
+                <textarea class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer..." rows="1" on:input={autoGrow} on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) sendRevise(); }}></textarea>
                 <button class="rev-send" on:click={sendRevise} disabled={reviseSending}>Senden</button>
               </div>
             </div>
@@ -515,11 +655,42 @@
       <div style="font-size:16px;font-weight:800;margin-bottom:6px;">📂 Nachricht verschieben</div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:20px;">Zielordner auswählen</p>
       {#each moveFolders as f}
-        <button class="move-btn" class:move-btn-danger={f.danger} on:click={() => moveMessage(f.key)}>
+        <button class="move-btn" class:move-btn-danger={f.danger} on:click={() => moveToFolder(f.key)}>
           <span style="font-size:20px;">{f.icon}</span> {f.label}
         </button>
       {/each}
+      {#if customFolders.length > 0}
+        <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+        {#each customFolders as cf}
+          <button class="move-btn" on:click={() => moveToFolder(cf.id)}>
+            <span style="font-size:20px;">{cf.icon}</span> {cf.name}
+          </button>
+        {/each}
+      {/if}
       <button class="move-cancel" on:click={() => showMoveModal = false}>Abbrechen</button>
+    </div>
+  </div>
+{/if}
+
+<!-- NEW FOLDER MODAL -->
+{#if showNewFolderModal}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <div class="move-overlay" on:click|self={() => showNewFolderModal = false}>
+    <div class="move-box">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px;">📂 Neuer Ordner</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">Name und Icon festlegen</p>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+        <select class="input" style="width:60px;text-align:center;font-size:18px;padding:8px;" bind:value={newFolderIcon}>
+          <option>📂</option><option>⭐</option><option>🔥</option><option>💎</option>
+          <option>📌</option><option>❗</option><option>💬</option><option>🛒</option>
+          <option>💰</option><option>🔧</option><option>🏷️</option><option>📋</option>
+        </select>
+        <input class="input" placeholder="Ordnername..." bind:value={newFolderName} on:keydown={(e) => e.key === 'Enter' && createFolder()} style="flex:1;" />
+      </div>
+      <button class="move-btn" style="justify-content:center;background:var(--primary);color:white;border-color:var(--primary);" on:click={createFolder}>
+        Ordner erstellen
+      </button>
+      <button class="move-cancel" on:click={() => showNewFolderModal = false}>Abbrechen</button>
     </div>
   </div>
 {/if}
@@ -542,6 +713,8 @@
   .f-count-active { background: var(--primary); color: white; }
   :global([data-theme="dark"]) .f-count-active { background: rgba(255,255,255,0.2); color: #fff; }
   .f-divider { height: 1px; background: var(--border); margin: 4px; }
+  .f-add { opacity: 0.6; transition: opacity 0.15s; }
+  .f-add:hover { opacity: 1; background: var(--border); }
 
   .list { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   .list-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
@@ -556,6 +729,8 @@
   :global([data-theme="dark"]) .li-active { background: rgba(255,255,255,0.05); border-left-color: #fff; }
   .li-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
   .li-name { font-size: 13px; font-weight: 700; color: var(--text); }
+  .li-unread .li-name { color: var(--primary); }
+  .li-unread .li-preview { font-weight: 600; color: var(--text); }
   .li-time { font-size: 10px; color: var(--text3); }
   .li-preview { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .li-tags { display: flex; gap: 4px; margin-top: 5px; }
@@ -591,10 +766,7 @@
 
   .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
 
-  .d-ai { padding: 0 24px 16px; border-top: 1px solid var(--border); flex-shrink: 0; }
-  .d-ai-resize-handle { display: flex; justify-content: center; padding: 4px 0 2px; cursor: ns-resize; user-select: none; }
-  .d-ai-resize-dots { color: var(--text3); font-size: 16px; letter-spacing: 3px; line-height: 1; transition: color 0.15s; }
-  .d-ai-resize-handle:hover .d-ai-resize-dots { color: var(--primary); }
+  .d-ai { padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
   .d-ai-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .d-ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
   .d-ai-dot { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: pulse 2s infinite; }
@@ -602,7 +774,7 @@
   .btn-ki { background: linear-gradient(135deg, #6c63ff, #a855f7); border: none; color: white; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .btn-ki:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-rev { background: var(--surface); border: 1.5px solid #a855f7; border-radius: 8px; padding: 6px 14px; color: #a855f7; font-size: 12px; font-weight: 600; cursor: pointer; }
-  .d-ai-text { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: none; min-height: 80px; outline: none; }
+  .d-ai-text { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: none; min-height: 80px; max-height: 50vh; transition: height 0.1s; outline: none; }
   .d-ai-text:focus { border-color: var(--primary); }
   .d-ai-actions { display: flex; gap: 10px; margin-top: 10px; }
   .d-ai-save { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 10px 18px; color: var(--text2); font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -615,7 +787,7 @@
   .rev-user { align-self: flex-end; background: #a855f7; color: white; border-radius: 10px 10px 2px 10px; padding: 8px 12px; font-size: 12px; max-width: 80%; }
   .rev-ki { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 10px 2px; padding: 8px 12px; font-size: 12px; max-width: 80%; color: var(--text2); }
   .rev-input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
-  .rev-input { flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; }
+  .rev-input { flex: 1; resize: none; min-height: 38px; max-height: 30vh; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; }
   .rev-input:focus { border-color: #a855f7; }
   .rev-send { background: #a855f7; border: none; border-radius: 8px; padding: 10px 16px; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
   .rev-send:disabled { opacity: 0.5; }
