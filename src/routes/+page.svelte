@@ -271,24 +271,19 @@
   }
 
   // ---- RENDER BODY ----
-  // FIX #7: eBay-System als HTML/iframe, Mitglieder als Text
   function isEbayMsg(msg) { return (msg.sender||'').toLowerCase() === 'ebay'; }
 
   function renderMemberText(body) {
     if (!body) return '—';
-    // Extract text from HTML if present
     if (/<html[\s>]/i.test(body) || /<!DOCTYPE/i.test(body) || /<table/i.test(body)) {
-      // Try UserInputtedText div
       const utm = body.match(/id=["']UserInputtedText["'][^>]*>([\s\S]*?)<\/div>/i);
       if (utm && utm[1].replace(/<[^>]*>/g,'').trim().length > 1) {
         return utm[1].replace(/<[^>]*>/g,'').trim();
       }
-      // Try "Neue Nachricht:" pattern
       const nm = body.match(/Neue Nachricht:\s*([\s\S]*?)<\/p>/i);
       if (nm && nm[1].replace(/<[^>]*>/g,'').trim().length > 3) {
         return nm[1].replace(/<[^>]*>/g,'').trim();
       }
-      // Fallback: strip all HTML
       let t = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
       t = t.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'');
       t = t.replace(/<[^>]*>/g,' ');
@@ -296,7 +291,6 @@
       t = t.replace(/\s{2,}/g,' ').trim();
       return t.length > 500 ? t.slice(0,500) + '...' : t;
     }
-    // Plain text
     let t = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
     t = t.replace(/<[^>]*>/g,' ');
     t = t.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&');
@@ -305,20 +299,29 @@
   }
 
   function setupIframe(node, body) {
-    const isDark = document.documentElement.dataset.theme === 'dark';
-    const darkCss = 'body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#d1d1d1;background:#1c1c1c}a{color:#8ab4f8}';
-    const lightCss = 'body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#333}';
-    const css = isDark ? darkCss : lightCss;
-    const styleTag = '<' + 'style>' + css + '</' + 'style>';
-    let htmlContent = body;
-    if (!/<html[\s>]/i.test(body)) {
-      htmlContent = '<!DOCTYPE html><html><head><meta charset=utf-8>' + styleTag + '</head><body>' + body + '</body></html>';
+    function render(html) {
+      const isDark = document.documentElement.dataset.theme === 'dark';
+      const darkCss = 'body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#d1d1d1;background:#1c1c1c}a{color:#8ab4f8}';
+      const lightCss = 'body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#333}';
+      const css = isDark ? darkCss : lightCss;
+      const styleTag = '<' + 'style>' + css + '</' + 'style>';
+      const baseTag = '<base target="_blank">';
+      let htmlContent = html;
+      if (!/<html[\s>]/i.test(html)) {
+        htmlContent = '<!DOCTYPE html><html><head><meta charset=utf-8>' + baseTag + styleTag + '</head><body>' + html + '</body></html>';
+      } else {
+        htmlContent = htmlContent.replace(/<head([^>]*)>/i, '<head$1>' + baseTag);
+      }
+      const doc = node.contentDocument || node.contentWindow.document;
+      doc.open(); doc.write(htmlContent); doc.close();
+      setTimeout(() => {
+        try { node.style.height = Math.min(Math.max(doc.body.scrollHeight + 20, 100), 600) + 'px'; } catch(e){}
+      }, 300);
     }
-    const doc = node.contentDocument || node.contentWindow.document;
-    doc.open(); doc.write(htmlContent); doc.close();
-    setTimeout(() => {
-      try { node.style.height = Math.min(Math.max(doc.body.scrollHeight + 20, 100), 600) + 'px'; } catch(e){}
-    }, 300);
+    render(body);
+    return {
+      update(newBody) { render(newBody); }
+    };
   }
   function escHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   function formatDate(str) {
@@ -418,7 +421,9 @@
         </div>
       </div>
 
-      <!-- THREAD BODY (scrollable) -->
+      {#key selectedMsgId}
+      <div class="d-scroll">
+      <!-- THREAD BODY -->
       <div class="d-body">
         {#each thread as t}
           {@const isOut = t.direction === 'outgoing'}
@@ -429,7 +434,7 @@
           </div>
           {#if isEbay && (/<html[\s>]/i.test(t.body||'') || /<!DOCTYPE/i.test(t.body||'') || /<table/i.test(t.body||''))}
             <div class="bubble">
-              <iframe class="ebay-iframe" use:setupIframe={t.body||''} sandbox="allow-same-origin" title="eBay"></iframe>
+              <iframe class="ebay-iframe" use:setupIframe={t.body||''} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="eBay"></iframe>
             </div>
           {:else if isEbay}
             <div class="bubble">{@html escHtml(t.body||'—').replace(/\n/g,'<br>')}</div>
@@ -445,7 +450,7 @@
         {/each}
       </div>
 
-      <!-- AI SECTION (fixed bottom) -->
+      <!-- AI SECTION -->
       {#if !isOutgoingOnly}
         <div class="d-ai">
           <div class="d-ai-top">
@@ -479,11 +484,13 @@
           </div>
         </div>
       {/if}
+      </div><!-- /d-scroll -->
+      {/key}
     {/if}
   </div>
 </div>
 
-<!-- FIX #1: MODAL als fixed overlay mit z-index -->
+<!-- MODAL -->
 {#if showMoveModal}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <div class="move-overlay" on:click|self={() => showMoveModal = false}>
@@ -501,7 +508,6 @@
 {/if}
 
 <style>
-  /* FIX #2/#3: Layout fills viewport width */
   .msg-layout {
     display: flex; height: calc(100vh - 130px); min-height: 400px;
     background: var(--surface); 
@@ -547,7 +553,7 @@
   :global([data-theme="dark"]) .t-neu, :global([data-theme="dark"]) .t-new { background: rgba(15,46,147,0.2); color: #93a8e8; }
   :global([data-theme="dark"]) .t-gesendet, :global([data-theme="dark"]) .t-bearbeitet { background: rgba(34,197,94,0.15); color: #86efac; }
 
-  /* DETAIL - FIX #3: flex-1 fills remaining width */
+  /* DETAIL */
   .detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
   .detail-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
   .d-header { padding: 16px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
@@ -564,18 +570,19 @@
   .d-chip { font-size: 11px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; }
   .d-chip b { color: var(--text); }
 
-  /* FIX #5: no black border on body */
-  .d-body { flex: 1; overflow-y: auto; padding: 20px 24px; min-height: 0; }
+  /* Scrollable container for body + AI */
+  .d-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+
+  .d-body { padding: 20px 24px; }
   .bubble-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
   .bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px; }
   .bubble-sent { border-color: #86efac; background: rgba(34,197,94,0.05); }
   :global([data-theme="dark"]) .bubble-sent { background: rgba(34,197,94,0.08); }
 
-  /* FIX #7: eBay iframe */
   .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
 
-  /* AI SECTION - FIX #6: larger textarea */
-  .d-ai { padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  /* AI SECTION */
+  .d-ai { padding: 16px 24px; border-top: 1px solid var(--border); }
   .d-ai-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .d-ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
   .d-ai-dot { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: pulse 2s infinite; }
@@ -583,7 +590,6 @@
   .btn-ki { background: linear-gradient(135deg, #6c63ff, #a855f7); border: none; color: white; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .btn-ki:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-rev { background: var(--surface); border: 1.5px solid #a855f7; border-radius: 8px; padding: 6px 14px; color: #a855f7; font-size: 12px; font-weight: 600; cursor: pointer; }
-  /* FIX #6: min-height 150px statt 100px */
   .d-ai-text { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: vertical; min-height: 150px; outline: none; }
   .d-ai-text:focus { border-color: var(--primary); }
   .d-ai-actions { display: flex; gap: 10px; margin-top: 10px; }
@@ -592,7 +598,6 @@
   .d-ai-send { flex: 1; background: var(--primary); border: none; border-radius: 9px; padding: 10px; color: white; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; }
   .d-ai-send:hover { background: var(--primary-dark); }
 
-  /* FIX #6: Revise box larger */
   .rev-box { margin-top: 10px; border: 1.5px solid #a855f7; border-radius: 12px; overflow: hidden; background: var(--surface2); }
   .rev-msgs { max-height: 200px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .rev-user { align-self: flex-end; background: #a855f7; color: white; border-radius: 10px 10px 2px 10px; padding: 8px 12px; font-size: 12px; max-width: 80%; }
@@ -603,7 +608,6 @@
   .rev-send { background: #a855f7; border: none; border-radius: 8px; padding: 10px 16px; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
   .rev-send:disabled { opacity: 0.5; }
 
-  /* FIX #1: Modal as FIXED overlay */
   .move-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; }
   .move-box { background: var(--surface); border-radius: 16px; padding: 28px 24px; max-width: 340px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 8px; }
   .move-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
