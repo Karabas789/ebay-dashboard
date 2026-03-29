@@ -830,9 +830,8 @@
   <div class="modal modal-wide">
     <div class="varianten-modal-header">
       <div class="varianten-modal-info">
-        {@const vBild = getProductImage(variantenProduct)}
-        {#if vBild}
-          <img src={vBild} alt="" class="varianten-modal-bild" onerror={(e) => e.target.style.display = 'none'} />
+        {#if getProductImage(variantenProduct)}
+          <img src={getProductImage(variantenProduct)} alt="" class="varianten-modal-bild" onerror={(e) => e.target.style.display = 'none'} />
         {/if}
         <div>
           <div class="modal-title" style="margin-bottom: 4px;">{variantenProduct.name || 'Varianten'}</div>
