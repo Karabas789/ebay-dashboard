@@ -19,6 +19,7 @@
   --shadow: 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
   --sidebar-width: 260px;
+  --sidebar-collapsed-width: 68px;
   --header-height: 56px;
 }
 [data-theme="dark"] {
