@@ -60,7 +60,11 @@
 {/if}
 
 <style>
-  .app-shell { display: flex; height: 100vh; overflow: hidden; }
+  .app-shell {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
   .main-content {
     flex: 1;
     margin-left: var(--sidebar-width);
@@ -72,5 +76,7 @@
   .main-content.sidebar-collapsed {
     margin-left: var(--sidebar-collapsed-width, 68px);
   }
-  .page-container { padding: 28px 32px; }
+  .page-container {
+    padding: 28px 32px;
+  }
 </style>
