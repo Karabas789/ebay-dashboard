@@ -583,9 +583,8 @@
   <div class="page-header-actions">
     <button class="btn btn-primary" onclick={() => showImportModal = true}>📦 eBay Import</button>
     <button class="btn btn-primary" onclick={() => showVariantenImportModal = true}>🔄 Varianten</button>
-    <button class="btn btn-primary" onclick={() => { exportSelected = new Set(); exportMergeMap = {}; exportSearchQuery = ''; showExportModal = true; }}>⬇️ CSV</button>
+    <button class="btn btn-primary" onclick={() => { exportSelected = new Set(); exportMergeMap = {}; exportSearchQuery = ''; showExportModal = true; }}>⬇️ Bestand</button>
     <button class="btn btn-primary" onclick={openSkuGenerator}>🏷️ SKU</button>
-    <button class="btn btn-primary" onclick={() => openProductModal()}>+ Neues Produkt</button>
   </div>
 </div>
 
@@ -978,11 +977,11 @@
       <div class="export-format-options">
         <label class="export-format-option" class:selected={exportFormat === 'raw'}>
           <input type="radio" name="export-format" value="raw" bind:group={exportFormat} />
-          <div><div class="format-title">Rohdaten</div><div class="format-desc">Eine Zeile pro Variante</div></div>
+          <div><div class="format-title">Alle Produkte</div><div class="format-desc">Kompletter Bestand als CSV</div></div>
         </label>
         <label class="export-format-option" class:selected={exportFormat === 'overview'}>
           <input type="radio" name="export-format" value="overview" bind:group={exportFormat} />
-          <div><div class="format-title">Übersicht <span class="format-badge">NEU</span></div><div class="format-desc">Gruppiert · Duo/TrioPack-Spalten</div></div>
+          <div><div class="format-title">Produkte auswählen</div><div class="format-desc">Gruppiert · Duo/TrioPack-Spalten</div></div>
         </label>
       </div>
       {#if exportFormat === 'overview'}
@@ -990,6 +989,8 @@
       {/if}
     </div>
 
+    <!-- Produktfilter nur bei "Produkte auswählen" zeigen -->
+    {#if exportFormat === 'overview'}
     <!-- Search -->
     <div class="export-section">
       <div class="export-section-header">
@@ -1054,6 +1055,7 @@
         {/each}
       {/if}
     </div>
+    {/if}<!-- Ende Produktfilter -->
 
     <div class="modal-actions" style="border-top: 1px solid var(--border); padding-top: 14px; margin-top: 16px;">
       <button class="btn btn-cancel" onclick={() => showExportModal = false}>Abbrechen</button>
