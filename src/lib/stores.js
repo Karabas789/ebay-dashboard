@@ -4,6 +4,7 @@ export const currentUser = writable(null);
 export const theme = writable('light');
 export const sidebarCollapsed = writable(false);
 export const toastMessage = writable(null);
+export const sessionExpired = writable(false);
 
 export function showToast(message, type = 'success') {
   toastMessage.set({ message, type });
