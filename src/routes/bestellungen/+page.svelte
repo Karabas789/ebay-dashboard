@@ -445,7 +445,7 @@
                     src={bild}
                     alt=""
                     style="width:36px;height:36px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;"
-                    onerror="this.style.display='none'"
+                    onerror={(e) => { e.currentTarget.style.display='none'; }}
                   />
                 {/if}
                 <div style="min-width:0;">
