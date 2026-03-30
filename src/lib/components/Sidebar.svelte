@@ -399,16 +399,16 @@
   .sidebar.collapsed .sidebar-action { flex: none; width: 38px; }
   .sidebar-action:hover { background: var(--border); }
 
-  /* Tooltips für Action-Buttons */
+  /* Tooltips für Action-Buttons (rechts vom Icon) */
   .sidebar-action {
     position: relative;
   }
-  .sidebar-action::after {
+  .sidebar-action[data-tooltip-action]::after {
     content: attr(data-tooltip-action);
     position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
     background: var(--text);
     color: var(--surface);
     padding: 5px 10px;
@@ -421,7 +421,7 @@
     transition: opacity 0.15s;
     z-index: 200;
   }
-  .sidebar-action:hover::after {
+  .sidebar-action[data-tooltip-action]:hover::after {
     opacity: 1;
   }
 
