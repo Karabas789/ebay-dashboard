@@ -581,10 +581,10 @@
     <p class="page-subtitle">Produktverwaltung & Lagerbestand</p>
   </div>
   <div class="page-header-actions">
-    <button class="btn btn-action btn-import" onclick={() => showImportModal = true}>📦 Von eBay importieren</button>
-    <button class="btn btn-action btn-varianten" onclick={() => showVariantenImportModal = true}>🔄 Varianten laden</button>
-    <button class="btn btn-action btn-export" onclick={() => { exportSelected = new Set(); exportMergeMap = {}; exportSearchQuery = ''; showExportModal = true; }}>⬇️ Lager CSV</button>
-    <button class="btn btn-action btn-sku" onclick={openSkuGenerator}>🏷️ SKU Generator</button>
+    <button class="btn btn-primary" onclick={() => showImportModal = true}>📦 eBay Import</button>
+    <button class="btn btn-primary" onclick={() => showVariantenImportModal = true}>🔄 Varianten</button>
+    <button class="btn btn-primary" onclick={() => { exportSelected = new Set(); exportMergeMap = {}; exportSearchQuery = ''; showExportModal = true; }}>⬇️ CSV</button>
+    <button class="btn btn-primary" onclick={openSkuGenerator}>🏷️ SKU</button>
     <button class="btn btn-primary" onclick={() => openProductModal()}>+ Neues Produkt</button>
   </div>
 </div>
@@ -1151,16 +1151,16 @@
   .btn-cancel:hover { border-color: var(--text3); }
   .btn-success { background: #22c55e; color: white; }
   .btn-success:hover { background: #16a34a; }
-  .btn-action {
-    background: var(--primary);
-    color: white;
-    padding: 10px 18px;
-    font-size: 12px;
+  .btn-secondary {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    color: var(--text2);
   }
-  .btn-import { background: var(--primary); }
-  .btn-varianten { background: #22c55e; }
-  .btn-export { background: #0891b2; }
-  .btn-sku { background: #7c3aed; }
+  .btn-secondary:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-light, rgba(55, 119, 207, 0.05));
+  }
 
   /* ─── Stats Bar ─────────────────────────────────── */
   .stats-bar {
@@ -1182,17 +1182,15 @@
     font-family: inherit;
   }
   .stat-chip:hover { border-color: var(--primary); color: var(--text); }
-  .stat-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
-  .stat-chip.chip-warning.active { background: #f59e0b; border-color: #f59e0b; }
-  .stat-chip.chip-danger.active { background: #ef4444; border-color: #ef4444; }
+  .stat-chip.active { background: var(--surface2); color: var(--text); border-color: var(--text3); font-weight: 700; }
   .stat-count {
-    background: rgba(255,255,255,0.2);
+    background: var(--surface2);
     padding: 1px 7px;
     border-radius: 10px;
     font-size: 11px;
     margin-left: 4px;
   }
-  .stat-chip:not(.active) .stat-count { background: var(--surface2); }
+  .stat-chip.active .stat-count { background: var(--primary); color: white; }
 
   /* ─── Search ────────────────────────────────────── */
   .search-bar {
