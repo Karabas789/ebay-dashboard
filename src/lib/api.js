@@ -1,3 +1,5 @@
+import { sessionExpired } from './stores.js';
+
 const API = 'https://n8n.ai-online.cloud/webhook';
 
 function getToken() {
@@ -32,12 +34,22 @@ async function apiCall(path, body = {}, method = 'POST') {
   };
   if (method !== 'GET') opts.body = JSON.stringify(body);
   const res = await fetch(API + path, opts);
+
+  // Token ungültig / abgelaufen → Session-Modal anzeigen
   if (res.status === 401) {
-    clearAuth();
-    if (typeof window !== 'undefined') window.location.href = '/login';
-    throw new Error('Nicht autorisiert');
+    sessionExpired.set(true);
+    throw new Error('Session abgelaufen');
   }
-  return res.json();
+
+  const data = await res.json();
+
+  // n8n gibt manchmal 200 zurück, aber success: false bei Auth-Problemen
+  if (data && data.success === false && data.message && /token|autoris|auth/i.test(data.message)) {
+    sessionExpired.set(true);
+    throw new Error('Session abgelaufen');
+  }
+
+  return data;
 }
 
 async function login(email, password) {
