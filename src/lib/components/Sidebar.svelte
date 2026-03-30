@@ -1,24 +1,38 @@
 <script>
   import { page } from '$app/stores';
-  import { currentUser, theme, sidebarCollapsed } from '$lib/stores.js';
-  import { clearAuth, apiCall, API } from '$lib/api.js';
+  import { currentUser, theme, sidebarCollapsed, sessionExpired } from '$lib/stores.js';
+  import { clearAuth, setAuth, API } from '$lib/api.js';
   import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
 
   let user;
-  currentUser.subscribe(v => user = v);
+  let unsubUser = currentUser.subscribe(v => user = v);
 
   let isDark;
-  theme.subscribe(v => isDark = v === 'dark');
+  let unsubTheme = theme.subscribe(v => isDark = v === 'dark');
 
   let collapsed = false;
-  sidebarCollapsed.subscribe(v => collapsed = v);
+  let unsubCollapsed = sidebarCollapsed.subscribe(v => collapsed = v);
 
-  // Session Modal
+  // Session Modal — öffnet sich automatisch bei abgelaufenem Token
   let showSessionModal = false;
   let sessionEmail = '';
   let sessionPassword = '';
   let sessionError = '';
+  let sessionLoading = false;
+
+  let unsubSession = sessionExpired.subscribe(v => {
+    if (v && !showSessionModal) {
+      sessionEmail = user?.email || '';
+      sessionPassword = '';
+      sessionError = '';
+      showSessionModal = true;
+    }
+  });
+
+  onDestroy(() => {
+    unsubUser(); unsubTheme(); unsubCollapsed(); unsubSession();
+  });
 
   const nav = [
     { path: '/',              icon: '📩', label: 'Nachrichten' },
@@ -79,6 +93,7 @@
 
   async function doSessionRenew() {
     sessionError = '';
+    sessionLoading = true;
     try {
       const res = await fetch(API + '/login', {
         method: 'POST',
@@ -87,15 +102,19 @@
       });
       const data = await res.json();
       if (data.success) {
-        localStorage.setItem('dashboard_token', data.token);
-        localStorage.setItem('dashboard_user', JSON.stringify(data.user));
+        setAuth(data.token, data.user);
         currentUser.set(data.user);
+        sessionExpired.set(false);
         showSessionModal = false;
+        // Seite neu laden, damit alle Daten frisch kommen
+        window.location.reload();
       } else {
         sessionError = data.message || 'Anmeldung fehlgeschlagen.';
       }
     } catch (e) {
       sessionError = 'Verbindungsfehler.';
+    } finally {
+      sessionLoading = false;
     }
   }
 
@@ -196,14 +215,20 @@
   </div>
 </aside>
 
-<!-- SESSION MODAL -->
+<!-- SESSION MODAL (manuell oder automatisch bei abgelaufenem Token) -->
 {#if showSessionModal}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="session-overlay" on:click|self={() => showSessionModal = false}>
+  <div class="session-overlay" on:click|self={() => { if (!$sessionExpired) showSessionModal = false; }}>
     <div class="session-modal">
       <div class="session-title">🔄 Session erneuern</div>
-      <p class="session-desc">Dein Login-Token ist abgelaufen. Bitte melde dich erneut an.</p>
+      {#if $sessionExpired}
+        <div class="session-banner">
+          ⚠️ Deine Session ist abgelaufen. Bitte melde dich erneut an.
+        </div>
+      {:else}
+        <p class="session-desc">Melde dich erneut an, um fortzufahren.</p>
+      {/if}
       <div class="session-field">
         <label>E-Mail</label>
         <input type="email" bind:value={sessionEmail} placeholder="name@shop.de" />
@@ -217,8 +242,12 @@
         <div class="session-error">{sessionError}</div>
       {/if}
       <div class="session-actions">
-        <button class="session-btn-cancel" on:click={() => showSessionModal = false}>Abbrechen</button>
-        <button class="session-btn-ok" on:click={doSessionRenew}>✓ Anmelden</button>
+        {#if !$sessionExpired}
+          <button class="session-btn-cancel" on:click={() => showSessionModal = false}>Abbrechen</button>
+        {/if}
+        <button class="session-btn-ok" on:click={doSessionRenew} disabled={sessionLoading}>
+          {sessionLoading ? '⏳ Anmelden...' : '✓ Anmelden'}
+        </button>
       </div>
     </div>
   </div>
@@ -238,12 +267,8 @@
     z-index: 50;
     transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
+  .sidebar.collapsed { width: var(--sidebar-collapsed-width, 68px); }
 
-  .sidebar.collapsed {
-    width: var(--sidebar-collapsed-width, 68px);
-  }
-
-  /* Header */
   .sidebar-header {
     display: flex;
     align-items: center;
@@ -253,7 +278,6 @@
     min-height: 64px;
     gap: 8px;
   }
-
   .sidebar.collapsed .sidebar-header {
     justify-content: center;
     padding: 16px 10px;
@@ -269,48 +293,24 @@
     white-space: nowrap;
     min-width: 0;
   }
-
-  .logo-img {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    object-fit: contain;
-    flex-shrink: 0;
-  }
-
-  .logo-img-small {
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    object-fit: contain;
-  }
-
+  .logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
+  .logo-img-small { width: 30px; height: 30px; border-radius: 8px; object-fit: contain; }
   .logo-text { display: flex; flex-direction: column; }
   .logo-title { font-size: 15px; font-weight: 800; color: var(--text); }
   .logo-version { font-size: 11px; color: var(--text3); font-weight: 500; }
 
-  /* Toggle Button */
   .toggle-btn {
     background: none;
     border: 1px solid var(--border);
     border-radius: 8px;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text2);
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text2);
     transition: background 0.15s, color 0.15s;
     flex-shrink: 0;
   }
+  .toggle-btn:hover { background: var(--surface2); color: var(--text); }
 
-  .toggle-btn:hover {
-    background: var(--surface2);
-    color: var(--text);
-  }
-
-  /* Navigation */
   .sidebar-nav {
     flex: 1;
     padding: 12px 10px;
@@ -343,76 +343,39 @@
     white-space: nowrap;
     overflow: hidden;
   }
-
   .nav-item:hover { background: var(--surface2); color: var(--text); }
   .nav-item.active { background: var(--surface2); color: var(--text); font-weight: 700; }
-
   .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
   .nav-label { flex: 1; }
 
-  /* Collapsed: center icons */
-  .sidebar.collapsed .nav-item {
-    justify-content: center;
-    padding: 10px;
-  }
-
-  /* Tooltips bei collapsed */
+  .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
   .sidebar.collapsed .nav-item::after {
     content: attr(data-tooltip);
-    position: absolute;
-    left: calc(100% + 12px);
-    top: 50%;
+    position: absolute; left: calc(100% + 12px); top: 50%;
     transform: translateY(-50%);
-    background: var(--text);
-    color: var(--surface);
-    padding: 5px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 500;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s;
-    z-index: 200;
+    background: var(--text); color: var(--surface);
+    padding: 5px 12px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 200;
   }
+  .sidebar.collapsed .nav-item:hover::after { opacity: 1; }
 
-  .sidebar.collapsed .nav-item:hover::after {
-    opacity: 1;
-  }
-
-  /* Footer */
   .sidebar-footer {
     padding: 12px 14px 16px;
     border-top: 1px solid var(--border);
   }
-
   .sidebar-user {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 6px;
-    overflow: hidden;
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 6px; overflow: hidden;
   }
-
-  .sidebar.collapsed .sidebar-user {
-    justify-content: center;
-    padding: 8px 0;
-  }
+  .sidebar.collapsed .sidebar-user { justify-content: center; padding: 8px 0; }
 
   .user-avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    background: #3777CF;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    font-weight: 800;
-    flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: 10px;
+    background: #3777CF; color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; flex-shrink: 0;
   }
-
   .user-info { display: flex; flex-direction: column; min-width: 0; }
   .user-name {
     font-size: 13px; font-weight: 600; color: var(--text);
@@ -423,81 +386,73 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
-  .sidebar-actions {
-    display: flex;
-    gap: 4px;
-    padding: 6px 4px 0;
-  }
-
-  .sidebar.collapsed .sidebar-actions {
-    justify-content: center;
-  }
+  .sidebar-actions { display: flex; gap: 4px; padding: 6px 4px 0; }
+  .sidebar.collapsed .sidebar-actions { justify-content: center; }
 
   .sidebar-action {
     flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 8px;
-    border-radius: 8px;
-    font-size: 16px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+    padding: 8px; border-radius: 8px; font-size: 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    cursor: pointer; transition: all 0.15s;
   }
-
-  .sidebar.collapsed .sidebar-action {
-    flex: none;
-    width: 38px;
-  }
-
+  .sidebar.collapsed .sidebar-action { flex: none; width: 38px; }
   .sidebar-action:hover { background: var(--border); }
 
   /* Session Modal */
   .session-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.5);
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
     backdrop-filter: blur(4px);
     z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
   }
   .session-modal {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 28px;
-    width: 400px;
-    max-width: 95vw;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    width: 400px; max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
   }
   .session-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
   .session-desc { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
+  .session-banner {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1.5px solid rgba(239, 68, 68, 0.25);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #ef4444;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
   .session-field { margin-bottom: 14px; }
   .session-field label {
     display: block; font-size: 12px; font-weight: 600;
     color: var(--text2); margin-bottom: 6px;
   }
   .session-field input {
-    width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+    width: 100%; padding: 10px 12px;
+    border: 1.5px solid var(--border);
     border-radius: 9px; background: var(--surface2); color: var(--text);
     font-family: inherit; font-size: 13px; outline: none; box-sizing: border-box;
   }
   .session-field input:focus { border-color: var(--primary); }
-  .session-error { color: #ef4444; font-size: 12px; margin-top: 6px; }
+  .session-error { color: #ef4444; font-size: 12px; margin-top: 6px; margin-bottom: 4px; }
   .session-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
   .session-btn-cancel {
     background: var(--surface2); border: 1.5px solid var(--border);
     border-radius: 9px; padding: 10px 18px; color: var(--text2);
     font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
   }
+  .session-btn-cancel:hover { border-color: var(--text3); }
   .session-btn-ok {
     background: var(--primary); border: none; border-radius: 9px;
     padding: 10px 22px; color: white; font-family: inherit;
     font-size: 13px; font-weight: 700; cursor: pointer;
   }
-  .session-btn-ok:hover { background: var(--primary-dark); }
+  .session-btn-ok:hover { background: var(--primary-dark, #2d6ab8); }
+  .session-btn-ok:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
