@@ -197,17 +197,17 @@
       {/if}
     </div>
     <div class="sidebar-actions">
-      <button class="sidebar-action" on:click={toggleTheme} title={isDark ? 'Hell' : 'Dunkel'}>
+      <button class="sidebar-action" on:click={toggleTheme} data-tooltip-action={isDark ? 'Helles Design' : 'Dunkles Design'}>
         {isDark ? '☀️' : '🌙'}
       </button>
       {#if !collapsed}
-        <button class="sidebar-action" on:click={ebayOAuthLogin} title="Mit eBay verbinden">
+        <button class="sidebar-action" on:click={ebayOAuthLogin} data-tooltip-action="eBay verbinden">
           🔑
         </button>
-        <button class="sidebar-action" on:click={openSessionModal} title="Session erneuern">
+        <button class="sidebar-action" on:click={openSessionModal} data-tooltip-action="Session erneuern">
           🔄
         </button>
-        <button class="sidebar-action" on:click={logout} title="Ausloggen">
+        <button class="sidebar-action" on:click={logout} data-tooltip-action="Ausloggen">
           🚪
         </button>
       {/if}
@@ -398,6 +398,32 @@
   }
   .sidebar.collapsed .sidebar-action { flex: none; width: 38px; }
   .sidebar-action:hover { background: var(--border); }
+
+  /* Tooltips für Action-Buttons */
+  .sidebar-action {
+    position: relative;
+  }
+  .sidebar-action::after {
+    content: attr(data-tooltip-action);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--surface);
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 200;
+  }
+  .sidebar-action:hover::after {
+    opacity: 1;
+  }
 
   /* Session Modal */
   .session-overlay {
