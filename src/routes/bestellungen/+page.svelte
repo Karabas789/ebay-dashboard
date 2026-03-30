@@ -413,6 +413,8 @@
         {#each filteredOrders as o (o.order_id || o.id)}
           {@const isSelected = selectedOrderIds.has(String(o.order_id || o.id))}
           {@const trackUrl = getTrackingUrl(o.tracking_nummer, o.versanddienstleister)}
+          {@const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(o.ebay_artikel_id))}
+          {@const bild = prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || ''}
           <tr class:selected={isSelected}>
             <td style="text-align:center;">
               <input
@@ -437,8 +439,6 @@
               {/if}
             </td>
             <td class="col-artikel">
-              {@const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(o.ebay_artikel_id))}
-              {@const bild = prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || ''}
               <div style="display:flex;align-items:center;gap:8px;">
                 {#if bild}
                   <img
