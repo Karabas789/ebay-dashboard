@@ -5,6 +5,7 @@
 
   // ─── State ─────────────────────────────────────────────────────────────────
   let allOrders = $state([]);
+  let allProdukte = $state([]);
   let allRechnungen = $state([]);
   let ordersFilter = $state('alle');
   let searchQuery = $state('');
@@ -79,9 +80,26 @@
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(() => {
     loadBestellungen();
+    loadProdukte();
   });
 
   // ─── API ───────────────────────────────────────────────────────────────────
+  // Produkte laden (nur für Bilder — lightweight)
+  async function loadProdukte() {
+    try {
+      const data = await apiCall('/produkte-laden', {
+        user_id: $currentUser.id,
+        ebay_username: $currentUser.ebay_user_id
+      });
+      if (data.success || Array.isArray(data.data)) {
+        allProdukte = data.data || [];
+      }
+    } catch (e) {
+      // Bilder-Laden ist optional — kein Toast
+      console.warn('Produkte für Bilder nicht ladbar:', e);
+    }
+  }
+
   async function loadBestellungen() {
     loading = true;
     try {
@@ -419,10 +437,30 @@
               {/if}
             </td>
             <td class="col-artikel">
-              <div class="artikel-name">{o.artikel_name || '—'}</div>
-              {#if o.ebay_artikel_id}
-                <div class="artikel-id">eBay: {o.ebay_artikel_id}</div>
-              {/if}
+              {@const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(o.ebay_artikel_id))}
+              {@const bild = prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || ''}
+              <div style="display:flex;align-items:center;gap:8px;">
+                {#if bild}
+                  <img
+                    src={bild}
+                    alt=""
+                    style="width:36px;height:36px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;"
+                    onerror="this.style.display='none'"
+                  />
+                {/if}
+                <div style="min-width:0;">
+                  <div class="artikel-name">
+                    {#if o.ebay_artikel_id}
+                      <a href="https://www.ebay.de/itm/{o.ebay_artikel_id}" target="_blank" class="artikel-ebay-link">{o.artikel_name || '—'}</a>
+                    {:else}
+                      {o.artikel_name || '—'}
+                    {/if}
+                  </div>
+                  {#if o.ebay_artikel_id}
+                    <div class="artikel-id">eBay: {o.ebay_artikel_id}</div>
+                  {/if}
+                </div>
+              </div>
             </td>
             <td style="text-align:center;">{o.menge || 1}</td>
             <td style="text-align:right;font-weight:700;">{parseFloat(o.gesamt || 0).toFixed(2)} €</td>
@@ -851,6 +889,11 @@
   .col-artikel { max-width: 220px; }
   .artikel-name { font-size: 13px; }
   .artikel-id { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .artikel-ebay-link {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .artikel-ebay-link:hover { color: var(--primary); text-decoration: underline; }
   .col-tracking { min-width: 140px; }
   .tracking-link {
     color: var(--primary);
