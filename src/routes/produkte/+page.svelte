@@ -584,7 +584,7 @@
     <button class="btn btn-primary" onclick={() => showImportModal = true}>📦 eBay Import</button>
     <button class="btn btn-primary" onclick={() => showVariantenImportModal = true}>🔄 Varianten</button>
     <button class="btn btn-primary" onclick={() => { exportSelected = new Set(); exportMergeMap = {}; exportSearchQuery = ''; showExportModal = true; }}>⬇️ Bestand</button>
-    <button class="btn btn-primary" onclick={openSkuGenerator}>🏷️ SKU</button>
+    <!-- <button class="btn btn-primary" onclick={openSkuGenerator}>🏷️ SKU</button> -->
   </div>
 </div>
 
