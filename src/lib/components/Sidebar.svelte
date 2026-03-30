@@ -1,7 +1,7 @@
 <script>
   import { page } from '$app/stores';
   import { currentUser, theme, sidebarCollapsed } from '$lib/stores.js';
-  import { clearAuth } from '$lib/api.js';
+  import { clearAuth, apiCall, API } from '$lib/api.js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
 
@@ -13,6 +13,12 @@
 
   let collapsed = false;
   sidebarCollapsed.subscribe(v => collapsed = v);
+
+  // Session Modal
+  let showSessionModal = false;
+  let sessionEmail = '';
+  let sessionPassword = '';
+  let sessionError = '';
 
   const nav = [
     { path: '/',              icon: '📩', label: 'Nachrichten' },
@@ -38,6 +44,59 @@
     clearAuth();
     currentUser.set(null);
     goto('/login');
+  }
+
+  function ebayOAuthLogin() {
+    const userId = user?.id || '';
+    const ebayUsername = user?.ebay_user_id || '';
+    const state = ebayUsername + '_uid_' + userId;
+
+    const confirmed = confirm(
+      '⚠️ Wichtig: eBay verbindet den Account, der aktuell im Browser bei eBay eingeloggt ist!\n\n' +
+      'Erwartet: ' + (ebayUsername || 'unbekannt') + '\n\n' +
+      'Bitte stelle sicher, dass du bei eBay als "' + ebayUsername + '" eingeloggt bist.\n\n' +
+      'Jetzt mit eBay verbinden?'
+    );
+    if (!confirmed) return;
+
+    const params = new URLSearchParams({
+      client_id: 'VitaliDu-TestAPI-PRD-2b448418d-05f39944',
+      redirect_uri: 'Vitali_Dubs-VitaliDu-TestAP-lnbmshlxd',
+      response_type: 'code',
+      state: state,
+      scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/commerce.message'
+    });
+
+    window.open('https://auth.ebay.com/oauth2/authorize?' + params.toString(), '_blank', 'width=600,height=700');
+  }
+
+  function openSessionModal() {
+    sessionEmail = user?.email || '';
+    sessionPassword = '';
+    sessionError = '';
+    showSessionModal = true;
+  }
+
+  async function doSessionRenew() {
+    sessionError = '';
+    try {
+      const res = await fetch(API + '/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: sessionEmail, password: sessionPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('dashboard_token', data.token);
+        localStorage.setItem('dashboard_user', JSON.stringify(data.user));
+        currentUser.set(data.user);
+        showSessionModal = false;
+      } else {
+        sessionError = data.message || 'Anmeldung fehlgeschlagen.';
+      }
+    } catch (e) {
+      sessionError = 'Verbindungsfehler.';
+    }
   }
 
   onMount(() => {
@@ -123,6 +182,12 @@
         {isDark ? '☀️' : '🌙'}
       </button>
       {#if !collapsed}
+        <button class="sidebar-action" on:click={ebayOAuthLogin} title="Mit eBay verbinden">
+          🔑
+        </button>
+        <button class="sidebar-action" on:click={openSessionModal} title="Session erneuern">
+          🔄
+        </button>
         <button class="sidebar-action" on:click={logout} title="Ausloggen">
           🚪
         </button>
@@ -130,6 +195,34 @@
     </div>
   </div>
 </aside>
+
+<!-- SESSION MODAL -->
+{#if showSessionModal}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="session-overlay" on:click|self={() => showSessionModal = false}>
+    <div class="session-modal">
+      <div class="session-title">🔄 Session erneuern</div>
+      <p class="session-desc">Dein Login-Token ist abgelaufen. Bitte melde dich erneut an.</p>
+      <div class="session-field">
+        <label>E-Mail</label>
+        <input type="email" bind:value={sessionEmail} placeholder="name@shop.de" />
+      </div>
+      <div class="session-field">
+        <label>Passwort</label>
+        <input type="password" bind:value={sessionPassword} placeholder="••••••••"
+          on:keydown={(e) => { if (e.key === 'Enter') doSessionRenew(); }} />
+      </div>
+      {#if sessionError}
+        <div class="session-error">{sessionError}</div>
+      {/if}
+      <div class="session-actions">
+        <button class="session-btn-cancel" on:click={() => showSessionModal = false}>Abbrechen</button>
+        <button class="session-btn-ok" on:click={doSessionRenew}>✓ Anmelden</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .sidebar {
@@ -360,4 +453,51 @@
   }
 
   .sidebar-action:hover { background: var(--border); }
+
+  /* Session Modal */
+  .session-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .session-modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    width: 400px;
+    max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  .session-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+  .session-desc { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
+  .session-field { margin-bottom: 14px; }
+  .session-field label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: var(--text2); margin-bottom: 6px;
+  }
+  .session-field input {
+    width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);
+    border-radius: 9px; background: var(--surface2); color: var(--text);
+    font-family: inherit; font-size: 13px; outline: none; box-sizing: border-box;
+  }
+  .session-field input:focus { border-color: var(--primary); }
+  .session-error { color: #ef4444; font-size: 12px; margin-top: 6px; }
+  .session-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+  .session-btn-cancel {
+    background: var(--surface2); border: 1.5px solid var(--border);
+    border-radius: 9px; padding: 10px 18px; color: var(--text2);
+    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .session-btn-ok {
+    background: var(--primary); border: none; border-radius: 9px;
+    padding: 10px 22px; color: white; font-family: inherit;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .session-btn-ok:hover { background: var(--primary-dark); }
 </style>
