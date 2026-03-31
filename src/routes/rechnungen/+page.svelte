@@ -6,6 +6,9 @@
     { id: 'RE-2023-003', kunde: 'Hans Müller', datum: '2023-01-10', betrag: '249,99 €', status: 'Storniert' },
   ];
 
+  // Dark Mode Toggle
+  let darkMode = false;
+
   // Filtervariablen
   let filterRechnungsnummer = '';
   let filterVonDatum = '';
@@ -22,6 +25,12 @@
     );
   });
 
+  // Funktion zum Umschalten des Dark Modes
+  function toggleDarkMode() {
+    darkMode = !darkMode;
+    document.documentElement.classList.toggle('dark');
+  }
+
   // Funktion zum Herunterladen der Rechnung (Beispiel)
   function downloadRechnung(id) {
     alert(`Rechnung ${id} wird heruntergeladen.`);
@@ -29,106 +38,153 @@
   }
 </script>
 
-<div class="content">
-  <h1>Rechnungen</h1>
+<svelte:head>
+  <style>
+    :root {
+      --primary: #3777CF;
+      --primary-dark: #2a5ab8;
+      --surface: #ffffff;
+      --surface2: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text2: #64748b;
+      --text3: #94a3b8;
+    }
 
-  <div class="filter-section">
-    <h2>Filteroptionen</h2>
-    <div class="filter-form">
-      <input
-        type="text"
-        placeholder="Rechnungsnummer..."
-        bind:value={filterRechnungsnummer}
-      />
-      <input
-        type="date"
-        placeholder="Datum von"
-        bind:value={filterVonDatum}
-      />
-      <input
-        type="date"
-        placeholder="Datum bis"
-        bind:value={filterBisDatum}
-      />
-      <select bind:value={filterStatus}>
-        <option value="Alle">Alle</option>
-        <option value="Bezahlt">Bezahlt</option>
-        <option value="Ausstehend">Ausstehend</option>
-        <option value="Storniert">Storniert</option>
-      </select>
-      <button on:click={() => { /* Filterlogik hier */ }}>Filtern</button>
-    </div>
+    .dark {
+      --surface: #1e293b;
+      --surface2: #263347;
+      --border: #334155;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #475569;
+    }
+  </style>
+</svelte:head>
+
+<div class="page" class:dark={darkMode}>
+  <div class="header">
+    <h1>Rechnungen</h1>
+    <button on:click={toggleDarkMode} class="dark-mode-toggle">
+      {#if darkMode}
+        ☀️ Light Mode
+      {:else}
+        🌙 Dark Mode
+      {/if}
+    </button>
   </div>
 
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th>Rechnungsnummer</th>
-          <th>Kunde</th>
-          <th>Datum</th>
-          <th>Betrag</th>
-          <th>Status</th>
-          <th>Aktion</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each gefilterteRechnungen as rechnung}
+  <div class="content">
+    <div class="filter-section">
+      <h2>Filteroptionen</h2>
+      <div class="filter-form">
+        <input
+          type="text"
+          placeholder="Rechnungsnummer..."
+          bind:value={filterRechnungsnummer}
+        />
+        <input
+          type="date"
+          placeholder="Datum von"
+          bind:value={filterVonDatum}
+        />
+        <input
+          type="date"
+          placeholder="Datum bis"
+          bind:value={filterBisDatum}
+        />
+        <select bind:value={filterStatus}>
+          <option value="Alle">Alle</option>
+          <option value="Bezahlt">Bezahlt</option>
+          <option value="Ausstehend">Ausstehend</option>
+          <option value="Storniert">Storniert</option>
+        </select>
+        <button on:click={() => { /* Filterlogik hier */ }}>Filtern</button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead>
           <tr>
-            <td>{rechnung.id}</td>
-            <td>{rechnung.kunde}</td>
-            <td>{rechnung.datum}</td>
-            <td>{rechnung.betrag}</td>
-            <td>
-              <span class="status-badge {rechnung.status.toLowerCase()}">
-                {rechnung.status}
-              </span>
-            </td>
-            <td>
-              <button
-                class="download-btn"
-                on:click={() => downloadRechnung(rechnung.id)}
-              >
-                Download
-              </button>
-            </td>
+            <th>Rechnungsnummer</th>
+            <th>Kunde</th>
+            <th>Datum</th>
+            <th>Betrag</th>
+            <th>Status</th>
+            <th>Aktion</th>
           </tr>
-        {/each}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {#each gefilterteRechnungen as rechnung}
+            <tr>
+              <td>{rechnung.id}</td>
+              <td>{rechnung.kunde}</td>
+              <td>{rechnung.datum}</td>
+              <td>{rechnung.betrag}</td>
+              <td>
+                <span class="status-badge {rechnung.status.toLowerCase()}">
+                  {rechnung.status}
+                </span>
+              </td>
+              <td>
+                <button
+                  class="download-btn"
+                  on:click={() => downloadRechnung(rechnung.id)}
+                >
+                  Download
+                </button>
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <style>
-  /* Monochromes Design: Blau-Graustufen */
-  :root {
-    --primary: #2563eb; /* Blau */
-    --surface: #ffffff; /* Weiß */
-    --surface2: #f8fafc; /* Hellgrau */
-    --border: #e2e8f0; /* Hellgrau */
-    --text: #0f172a; /* Dunkelgrau */
-    --text2: #64748b; /* Mittelgrau */
-    --radius: 8px;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  /* Grundlegendes Layout */
+  .page {
+    background: var(--surface);
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .header {
+    background: var(--primary);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header h1 {
+    margin: 0;
+    font-size: 20px;
+  }
+
+  .dark-mode-toggle {
+    background: var(--surface);
+    color: var(--text);
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
   }
 
   .content {
-    padding: 16px;
-    font-family: 'Inter', sans-serif;
-  }
-
-  .content h1 {
-    color: var(--text);
-    margin-bottom: 16px;
+    padding: 20px;
   }
 
   /* Filterbereich */
   .filter-section {
     background: var(--surface);
     padding: 16px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     margin-bottom: 20px;
   }
 
@@ -164,7 +220,7 @@
   }
 
   .filter-form button:hover {
-    background: #1d4ed8;
+    background: var(--primary-dark);
   }
 
   /* Status-Badge */
@@ -193,8 +249,8 @@
   /* Tabellencontainer */
   .table-container {
     background: var(--surface);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     overflow: hidden;
   }
 
@@ -212,9 +268,8 @@
   }
 
   th {
-    background: var(--surface2);
-    color: var(--text2);
-    font-weight: 500;
+    background: var(--primary);
+    color: white;
   }
 
   tr:nth-child(even) {
@@ -222,7 +277,7 @@
   }
 
   tr:hover {
-    background: #f1f5f9;
+    background: rgba(55, 119, 207, 0.05);
   }
 
   /* Download-Button */
@@ -239,6 +294,6 @@
   }
 
   .download-btn:hover {
-    background: #1d4ed8;
+    background: var(--primary-dark);
   }
 </style>
