@@ -100,25 +100,7 @@
 </div>
 
 <style>
-  :root {
-    --primary: #3777CF;
-    --primary-dark: #2a5ab8;
-    --surface: #ffffff;
-    --surface2: #f8fafc;
-    --border: #e2e8f0;
-    --text: #0f172a;
-    --text2: #64748b;
-    --text3: #94a3b8;
-  }
-
-  .dark {
-    --surface: #1e293b;
-    --surface2: #263347;
-    --border: #334155;
-    --text: #f1f5f9;
-    --text2: #94a3b8;
-    --text3: #475569;
-  }
+  :root 
 
   /* Layout */
   .rechnungen-page {
