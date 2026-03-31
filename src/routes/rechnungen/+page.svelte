@@ -10,7 +10,7 @@
   let filterRechnungsnummer = '';
   let filterVonDatum = '';
   let filterBisDatum = '';
-  let filterStatus = '';
+  let filterStatus = 'Alle';
 
   // Gefilterte Rechnungen berechnen
   $: gefilterteRechnungen = rechnungen.filter(rechnung => {
@@ -18,7 +18,7 @@
       (filterRechnungsnummer === '' || rechnung.id.includes(filterRechnungsnummer)) &&
       (filterVonDatum === '' || rechnung.datum >= filterVonDatum) &&
       (filterBisDatum === '' || rechnung.datum <= filterBisDatum) &&
-      (filterStatus === '' || rechnung.status === filterStatus)
+      (filterStatus === 'Alle' || rechnung.status === filterStatus)
     );
   });
 
@@ -51,7 +51,7 @@
         bind:value={filterBisDatum}
       />
       <select bind:value={filterStatus}>
-        <option value="">Status</option>
+        <option value="Alle">Alle</option>
         <option value="Bezahlt">Bezahlt</option>
         <option value="Ausstehend">Ausstehend</option>
         <option value="Storniert">Storniert</option>
@@ -79,7 +79,11 @@
             <td>{rechnung.kunde}</td>
             <td>{rechnung.datum}</td>
             <td>{rechnung.betrag}</td>
-            <td>{rechnung.status}</td>
+            <td>
+              <span class="status-badge {rechnung.status.toLowerCase()}">
+                {rechnung.status}
+              </span>
+            </td>
             <td>
               <button
                 class="download-btn"
@@ -96,16 +100,27 @@
 </div>
 
 <style>
-  /* CSS-Variablen aus dem Dashboard-Design-System */
+  /* Monochromes Design: Blau-Graustufen */
   :root {
-    --primary: #2563eb;
-    --surface: #ffffff;
-    --surface2: #f8fafc;
-    --border: #e2e8f0;
-    --text: #0f172a;
-    --radius: 12px;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.05);
+    --primary: #2563eb; /* Blau */
+    --surface: #ffffff; /* Weiß */
+    --surface2: #f8fafc; /* Hellgrau */
+    --border: #e2e8f0; /* Hellgrau */
+    --text: #0f172a; /* Dunkelgrau */
+    --text2: #64748b; /* Mittelgrau */
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .content {
+    padding: 16px;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .content h1 {
+    color: var(--text);
+    margin-bottom: 16px;
   }
 
   /* Filterbereich */
@@ -115,6 +130,13 @@
     border-radius: var(--radius);
     box-shadow: var(--shadow);
     margin-bottom: 20px;
+  }
+
+  .filter-section h2 {
+    color: var(--text2);
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 16px;
   }
 
   .filter-form {
@@ -131,6 +153,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     font-family: 'Inter', sans-serif;
+    font-size: 14px;
   }
 
   .filter-form button {
@@ -142,6 +165,29 @@
 
   .filter-form button:hover {
     background: #1d4ed8;
+  }
+
+  /* Status-Badge */
+  .status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .status-badge.bezahlt {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .status-badge.ausstehend {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .status-badge.storniert {
+    background: #fee2e2;
+    color: #991b1b;
   }
 
   /* Tabellencontainer */
@@ -166,12 +212,17 @@
   }
 
   th {
-    background: var(--primary);
-    color: white;
+    background: var(--surface2);
+    color: var(--text2);
+    font-weight: 500;
   }
 
   tr:nth-child(even) {
     background: var(--surface2);
+  }
+
+  tr:hover {
+    background: #f1f5f9;
   }
 
   /* Download-Button */
@@ -184,6 +235,7 @@
     font-weight: 500;
     border: none;
     cursor: pointer;
+    font-size: 14px;
   }
 
   .download-btn:hover {
