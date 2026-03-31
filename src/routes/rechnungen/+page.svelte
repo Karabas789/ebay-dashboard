@@ -100,9 +100,7 @@
 </div>
 
 <style>
-  :root 
-
-  /* Layout */
+   /* Layout */
   .rechnungen-page {
     background: var(--surface);
     color: var(--text);
