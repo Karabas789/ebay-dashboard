@@ -37,10 +37,6 @@
   let showDetailModal = $state(false);
   let detailOrder = $state(null);
 
-  // Lager-Abgleich
-  let showAbgleichModal = $state(false);
-  let abgleichLoading = $state(false);
-  let abgleichResult = $state(null);
 
   // ─── Derived ───────────────────────────────────────────────────────────────
   let filteredOrders = $derived.by(() => {
@@ -311,24 +307,6 @@
     _toastTimer = setTimeout(() => { _toast = { ..._toast, visible: false }; }, 3500);
   }
 
-  async function doLagerAbgleich() {
-    abgleichLoading = true;
-    abgleichResult = null;
-    try {
-      const data = await apiCall('/lager-abgleich', {
-        user_id: $currentUser.id,
-        ebay_username: $currentUser.ebay_user_id
-      });
-      abgleichResult = data;
-      if (data.success) {
-        await loadBestellungen();
-      }
-    } catch (e) {
-      abgleichResult = { success: false, message: 'Verbindungsfehler: ' + e.message };
-    } finally {
-      abgleichLoading = false;
-    }
-  }
 </script>
 
 <!-- ═══════════════════════════════════════════════════════ PAGE HEADER -->
@@ -337,15 +315,9 @@
     <div class="page-hdr-title">Bestellungen</div>
     <div class="page-hdr-sub">Alle eingehenden eBay-Bestellungen</div>
   </div>
-  <div style="display:flex;gap:8px;">
-    <button
-      class="btn-abgleich"
-      onclick={() => { showAbgleichModal = true; abgleichResult = null; }}
-    >⚖️ Lager abgleichen</button>
-    <button class="btn-refresh" onclick={() => loadBestellungen()} disabled={loading}>
-      {#if loading}<span class="spinner-sm"></span>{:else}🔄{/if} Aktualisieren
-    </button>
-  </div>
+  <button class="btn-refresh" onclick={() => loadBestellungen()} disabled={loading}>
+    {#if loading}<span class="spinner-sm"></span>{:else}🔄{/if} Aktualisieren
+  </button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════ TOOLBAR -->
@@ -736,90 +708,6 @@
   </div>
 {/if}
 
-<!-- ═══════════════════════════════════════════════════════ LAGER-ABGLEICH MODAL -->
-{#if showAbgleichModal}
-  <div class="modal-overlay open" onclick={(e) => { if (e.target === e.currentTarget && !abgleichLoading) showAbgleichModal = false; }}>
-    <div class="modal" style="max-width:560px;">
-      <div class="modal-title">⚖️ Lagerbestand abgleichen</div>
-
-      {#if !abgleichResult}
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;font-size:13px;line-height:1.7;color:var(--text2);">
-          <div style="font-weight:700;color:var(--text);margin-bottom:6px;">Was passiert hier?</div>
-          Prüft alle Bestellungen bei denen der Lagerbestand noch <strong>nicht abgezogen</strong> wurde
-          (z.B. nach einer n8n-Störung) und gleicht automatisch ab:<br/><br/>
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <div>✅ <strong>Einzelartikel</strong> → Lager wird sofort korrigiert</div>
-            <div>⚠️ <strong>Varianten-Artikel</strong> → werden angezeigt, manuell prüfen</div>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="btn-cancel" onclick={() => showAbgleichModal = false}>Abbrechen</button>
-          <button
-            class="btn-primary"
-            style="width:auto;padding:10px 28px;background:#0891b2;"
-            onclick={doLagerAbgleich}
-            disabled={abgleichLoading}
-          >
-            {#if abgleichLoading}
-              Gleiche ab...
-            {:else}
-              ⚖️ Jetzt abgleichen
-            {/if}
-          </button>
-        </div>
-
-      {:else}
-        {#if abgleichResult.success}
-          <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;margin-bottom:16px;">
-            <span style="font-size:22px;">✅</span>
-            <div style="font-weight:700;color:#16a34a;font-size:14px;">{abgleichResult.message}</div>
-          </div>
-
-          {#if abgleichResult.produkte && abgleichResult.produkte.length > 0}
-            <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;margin-bottom:16px;">
-              {#each abgleichResult.produkte as p}
-                <div style="background:var(--surface2);border:1px solid {p.typ === 'manuell' ? '#f59e0b' : 'var(--border)'};border-radius:10px;padding:12px 14px;">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                    <div style="font-size:13px;font-weight:600;flex:1;">{p.produkt_name}</div>
-                    {#if p.typ === 'manuell'}
-                      <span style="background:#fffbeb;color:#d97706;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;">⚠️ Manuell</span>
-                    {:else}
-                      <span style="background:#f0fdf4;color:#16a34a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;">✅ OK</span>
-                    {/if}
-                  </div>
-                  {#if p.typ === 'auto'}
-                    <div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--text2);">
-                      <span>Vorher: <strong>{p.lager_vorher}</strong></span>
-                      <span>Verkauft: <strong style="color:#dc2626;">-{p.verkauft}</strong></span>
-                      <span>Nachher: <strong style="color:#16a34a;">{p.lager_nachher}</strong></span>
-                    </div>
-                  {:else}
-                    <div style="font-size:12px;color:var(--text2);margin-top:6px;">
-                      Varianten-Artikel — bitte in Produkte manuell anpassen ({p.verkauft} Stück verkauft)
-                    </div>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <div style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">
-              Alle Bestellungen waren bereits abgeglichen 👍
-            </div>
-          {/if}
-        {:else}
-          <div style="padding:14px 16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;color:#dc2626;font-size:13px;margin-bottom:16px;">
-            ❌ Fehler: {abgleichResult.message || 'Unbekannter Fehler'}
-          </div>
-        {/if}
-
-        <div class="modal-actions">
-          <button class="btn-cancel" onclick={() => showAbgleichModal = false}>Schließen</button>
-        </div>
-      {/if}
-    </div>
-  </div>
-{/if}
-
 <!-- ═══════════════════════════════════════════════════════ TOAST -->
 {#if _toast.visible}
   <div class="toast toast-{_toast.type}">{_toast.msg}</div>
@@ -1034,23 +922,6 @@
   }
   .btn-add-tracking:hover { opacity: 0.85; }
 
-  /* ── Abgleich Button ─────────────────────────────────── */
-  .btn-abgleich {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--surface);
-    border: 1.5px solid #0891b2;
-    border-radius: 9px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #0891b2;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-  }
-  .btn-abgleich:hover { background: rgba(8,145,178,0.08); }
 
   /* ── Status Badges ──────────────────────────────────────── */
   .badge {
