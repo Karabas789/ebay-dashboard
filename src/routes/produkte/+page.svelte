@@ -49,6 +49,11 @@
   // Inline editing (for single products)
   let inlineEdits = $state({});
 
+  // Lager-Abgleich
+  let showAbgleichModal = $state(false);
+  let abgleichLoading = $state(false);
+  let abgleichResult = $state(null);
+
   // ─── Derived ────────────────────────────────────────────
   let filteredProducts = $derived.by(() => {
     let products = allProdukte;
@@ -568,6 +573,25 @@
   }
 
   // ─── Lifecycle ─────────────────────────────────────────
+  async function doLagerAbgleich() {
+    abgleichLoading = true;
+    abgleichResult = null;
+    try {
+      const data = await apiCall('/lager-abgleich', {
+        user_id: $currentUser.id,
+        ebay_username: $currentUser.ebay_user_id
+      });
+      abgleichResult = data;
+      if (data.success) {
+        await loadProdukte();
+      }
+    } catch (e) {
+      abgleichResult = { success: false, message: 'Verbindungsfehler: ' + e.message };
+    } finally {
+      abgleichLoading = false;
+    }
+  }
+
   onMount(() => {
     loadProdukte();
   });
@@ -584,6 +608,7 @@
     <button class="btn btn-primary" onclick={() => showImportModal = true}>📦 eBay Import</button>
     <button class="btn btn-primary" onclick={() => showVariantenImportModal = true}>🔄 Varianten</button>
     <button class="btn btn-primary" onclick={() => { exportSelected = new Set(); exportMergeMap = {}; exportSearchQuery = ''; showExportModal = true; }}>⬇️ Bestand</button>
+    <button class="btn btn-abgleich" onclick={() => { showAbgleichModal = true; abgleichResult = null; }}>⚖️ Lager abgleichen</button>
     <!-- <button class="btn btn-primary" onclick={openSkuGenerator}>🏷️ SKU</button> -->
   </div>
 </div>
@@ -1108,6 +1133,67 @@
 </div>
 {/if}
 
+
+
+<!-- ═══════════════════════════════════════════════════════ LAGER-ABGLEICH MODAL -->
+{#if showAbgleichModal}
+  <div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget && !abgleichLoading) showAbgleichModal = false; }}>
+    <div class="modal-box" style="max-width:560px;">
+      <div class="modal-title">⚖️ Lagerbestand abgleichen</div>
+
+      {#if !abgleichResult}
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;font-size:13px;line-height:1.7;color:var(--text2);">
+          <div style="font-weight:700;color:var(--text);margin-bottom:6px;">Was passiert hier?</div>
+          Prüft alle Bestellungen wo der Lagerbestand noch <strong>nicht abgezogen</strong> wurde (z.B. nach n8n-Störung) und gleicht automatisch ab.
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick={() => showAbgleichModal = false}>Abbrechen</button>
+          <button class="btn btn-primary" style="background:#0891b2;" onclick={doLagerAbgleich} disabled={abgleichLoading}>
+            {#if abgleichLoading}Gleiche ab...{:else}⚖️ Jetzt abgleichen{/if}
+          </button>
+        </div>
+      {:else if abgleichResult.success}
+        <div style="padding:14px 16px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;margin-bottom:16px;">
+          <span style="font-weight:700;color:#16a34a;">{abgleichResult.message}</span>
+        </div>
+        {#if abgleichResult.produkte && abgleichResult.produkte.length > 0}
+          <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;margin-bottom:16px;">
+            {#each abgleichResult.produkte as p}
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <span style="font-size:13px;font-weight:600;">{p.produkt_name}</span>
+                  {#if p.typ === 'auto_var'}
+                    <span style="background:#eff6ff;color:#2563eb;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;">Variante</span>
+                  {:else}
+                    <span style="background:#f0fdf4;color:#16a34a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;">✅ OK</span>
+                  {/if}
+                </div>
+                <div style="font-size:12px;color:var(--text2);margin-top:4px;">
+                  Vorher: {p.lager_vorher} → Verkauft: -{p.verkauft} → Nachher: {p.lager_nachher}
+                  {#if p.variante_name}<br/>Variante: {p.variante_name}{/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div style="text-align:center;padding:24px;color:var(--text3);font-size:13px;">
+            Alle Bestellungen waren bereits abgeglichen 👍
+          </div>
+        {/if}
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick={() => showAbgleichModal = false}>Schließen</button>
+        </div>
+      {:else}
+        <div style="padding:14px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;color:#dc2626;font-size:13px;margin-bottom:16px;">
+          ❌ {abgleichResult.message || 'Fehler'}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick={() => showAbgleichModal = false}>Schließen</button>
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}
 
 <style>
   /* ─── Page Header ───────────────────────────────── */
@@ -1887,4 +1973,14 @@
     font-family: inherit;
   }
   .btn-sku-save:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  /* ── Abgleich Button ─────────────────────────────────── */
+  .btn-abgleich {
+    background: var(--surface) !important;
+    border: 1.5px solid #0891b2 !important;
+    color: #0891b2 !important;
+  }
+  .btn-abgleich:hover {
+    background: rgba(8,145,178,0.08) !important;
+  }
 </style>
