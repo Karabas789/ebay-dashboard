@@ -113,18 +113,25 @@
   };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
-  onMount(async () => {
-    if ($currentUser) await ladeVorlage();
+  onMount(() => {
+    if ($currentUser) {
+      ladeVorlage();
+    } else {
+      vorlageGeladen = true;
+    }
   });
 
   async function ladeVorlage() {
+    const timeout = setTimeout(() => { vorlageGeladen = true; }, 5000);
     try {
       const data = await apiCall('vorlage-laden', { user_id: $currentUser.id });
       if (data && data.vorlage) {
         vorlage = { ...vorlage, ...data.vorlage };
       }
-      vorlageGeladen = true;
     } catch(e) {
+      // Webhook noch nicht vorhanden – Standardwerte werden genutzt
+    } finally {
+      clearTimeout(timeout);
       vorlageGeladen = true;
     }
   }
@@ -205,11 +212,13 @@
       : `<tr><td colspan="3" style="padding:8px 14px;text-align:right;font-size:12px;color:#666;">MwSt. ${b.steuersatz}%</td><td style="padding:8px 14px;text-align:right;">${fmt(b.steuer_betrag)} ${w}</td></tr>`;
 
     const wasserzeichenHTML = v.wasserzeichen
-      ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;color:rgba(0,0,0,0.06);font-weight:900;pointer-events:none;z-index:0;">${v.wasserzeichen_text}</div>`
+      ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;color:rgba(0,0,0,0.06);font-weight:900;pointer-events:none;z-index:0;">${v.wasserzeichen_text}</div>
+{/if}`
       : '';
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
+  @keyframes spin { to { transform: rotate(360deg); } }
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:${v.schriftart},Arial,sans-serif;font-size:${v.schriftgroesse}px;color:${v.schriftfarbe};background:#fff;padding:32px;}
 table{width:100%;border-collapse:collapse;margin-bottom:16px}
@@ -309,6 +318,12 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 </script>
 
+{#if !vorlageGeladen}
+  <div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--text2);font-size:0.85rem;gap:10px;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+    Vorlage wird geladen…
+  </div>
+{:else}
 <div class="vb-container">
 
   <!-- Topbar -->
