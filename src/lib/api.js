@@ -33,7 +33,7 @@ async function apiCall(path, body = {}, method = 'POST') {
     }
   };
   if (method !== 'GET') opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
+  const res = await fetch(API + '/' + path, opts);  // ← Fix: '/' + path
 
   // Token ungültig / abgelaufen → Session-Modal anzeigen
   if (res.status === 401) {
