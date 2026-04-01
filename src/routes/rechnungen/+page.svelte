@@ -36,6 +36,10 @@
   });
   let erstellenLaeuft = $state(false);
 
+  // ── Autofill State ─────────────────────────────────────────────────────────
+  let autofillSucht = $state(false);
+  let autofillGefunden = $state(false);
+
   // ── Derived ────────────────────────────────────────────────────────────────
   let gefiltert = $derived.by(() => {
     let liste = rechnungen;
@@ -171,7 +175,6 @@
   async function erstelleStorno() {
     stornoLaeuft = true;
     try {
-      // WF-RE-05: Dedizierter Storno-Workflow
       await apiCall('rechnung-stornieren', {
         user_id: $currentUser.id,
         invoice_id: stornoRechnung.id
@@ -184,6 +187,64 @@
     } finally {
       stornoLaeuft = false;
     }
+  }
+
+  // ── Bestellnummer-Autofill ─────────────────────────────────────────────────
+  let autofillTimer = null;
+
+  function onOrderIdInput() {
+    autofillGefunden = false;
+    const orderId = neueRechnung.order_id?.trim();
+    if (!orderId || orderId.length < 5) {
+      autofillSucht = false;
+      return;
+    }
+    clearTimeout(autofillTimer);
+    autofillTimer = setTimeout(() => sucheBestellung(orderId), 500);
+  }
+
+  async function sucheBestellung(orderId) {
+    autofillSucht = true;
+    try {
+      const data = await apiCall('orders-laden', { user_id: $currentUser.id });
+      const orders = Array.isArray(data) ? data : (data.orders || []);
+      const order = orders.find(o =>
+        o.order_id === orderId ||
+        o.order_id?.replace(/-/g, '') === orderId.replace(/-/g, '')
+      );
+      if (order) {
+        neueRechnung.kaeufer_name    = order.buyer_name || order.buyer_username || '';
+        neueRechnung.kaeufer_email   = order.buyer_email || '';
+        neueRechnung.kaeufer_strasse = order.buyer_strasse || '';
+        neueRechnung.kaeufer_plz     = order.buyer_plz || '';
+        neueRechnung.kaeufer_ort     = order.buyer_ort || '';
+        neueRechnung.kaeufer_land    = order.buyer_land || 'DE';
+        neueRechnung.artikel_name    = order.artikel_name || '';
+        neueRechnung.ebay_artikel_id = order.ebay_artikel_id || '';
+        neueRechnung.menge           = order.menge || 1;
+        neueRechnung.einzelpreis     = order.gesamt || '';
+        autofillGefunden = true;
+        showToast('Bestelldaten übernommen ✓');
+      } else {
+        showToast('Keine Bestellung gefunden.');
+      }
+    } catch (e) {
+      // kein Toast — stilles Fallback
+    } finally {
+      autofillSucht = false;
+    }
+  }
+
+  function resetErstellenModal() {
+    erstellenModal = false;
+    autofillGefunden = false;
+    autofillSucht = false;
+    clearTimeout(autofillTimer);
+    neueRechnung = {
+      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
+      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
+      menge: 1, einzelpreis: '', order_id: ''
+    };
   }
 
   async function erstelleManuell() {
@@ -209,12 +270,7 @@
         einzelpreis: Number(neueRechnung.einzelpreis)
       });
       showToast('Rechnung erstellt ✓');
-      erstellenModal = false;
-      neueRechnung = {
-        kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
-        kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-        menge: 1, einzelpreis: '', order_id: ''
-      };
+      resetErstellenModal();
       await ladeRechnungen();
     } catch (e) {
       showToast('Fehler: ' + e.message);
@@ -569,14 +625,35 @@
 
 <!-- MODAL: RECHNUNG ERSTELLEN -->
 {#if erstellenModal}
-  <div class="modal-overlay" onclick={() => erstellenModal = false}>
+  <div class="modal-overlay" onclick={resetErstellenModal}>
     <div class="modal-box" onclick={(e) => e.stopPropagation()}>
       <div class="modal-hdr">
         <span class="modal-titel">Neue Rechnung erstellen</span>
-        <button class="icon-btn" onclick={() => erstellenModal = false}>✕</button>
+        <button class="icon-btn" onclick={resetErstellenModal}>✕</button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
+
+          <!-- Bestellnummer-Autofill -->
+          <div class="form-group">
+            <label>
+              eBay Bestellnr.
+              {#if autofillSucht}
+                <span class="autofill-hint autofill-sucht">🔍 Suche…</span>
+              {:else if autofillGefunden}
+                <span class="autofill-hint autofill-ok">✓ Daten übernommen</span>
+              {:else}
+                <span class="autofill-hint">→ Felder werden automatisch befüllt</span>
+              {/if}
+            </label>
+            <input
+              bind:value={neueRechnung.order_id}
+              placeholder="12-34567-89012"
+              oninput={onOrderIdInput}
+              class={autofillGefunden ? 'input-ok' : ''}
+            />
+          </div>
+
           <div class="form-group">
             <label>Käufer *</label>
             <input bind:value={neueRechnung.kaeufer_name} placeholder="Max Mustermann" />
@@ -599,15 +676,9 @@
               <input bind:value={neueRechnung.kaeufer_ort} placeholder="Berlin" />
             </div>
           </div>
-          <div class="form-group form-2col">
-            <div class="form-group">
-              <label>Land</label>
-              <input bind:value={neueRechnung.kaeufer_land} placeholder="DE" />
-            </div>
-            <div class="form-group">
-              <label>eBay Bestellnr.</label>
-              <input bind:value={neueRechnung.order_id} placeholder="12-34567-89012" />
-            </div>
+          <div class="form-group">
+            <label>Land</label>
+            <input bind:value={neueRechnung.kaeufer_land} placeholder="DE" />
           </div>
           <div class="form-group">
             <label>Artikel *</label>
@@ -630,7 +701,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-ghost" onclick={() => erstellenModal = false}>Abbrechen</button>
+        <button class="btn-ghost" onclick={resetErstellenModal}>Abbrechen</button>
         <button class="btn-primary" onclick={erstelleManuell} disabled={erstellenLaeuft}>
           {erstellenLaeuft ? 'Erstelle…' : 'Rechnung erstellen'}
         </button>
@@ -898,7 +969,10 @@
   .form-grid { display: flex; flex-direction: column; gap: 14px; }
   .form-group { display: flex; flex-direction: column; gap: 5px; }
   .form-2col  { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .form-group label { font-size: 0.78rem; color: var(--text2); font-weight: 500; }
+  .form-group label {
+    font-size: 0.78rem; color: var(--text2); font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
   .form-group input {
     background: var(--surface); border: 1px solid var(--border); color: var(--text);
     padding: 8px 12px; border-radius: 8px; font-size: 0.85rem;
@@ -906,4 +980,11 @@
   }
   .form-group input:focus { border-color: var(--primary); }
   .form-group input::placeholder { color: var(--text3); }
+  .form-group input.input-ok { border-color: #16a34a; background: rgba(22,163,74,0.04); }
+
+  .autofill-hint {
+    font-size: 0.72rem; font-weight: 400; color: var(--text3);
+  }
+  .autofill-sucht { color: var(--primary); }
+  .autofill-ok    { color: #16a34a; font-weight: 600; }
 </style>
