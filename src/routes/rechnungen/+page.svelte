@@ -117,7 +117,7 @@
     if ($currentUser) {
       ladeVorlage();
     } else {
-      vorlageGeladen = false;
+      vorlageGeladen = true;
     }
   });
 
@@ -318,7 +318,6 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 </script>
 
-{#if !vorlageGeladen}
   <div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--text2);font-size:0.85rem;gap:10px;">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
     Vorlage wird geladen…
