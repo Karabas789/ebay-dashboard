@@ -39,6 +39,7 @@
     { path: '/produkte',      icon: '📦', label: 'Produkte' },
     { path: '/bestellungen',  icon: '🛒', label: 'Bestellungen' },
     { path: '/rechnungen',    icon: '🧾', label: 'Rechnungen' },
+    { path: '/rechnungsvorlage', icon: '🖨', label: 'Rechnungsvorlage' },
   ];
 
   function toggleSidebar() {
