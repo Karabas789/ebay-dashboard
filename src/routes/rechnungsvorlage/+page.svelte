@@ -643,7 +643,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 </div>
 
 <style>
-  .vb-container { display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+  .vb-container { display: flex; flex-direction: column; height: calc(100vh - 56px); background: var(--bg); margin: -28px -32px; }
 
   .vb-topbar {
     display: flex; align-items: center; justify-content: space-between;
