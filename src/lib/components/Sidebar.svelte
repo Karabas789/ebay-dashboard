@@ -4,6 +4,7 @@
   import { clearAuth, setAuth, API } from '$lib/api.js';
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
+  import EbayVerbindenModal from '$lib/components/EbayVerbindenModal.svelte';
 
   let user;
   let unsubUser = currentUser.subscribe(v => user = v);
@@ -66,14 +67,6 @@
     const ebayUsername = user?.ebay_user_id || '';
     const state = ebayUsername + '_uid_' + userId;
 
-    const confirmed = confirm(
-      '⚠️ Wichtig: eBay verbindet den Account, der aktuell im Browser bei eBay eingeloggt ist!\n\n' +
-      'Erwartet: ' + (ebayUsername || 'unbekannt') + '\n\n' +
-      'Bitte stelle sicher, dass du bei eBay als "' + ebayUsername + '" eingeloggt bist.\n\n' +
-      'Jetzt mit eBay verbinden?'
-    );
-    if (!confirmed) return;
-
     const params = new URLSearchParams({
       client_id: 'VitaliDu-TestAPI-PRD-2b448418d-05f39944',
       redirect_uri: 'Vitali_Dubs-VitaliDu-TestAP-lnbmshlxd',
@@ -82,7 +75,14 @@
       scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/commerce.message'
     });
 
-    window.open('https://auth.ebay.com/oauth2/authorize?' + params.toString(), '_blank', 'width=600,height=700');
+    ebayModalUser = ebayUsername || 'unbekannt';
+    ebayOAuthUrl = 'https://auth.ebay.com/oauth2/authorize?' + params.toString();
+    showEbayModal = true;
+  }
+
+  function handleEbayConfirm() {
+    showEbayModal = false;
+    window.open(ebayOAuthUrl, '_blank', 'width=600,height=700');
   }
 
   function openSessionModal() {
@@ -482,4 +482,12 @@
   }
   .session-btn-ok:hover { background: var(--primary-dark, #2d6ab8); }
   .session-btn-ok:disabled { opacity: 0.6; cursor: not-allowed; }
+
+<EbayVerbindenModal
+  bind:open={showEbayModal}
+  expectedUser={ebayModalUser}
+  onConfirm={handleEbayConfirm}
+  onCancel={() => showEbayModal = false}
+/>
+
 </style>
