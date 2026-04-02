@@ -30,11 +30,13 @@
     const user = getUser();
     if (token && user) {
       currentUser.set(user);
-    } else if (!isLoginPage) {
+      ready = true;
+    } else if (isLoginPage) {
+      ready = true;
+    } else {
+      ready = true;
       goto('/login');
-      return;
     }
-    ready = true;
   });
 </script>
 
