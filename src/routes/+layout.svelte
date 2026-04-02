@@ -45,7 +45,7 @@
     <div class="app-shell">
       <Sidebar />
       <main class="main-content" class:sidebar-collapsed={collapsed}>
-        <div class="page-container animate-in">
+        <div class="page-wrapper animate-in">
           <slot />
         </div>
       </main>
@@ -63,20 +63,20 @@
   .app-shell {
     display: flex;
     height: 100vh;
-    overflow: hidden;
   }
   .main-content {
     flex: 1;
     margin-left: var(--sidebar-width);
-    overflow-y: auto;
-    overflow-x: hidden;
     height: 100vh;
+    overflow-y: auto;
     transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Kein overflow-x:hidden — das erzeugt einen Stacking Context der position:fixed bricht */
   }
   .main-content.sidebar-collapsed {
     margin-left: var(--sidebar-collapsed-width, 68px);
   }
-  .page-container {
+  .page-wrapper {
     padding: 28px 32px;
+    min-height: 100%;
   }
 </style>
