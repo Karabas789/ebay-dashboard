@@ -530,7 +530,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
           <div class="form-group">
             <label>Einleitungstext</label>
             <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. {order_id} vom {datum}."></textarea>
-            <span class="hint">Platzhalter: {'{order_id}'}, {'{datum}'}</span>
+            <span class="hint">Platzhalter: {'{'}order_id{'}'}, {'{'}datum{'}'}</span>
           </div>
         </div>
         {/if}
