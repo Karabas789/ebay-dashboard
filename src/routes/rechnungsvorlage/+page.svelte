@@ -117,17 +117,18 @@
     if ($currentUser) await ladeVorlage();
   });
 
-  async function ladeVorlage() {
-    try {
-      const data = await apiCall('vorlage-laden', { user_id: $currentUser.id });
-      if (data && data.vorlage) {
-        vorlage = { ...vorlage, ...data.vorlage };
-      }
-      vorlageGeladen = true;
-    } catch(e) {
-      vorlageGeladen = true;
+async function ladeVorlage() {
+  try {
+    const data = await apiCall('vorlage-laden', { user_id: $currentUser.id });
+    if (data && data.vorlage) {
+      vorlage = { ...vorlage, ...data.vorlage };
     }
+  } catch(e) {
+    // Kein Fehler anzeigen — Workflow existiert noch nicht
+  } finally {
+    vorlageGeladen = true;  // IMMER auf true setzen
   }
+}
 
   async function speichereVorlage() {
     vorlageLaeuft = true;
