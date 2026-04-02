@@ -15,7 +15,6 @@
   let collapsed = false;
   let unsubCollapsed = sidebarCollapsed.subscribe(v => collapsed = v);
 
-  // Session Modal — öffnet sich automatisch bei abgelaufenem Token
   let showSessionModal = false;
   let sessionEmail = '';
   let sessionPassword = '';
@@ -31,16 +30,20 @@
     }
   });
 
+  let showEbayModal = false;
+  let ebayModalUser = '';
+  let ebayOAuthUrl = '';
+
   onDestroy(() => {
     unsubUser(); unsubTheme(); unsubCollapsed(); unsubSession();
   });
 
   const nav = [
-    { path: '/',              icon: '📩', label: 'Nachrichten' },
-    { path: '/produkte',      icon: '📦', label: 'Produkte' },
-    { path: '/bestellungen',  icon: '🛒', label: 'Bestellungen' },
-    { path: '/rechnungen',    icon: '🧾', label: 'Rechnungen' },
-    { path: '/rechnungsvorlage', icon: '🖨', label: 'Rechnungsvorlage' },
+    { path: '/nachrichten',      icon: '📩', label: 'Nachrichten' },
+    { path: '/produkte',         icon: '📦', label: 'Produkte' },
+    { path: '/bestellungen',     icon: '🛒', label: 'Bestellungen' },
+    { path: '/rechnungen',       icon: '🧾', label: 'Rechnungen' },
+    { path: '/rechnungsvorlage', icon: '🖨',  label: 'Rechnungsvorlage' },
   ];
 
   function toggleSidebar() {
@@ -107,7 +110,6 @@
         currentUser.set(data.user);
         sessionExpired.set(false);
         showSessionModal = false;
-        // Seite neu laden, damit alle Daten frisch kommen
         window.location.reload();
       } else {
         sessionError = data.message || 'Anmeldung fehlgeschlagen.';
@@ -158,7 +160,7 @@
       <a
         href={item.path}
         class="nav-item"
-        class:active={currentPath === item.path || (item.path !== '/' && currentPath.startsWith(item.path))}
+        class:active={currentPath === item.path || currentPath.startsWith(item.path)}
         data-tooltip={item.label}
       >
         <span class="nav-icon">{item.icon}</span>
@@ -216,7 +218,7 @@
   </div>
 </aside>
 
-<!-- SESSION MODAL (manuell oder automatisch bei abgelaufenem Token) -->
+<!-- SESSION MODAL -->
 {#if showSessionModal}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -253,6 +255,13 @@
     </div>
   </div>
 {/if}
+
+<EbayVerbindenModal
+  bind:open={showEbayModal}
+  expectedUser={ebayModalUser}
+  onConfirm={handleEbayConfirm}
+  onCancel={() => showEbayModal = false}
+/>
 
 <style>
   .sidebar {
@@ -400,7 +409,6 @@
   .sidebar.collapsed .sidebar-action { flex: none; width: 38px; }
   .sidebar-action:hover { background: var(--border); }
 
-  /* Tooltips für Action-Buttons (rechts vom Icon) */
   .sidebar-action {
     position: relative;
   }
@@ -482,12 +490,4 @@
   }
   .session-btn-ok:hover { background: var(--primary-dark, #2d6ab8); }
   .session-btn-ok:disabled { opacity: 0.6; cursor: not-allowed; }
-
-<EbayVerbindenModal
-  bind:open={showEbayModal}
-  expectedUser={ebayModalUser}
-  onConfirm={handleEbayConfirm}
-  onCancel={() => showEbayModal = false}
-/>
-
 </style>
