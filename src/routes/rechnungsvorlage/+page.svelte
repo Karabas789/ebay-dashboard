@@ -50,7 +50,7 @@
     firma_bank_name: '',
 
     // Einleitungstext
-    einleitungstext: 'Ihre Bestellung Nr. [order_id] vom [datum].',
+    einleitungstext: 'Ihre Bestellung Nr. {order_id} vom {datum}.',
 
     // Tabelle
     tabelle_zeige_artnr: true,
@@ -251,7 +251,7 @@ ${wasserzeichenHTML}
 </div>
 
 <!-- EINLEITUNGSTEXT -->
-${v.einleitungstext ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('[order_id]', b.order_id).replace('[datum]', b.datum)}</div>` : ''}
+${v.einleitungstext ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('{order_id}', b.order_id).replace('{datum}', b.datum)}</div>` : ''}
 
 <!-- POSITIONEN -->
 <table>
@@ -529,8 +529,8 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
           </div>
           <div class="form-group">
             <label>Einleitungstext</label>
-            <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. [order_id] vom [datum]."></textarea>
-            <span class="hint">Platzhalter: {'{'}order_id{'}'}, {'{'}datum{'}'}</span>
+            <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. {order_id} vom {datum}."></textarea>
+            <span class="hint">Platzhalter: {'{order_id}'}, {'{datum}'}</span>
           </div>
         </div>
         {/if}
@@ -643,110 +643,143 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 </div>
 
 <style>
-  .vb-container { display: flex; flex-direction: column; height: calc(100vh - 56px); background: var(--bg); margin: -28px -32px; }
-
+  .vb-container {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 56px);
+    background: var(--bg);
+    margin: -28px -32px;
+  }
   .vb-topbar {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
-    flex-wrap: wrap; gap: 12px; flex-shrink: 0;
+    padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 10px; flex-shrink: 0;
   }
-  .vb-title { font-size: 1.2rem; font-weight: 700; color: var(--text); }
-  .vb-sub   { font-size: 0.8rem; color: var(--text2); }
-  .vb-topbar-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-
+  .vb-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+  .vb-sub   { font-size: 0.78rem; color: var(--text2); }
+  .vb-topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .tab-switcher { display: flex; background: var(--surface2); border-radius: 8px; padding: 3px; gap: 2px; }
-  .tab-btn { background: transparent; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.82rem; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+  .tab-btn { background: transparent; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; color: var(--text2); cursor: pointer; transition: all 0.15s; }
   .tab-btn.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-
-  .btn-primary { background: var(--primary); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 0.84rem; cursor: pointer; transition: background 0.15s; }
+  .btn-primary { background: var(--primary); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 0.83rem; cursor: pointer; transition: background 0.15s; }
   .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); padding: 8px 14px; border-radius: 8px; font-size: 0.84rem; cursor: pointer; transition: all 0.15s; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); padding: 7px 12px; border-radius: 8px; font-size: 0.83rem; cursor: pointer; transition: all 0.15s; }
   .btn-ghost:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
   .btn-ghost:disabled { opacity: 0.6; cursor: not-allowed; }
   .btn-danger { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-  .vb-body { display: flex; flex: 1; overflow: hidden; gap: 0; }
+  .vb-body { display: flex; flex: 1; overflow: hidden; }
 
+  /* Einstellungen-Panel: breiter für gut lesbare Felder */
   .vb-settings {
-    width: 360px; flex-shrink: 0; overflow-y: auto;
-    border-right: 1px solid var(--border); background: var(--surface);
-    padding: 16px; display: flex; flex-direction: column; gap: 8px;
+    width: 440px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-
   .sektion { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .sektion-hdr {
     width: 100%; background: var(--surface2); border: none;
-    padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
-    font-size: 0.85rem; font-weight: 600; color: var(--text); cursor: pointer;
-    transition: background 0.15s;
+    padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.83rem; font-weight: 600; color: var(--text); cursor: pointer; transition: background 0.15s;
   }
   .sektion-hdr:hover { background: var(--border); }
-  .chevron { font-size: 1.1rem; color: var(--text2); transform: rotate(90deg); transition: transform 0.2s; }
+  .chevron { font-size: 1rem; color: var(--text2); transform: rotate(90deg); transition: transform 0.2s; }
   .chevron.offen { transform: rotate(270deg); }
-  .sektion-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
-
+  .sektion-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
-  .form-group label { font-size: 0.75rem; color: var(--text2); font-weight: 500; }
+  .form-group label { font-size: 0.73rem; color: var(--text2); font-weight: 500; }
   .form-group input, .form-group select, .form-group textarea {
     background: var(--bg); border: 1px solid var(--border); color: var(--text);
     padding: 7px 10px; border-radius: 7px; font-size: 0.83rem; outline: none;
     transition: border-color 0.15s; font-family: inherit;
+    width: 100%; box-sizing: border-box;
   }
   .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
   .form-group textarea { resize: vertical; min-height: 52px; }
-  .hint { font-size: 0.72rem; color: var(--text3); }
-
+  .hint { font-size: 0.71rem; color: var(--text3); }
   .color-row { display: flex; gap: 6px; align-items: center; }
   .color-input { width: 36px; height: 32px; padding: 2px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; background: var(--bg); flex-shrink: 0; }
-  .color-text { flex: 1; }
-
+  .color-text { flex: 1; min-width: 0; }
   .toggle-list { display: flex; flex-direction: column; gap: 8px; }
-  .toggle-item { display: flex; align-items: center; gap: 8px; font-size: 0.83rem; color: var(--text); cursor: pointer; }
-  .toggle-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
-
-  .themen-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .toggle-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text); cursor: pointer; }
+  .toggle-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); flex-shrink: 0; }
+  .themen-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .thema-btn {
-    display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    display: flex; align-items: center; gap: 5px; padding: 5px 8px;
     background: var(--bg); border: 2px solid transparent; border-radius: 8px;
-    font-size: 0.78rem; color: var(--text); cursor: pointer; transition: all 0.15s;
+    font-size: 0.75rem; color: var(--text); cursor: pointer; transition: all 0.15s;
   }
   .thema-btn:hover { background: var(--surface2); }
-  .thema-farbe { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
-
+  .thema-farbe { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
   .upload-zone {
     display: flex; flex-direction: column; align-items: center; gap: 8px;
-    padding: 20px; border: 2px dashed var(--border); border-radius: 10px;
-    cursor: pointer; color: var(--text2); font-size: 0.82rem; text-align: center;
+    padding: 16px; border: 2px dashed var(--border); border-radius: 10px;
+    cursor: pointer; color: var(--text2); font-size: 0.81rem; text-align: center;
     transition: border-color 0.15s, background 0.15s;
   }
   .upload-zone:hover { border-color: var(--primary); background: var(--surface2); color: var(--primary); }
-
   .logo-preview { display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
 
+  /* Vorschau-Panel: scrollbar, A4-Seite zentriert */
   .vb-preview {
-    flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #cbd5e1;
+    overflow: hidden;
   }
   .vb-preview-fullscreen { flex: 1; }
-
   .preview-hdr {
-    padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
-    font-size: 0.82rem; font-weight: 600; color: var(--text); display: flex; justify-content: space-between;
-    align-items: center; flex-shrink: 0;
+    padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+    font-size: 0.81rem; font-weight: 600; color: var(--text);
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
   }
-  .preview-hint { font-size: 0.75rem; color: var(--text3); font-weight: 400; }
-  .preview-frame-wrap { flex: 1; overflow: hidden; padding: 16px; background: #e2e8f0; }
-  .preview-iframe, .pdf-iframe {
-    width: 100%; height: 100%;
-    background: white; border: none;
-    border-radius: 4px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  .preview-hint { font-size: 0.73rem; color: var(--text3); font-weight: 400; }
+
+  /* Scrollbarer Bereich — A4 zentriert */
+  .preview-frame-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
   }
 
+  /* A4 bei 96dpi = 794×1123px */
+  .preview-iframe {
+    width: 794px;
+    height: 1123px;
+    flex-shrink: 0;
+    background: white;
+    border: none;
+    border-radius: 2px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .pdf-iframe {
+    width: 794px;
+    height: 1123px;
+    flex-shrink: 0;
+    background: white;
+    border: none;
+    border-radius: 2px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+
+  @media (max-width: 1200px) {
+    .vb-settings { width: 380px; }
+  }
   @media (max-width: 900px) {
     .vb-body { flex-direction: column; }
-    .vb-settings { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 50vh; }
+    .vb-settings { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 45vh; }
+    .preview-iframe, .pdf-iframe { width: 100%; height: 600px; }
   }
 </style>
