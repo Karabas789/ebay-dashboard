@@ -221,7 +221,8 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:${v.schriftart},Arial,sans-serif;font-size:${v.schriftgroesse}px;color:${v.schriftfarbe};background:#fff;padding:32px;}
-table{width:100%;border-collapse:collapse;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;margi
+n-bottom:16px}
 thead th{background:${v.tabellenfarbe};color:#fff;padding:9px 12px;text-align:left;font-size:12px;}
 tbody td{padding:9px 12px;border-bottom:1px solid #e2e8f0}
 .right{text-align:right}
@@ -318,11 +319,6 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 </script>
 
-  <div style="display:flex;align-items:center;justify-content:center;height:300px;color:var(--text2);font-size:0.85rem;gap:10px;">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-    Vorlage wird geladen…
-  </div>
-{:else}
 <div class="vb-container">
 
   <!-- Topbar -->
