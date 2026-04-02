@@ -18,6 +18,7 @@
   let reviseHistory = {};
   let customFolders = [];
   let showNewFolderModal = false;
+  let confirmModal = { open: false, title: '', message: '', variant: 'danger', onConfirm: () => {} };
   let newFolderName = '';
   let newFolderIcon = '📂';
 
@@ -804,6 +805,6 @@
   .move-btn-danger:hover { background: rgba(239,68,68,0.07); border-color: var(--danger); color: var(--danger); }
   .move-cancel { margin-top: 8px; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
 
-<ConfirmModal bind:modal={confirmModal} />
-
 </style>
+
+<ConfirmModal bind:modal={confirmModal} />
