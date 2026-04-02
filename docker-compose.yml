@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ebay-dashboard
+    restart: unless-stopped
+    expose:
+      - '3000'
+    networks:
+      - coolify
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ebay-dashboard.rule=Host(`ebay.ai-online.cloud`)
+      - traefik.http.routers.ebay-dashboard.entrypoints=https
+      - traefik.http.routers.ebay-dashboard.tls=true
+      - traefik.http.routers.ebay-dashboard.tls.certresolver=letsencrypt
+      - traefik.http.services.ebay-dashboard.loadbalancer.server.port=3000
+    image: ''
+networks:
+  coolify:
+    external: true
