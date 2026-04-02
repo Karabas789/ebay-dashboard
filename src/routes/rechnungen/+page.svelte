@@ -213,7 +213,7 @@
 
     const wasserzeichenHTML = v.wasserzeichen
       ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;color:rgba(0,0,0,0.06);font-weight:900;pointer-events:none;z-index:0;">${v.wasserzeichen_text}</div>
-{/if}`
+`
       : '';
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
