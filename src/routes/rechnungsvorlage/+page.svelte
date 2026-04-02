@@ -50,7 +50,7 @@
     firma_bank_name: '',
 
     // Einleitungstext
-    einleitungstext: 'Ihre Bestellung Nr. {order_id} vom {datum}.',
+    einleitungstext: 'Ihre Bestellung Nr. [order_id] vom [datum].',
 
     // Tabelle
     tabelle_zeige_artnr: true,
@@ -251,7 +251,7 @@ ${wasserzeichenHTML}
 </div>
 
 <!-- EINLEITUNGSTEXT -->
-${v.einleitungstext ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('{order_id}', b.order_id).replace('{datum}', b.datum)}</div>` : ''}
+${v.einleitungstext ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('[order_id]', b.order_id).replace('[datum]', b.datum)}</div>` : ''}
 
 <!-- POSITIONEN -->
 <table>
@@ -529,7 +529,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
           </div>
           <div class="form-group">
             <label>Einleitungstext</label>
-            <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. {order_id} vom {datum}."></textarea>
+            <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. [order_id] vom [datum]."></textarea>
             <span class="hint">Platzhalter: {'{'}order_id{'}'}, {'{'}datum{'}'}</span>
           </div>
         </div>
