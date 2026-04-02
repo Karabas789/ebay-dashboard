@@ -117,15 +117,15 @@
     if ($currentUser) await ladeVorlage();
   });
 
-async function ladeVorlage() {
-  vorlageGeladen = true; // Sofort auf true — Seite zeigt sich
+ async function ladeVorlage() {
+  vorlageGeladen = true;
   try {
     const data = await apiCall('vorlage-laden', { user_id: $currentUser.id });
     if (data && data.vorlage) {
       vorlage = { ...vorlage, ...data.vorlage };
     }
   } catch(e) {
-    // Workflow existiert noch nicht — kein Problem
+    // Workflow noch nicht aktiv — Standardwerte werden verwendet
   }
 }
 
