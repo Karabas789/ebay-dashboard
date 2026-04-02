@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { currentUser } from '$lib/stores.js';
   import { apiCall, getToken, API } from '$lib/api.js';
+  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import { showToast } from '$lib/stores.js';
 
   let user;
@@ -17,6 +18,7 @@
   let reviseHistory = {};
   let customFolders = [];
   let showNewFolderModal = false;
+  let confirmModal = { open: false, title: '', message: '', variant: 'danger', onConfirm: () => {} };
   let newFolderName = '';
   let newFolderIcon = '📂';
 
@@ -270,17 +272,25 @@
   }
 
   async function deleteMessage() {
-    if (!selectedMsg || !confirm('Nachricht wirklich löschen?')) return;
-    try {
-      const data = await apiCall('/nachricht-loeschen', { id: selectedMsg.id, user_id: user?.id });
-      if (data.success) {
-        deletedIds = [...deletedIds, selectedMsg.id];
-        sessionStorage.setItem('deleted_ids', JSON.stringify(deletedIds));
-        allMessages = allMessages.filter(m => m.id !== selectedMsg.id);
-        selectedMsgId = null;
-        showToast('Nachricht gelöscht ✓', 'success');
+    if (!selectedMsg) return;
+    confirmModal = {
+      open: true,
+      title: 'Nachricht löschen',
+      message: 'Möchtest du diese Nachricht wirklich löschen?',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          const data = await apiCall('/nachricht-loeschen', { id: selectedMsg.id, user_id: user?.id });
+          if (data.success) {
+            deletedIds = [...deletedIds, selectedMsg.id];
+            sessionStorage.setItem('deleted_ids', JSON.stringify(deletedIds));
+            allMessages = allMessages.filter(m => m.id !== selectedMsg.id);
+            selectedMsgId = null;
+            showToast('Nachricht gelöscht ✓', 'success');
+          }
+        } catch (e) { showToast('Verbindungsfehler', 'error'); }
       }
-    } catch (e) { showToast('Verbindungsfehler', 'error'); }
+    };
   }
 
   async function sendRevise() {
@@ -329,15 +339,22 @@
   }
 
   async function deleteFolder(folderId) {
-    if (!confirm('Ordner löschen? Nachrichten werden in den Posteingang verschoben.')) return;
-    try {
-      const data = await apiCall('/nachricht-ordner', { action: 'delete', user_id: user?.id, folder_id: folderId });
-      if (data.success) {
-        if (currentFolder === 'custom_' + folderId) { currentFolder = 'alle'; selectedMsgId = null; }
-        await loadCustomFolders(); await loadNachrichten();
-        showToast('Ordner gelöscht', 'success');
+    confirmModal = {
+      open: true,
+      title: 'Ordner löschen',
+      message: 'Nachrichten werden in den Posteingang verschoben.',
+      variant: 'warning',
+      onConfirm: async () => {
+        try {
+          const data = await apiCall('/nachricht-ordner', { action: 'delete', user_id: user?.id, folder_id: folderId });
+          if (data.success) {
+            if (currentFolder === 'custom_' + folderId) { currentFolder = 'alle'; selectedMsgId = null; }
+            await loadCustomFolders(); await loadNachrichten();
+            showToast('Ordner gelöscht', 'success');
+          }
+        } catch(e) { showToast('Fehler', 'error'); }
       }
-    } catch(e) { showToast('Fehler', 'error'); }
+    };
   }
 
   async function renameFolder(folderId) {
@@ -800,3 +817,5 @@
   .move-btn-danger:hover { background: rgba(239,68,68,0.07); border-color: var(--danger); color: var(--danger); }
   .move-cancel { margin-top: 8px; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
 </style>
+
+<ConfirmModal bind:modal={confirmModal} />
