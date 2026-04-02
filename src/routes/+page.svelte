@@ -341,6 +341,7 @@
         showToast('Ordner gelöscht', 'success');
       }
     } catch(e) { showToast('Fehler', 'error'); }
+  }};
   }
 
   async function renameFolder(folderId) {
