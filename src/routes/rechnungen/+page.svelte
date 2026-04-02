@@ -117,7 +117,7 @@
     if ($currentUser) {
       ladeVorlage();
     } else {
-      vorlageGeladen = true;
+      vorlageGeladen = false;
     }
   });
 
