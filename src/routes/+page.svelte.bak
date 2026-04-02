@@ -2,7 +2,6 @@
   import { onMount, tick } from 'svelte';
   import { currentUser } from '$lib/stores.js';
   import { apiCall, getToken, API } from '$lib/api.js';
-  import ConfirmModal from '$lib/components/ConfirmModal.svelte';
   import { showToast } from '$lib/stores.js';
 
   let user;
@@ -271,8 +270,7 @@
   }
 
   async function deleteMessage() {
-    if (!selectedMsg) return;
-    confirmModal = { open: true, title: 'Nachricht löschen', message: 'Möchtest du diese Nachricht wirklich löschen?', variant: 'danger', onConfirm: async () => {
+    if (!selectedMsg || !confirm('Nachricht wirklich löschen?')) return;
     try {
       const data = await apiCall('/nachricht-loeschen', { id: selectedMsg.id, user_id: user?.id });
       if (data.success) {
@@ -283,7 +281,6 @@
         showToast('Nachricht gelöscht ✓', 'success');
       }
     } catch (e) { showToast('Verbindungsfehler', 'error'); }
-    }};
   }
 
   async function sendRevise() {
@@ -332,7 +329,7 @@
   }
 
   async function deleteFolder(folderId) {
-    confirmModal = { open: true, title: 'Ordner löschen', message: 'Nachrichten werden in den Posteingang verschoben.', variant: 'warning', onConfirm: async () => {
+    if (!confirm('Ordner löschen? Nachrichten werden in den Posteingang verschoben.')) return;
     try {
       const data = await apiCall('/nachricht-ordner', { action: 'delete', user_id: user?.id, folder_id: folderId });
       if (data.success) {
@@ -802,7 +799,4 @@
   .move-btn-danger { border-color: #fca5a5; color: var(--danger); }
   .move-btn-danger:hover { background: rgba(239,68,68,0.07); border-color: var(--danger); color: var(--danger); }
   .move-cancel { margin-top: 8px; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: none; color: var(--text2); font-size: 13px; font-weight: 600; cursor: pointer; font-family: var(--font); }
-
-<ConfirmModal bind:modal={confirmModal} />
-
 </style>
