@@ -55,7 +55,12 @@
     firmabankbic: '',
     firmabankname: '',
     // Einleitungstext
+<<<<<<< Updated upstream
     einleitungstext: 'Ihre Bestellung Nr. {order_id} vom {datum}.',
+=======
+    einleitungstext: 'Ihre Bestellung Nr. [order_id] vom [datum].',
+
+>>>>>>> Stashed changes
     // Tabelle
     tabelle_zeige_artnr: true,
     tabelle_zeige_menge: true,
@@ -91,8 +96,6 @@
   // Vorschau
   let vorschauPDF = $state('');
   let vorschauLaeuft = $state(false);
-
-  // Beispieldaten für Vorschau
   const beispiel = {
     rechnungnr: 'RE-2026-00042',
     datum: '02.04.2026',
@@ -112,10 +115,20 @@
     steuersatz: 19,
   };
 
+<<<<<<< Updated upstream
   // Lifecycle
   onMount(() => {
     if ($currentUser) ladeVorlage();
     else vorlageGeladen = true;
+=======
+  let vorschauHTML = $derived(generiereHTML(vorlage, beispiel));
+
+  // Beispieldaten für Vorschau
+
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  onMount(async () => {
+    if ($currentUser) await ladeVorlage();
+>>>>>>> Stashed changes
   });
 
   async function ladeVorlage() {
@@ -167,12 +180,23 @@
   }
   function logoEntfernen() { vorlage.logo_base64 = ''; }
 
+<<<<<<< Updated upstream
   // Live HTML-Vorschau (inline, kein Backend nötig)
   let vorschauHTML = $derived.by(() => {
     const v = vorlage;
     const b = beispiel;
     const fmt = n => Number(n||0).toLocaleString('de-DE', { minimumFractionDigits:2, maximumFractionDigits:2 });
     const w = '€';
+=======
+  function logoEntfernen() {
+    vorlage.logo_base64 = '';
+  }
+
+  // ── Live HTML-Vorschau (inline, kein Backend nötig) ──────────────────────
+  function generiereHTML(v, b) {
+    const fmt = (n) => Number(n||0).toLocaleString('de-DE', {minimumFractionDigits:2,maximumFractionDigits:2});
+    const w = 'EUR';
+>>>>>>> Stashed changes
 
     const logoHTML = v.logo_base64
       ? `<img src="${v.logo_base64}" style="height:${v.logo_breite/2}px;max-width:${v.logo_breite}px;object-fit:contain" alt="Logo">`
@@ -215,6 +239,7 @@
       ? `<span>Steuer-Nr. ${v.firmasteuernr}</span>`
       : '';
 
+<<<<<<< Updated upstream
     // Header layout
     let headerContent = '';
     if (v.logo_position === 'mitte') {
@@ -287,6 +312,65 @@
     </div>
     </body></html>`;
   });
+=======
+<!-- EINLEITUNGSTEXT -->
+${(v.einleitungstext || '') ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('[order_id]', b.order_id).replace('[datum]', b.datum)}</div>` : ''}
+
+<!-- POSITIONEN -->
+<table>
+  <thead>
+    <tr>
+      ${v.tabelle_zeige_artnr ? `<th style="width:70px">${v.tabelle_kopfzeilen.artnr}</th>` : ''}
+      <th>${v.tabelle_kopfzeilen.bezeichnung}</th>
+      ${v.tabelle_zeige_menge ? `<th class="right" style="width:60px">${v.tabelle_kopfzeilen.menge}</th>` : ''}
+      ${v.tabelle_zeige_einzelpreis ? `<th class="right" style="width:100px">${v.tabelle_kopfzeilen.einzelpreis}</th>` : ''}
+      ${v.tabelle_zeige_betrag ? `<th class="right" style="width:100px">${v.tabelle_kopfzeilen.betrag}</th>` : ''}
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      ${v.tabelle_zeige_artnr ? `<td>${b.artikel_nr}</td>` : ''}
+      <td><strong>${b.artikel_name}</strong></td>
+      ${v.tabelle_zeige_menge ? `<td class="right">${b.menge}</td>` : ''}
+      ${v.tabelle_zeige_einzelpreis ? `<td class="right">${fmt(b.einzelpreis)} ${w}</td>` : ''}
+      ${v.tabelle_zeige_betrag ? `<td class="right">${fmt(b.einzelpreis * b.menge)} ${w}</td>` : ''}
+    </tr>
+  </tbody>
+</table>
+
+<!-- SUMMEN -->
+<table style="width:280px;margin-left:auto">
+  <tbody>
+    <tr><td style="padding:8px 14px;color:#666;">Nettobetrag</td><td style="padding:8px 14px;text-align:right">${fmt(b.netto_betrag)} ${w}</td></tr>
+    ${steuerZeile}
+    <tr class="total"><td style="padding:10px 14px;">Gesamtbetrag</td><td style="padding:10px 14px;text-align:right;">${fmt(b.brutto_betrag)} ${w}</td></tr>
+  </tbody>
+</table>
+
+<!-- ZAHLUNGSHINWEIS -->
+${v.zeige_zahlungshinweis && v.zahlungshinweis ? `<div style="margin-top:12px;display:inline-block;background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;">${v.zahlungshinweis}</div>` : ''}
+
+<!-- BANKDATEN -->
+${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;padding:12px;background:${v.hintergrundfarbe};border-radius:6px;font-size:12px;"><strong>Bankverbindung:</strong> ${v.firma_bank_name ? v.firma_bank_name+' · ' : ''}IBAN: ${v.firma_bank_iban}${v.firma_bank_bic ? ' · BIC: '+v.firma_bank_bic : ''}</div>` : ''}
+
+<!-- FOOTER -->
+<div style="margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:${v.footer_farbe};text-align:center;">
+  ${v.footer_text ? `<div>${v.footer_text}</div>` : ''}
+  ${v.footer_zeige_steuernr && v.firma_steuernr ? `<div>Steuer-Nr.: ${v.firma_steuernr}${v.firma_ust_idnr ? ' · USt-IdNr.: '+v.firma_ust_idnr : ''}</div>` : ''}
+</div>
+</body></html>`;
+}
+
+  // Sektion-Accordion
+  let offeneSektionen = $state(new Set(['logo', 'farben', 'firma', 'header', 'tabelle', 'footer']));
+  function toggleSektion(s) {
+    const neu = new Set(offeneSektionen);
+    neu.has(s) ? neu.delete(s) : neu.add(s);
+    offeneSektionen = neu;
+  }
+
+  const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
+>>>>>>> Stashed changes
 </script>
 
 <div class="page">
@@ -491,10 +575,16 @@
             <input id="titeltext" bind:value={vorlage.titeltext} placeholder="Rechnung">
           </div>
           <div class="form-group">
+<<<<<<< Updated upstream
             <label for="einleitungstext">Einleitungstext</label>
             <textarea id="einleitungstext" bind:value={vorlage.einleitungstext} rows="2"
               placeholder="Ihre Bestellung Nr. {order_id} vom {datum}."></textarea>
             <span class="hint">Platzhalter: {'{order_id}'}, {'{datum}'}</span>
+=======
+            <label>Einleitungstext</label>
+            <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. [order_id] vom [datum]."></textarea>
+            <span class="hint">Platzhalter: &#123;order_id&#125;, &#123;datum&#125;</span>
+>>>>>>> Stashed changes
           </div>
           {/if}
         </div>
