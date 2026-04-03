@@ -55,12 +55,8 @@
     firmabankbic: '',
     firmabankname: '',
     // Einleitungstext
-<<<<<<< Updated upstream
-    einleitungstext: 'Ihre Bestellung Nr. {order_id} vom {datum}.',
-=======
     einleitungstext: 'Ihre Bestellung Nr. [order_id] vom [datum].',
 
->>>>>>> Stashed changes
     // Tabelle
     tabelle_zeige_artnr: true,
     tabelle_zeige_menge: true,
@@ -115,12 +111,6 @@
     steuersatz: 19,
   };
 
-<<<<<<< Updated upstream
-  // Lifecycle
-  onMount(() => {
-    if ($currentUser) ladeVorlage();
-    else vorlageGeladen = true;
-=======
   let vorschauHTML = $derived(generiereHTML(vorlage, beispiel));
 
   // Beispieldaten für Vorschau
@@ -128,7 +118,6 @@
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(async () => {
     if ($currentUser) await ladeVorlage();
->>>>>>> Stashed changes
   });
 
   async function ladeVorlage() {
@@ -180,14 +169,6 @@
   }
   function logoEntfernen() { vorlage.logo_base64 = ''; }
 
-<<<<<<< Updated upstream
-  // Live HTML-Vorschau (inline, kein Backend nötig)
-  let vorschauHTML = $derived.by(() => {
-    const v = vorlage;
-    const b = beispiel;
-    const fmt = n => Number(n||0).toLocaleString('de-DE', { minimumFractionDigits:2, maximumFractionDigits:2 });
-    const w = '€';
-=======
   function logoEntfernen() {
     vorlage.logo_base64 = '';
   }
@@ -196,7 +177,6 @@
   function generiereHTML(v, b) {
     const fmt = (n) => Number(n||0).toLocaleString('de-DE', {minimumFractionDigits:2,maximumFractionDigits:2});
     const w = 'EUR';
->>>>>>> Stashed changes
 
     const logoHTML = v.logo_base64
       ? `<img src="${v.logo_base64}" style="height:${v.logo_breite/2}px;max-width:${v.logo_breite}px;object-fit:contain" alt="Logo">`
@@ -239,80 +219,6 @@
       ? `<span>Steuer-Nr. ${v.firmasteuernr}</span>`
       : '';
 
-<<<<<<< Updated upstream
-    // Header layout
-    let headerContent = '';
-    if (v.logo_position === 'mitte') {
-      headerContent = `<div style="text-align:center;margin-bottom:8px">${logoHTML}</div><div style="display:flex;justify-content:space-between">${v.header_zeige_firmenname ? firmaBlock : ''} ${kontaktBlock}</div>`;
-    } else if (v.logo_position === 'rechts') {
-      headerContent = `<div style="display:flex;justify-content:space-between;align-items:flex-start">${v.header_zeige_firmenname ? firmaBlock : ''} <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">${logoHTML}${kontaktBlock}</div></div>`;
-    } else {
-      headerContent = `<div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:6px">${logoHTML}${v.header_zeige_firmenname ? firmaBlock : ''}</div>${kontaktBlock}</div>`;
-    }
-
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-      *{margin:0;padding:0;box-sizing:border-box}
-      body{font-family:${v.schriftart},Arial,sans-serif;font-size:${v.schriftgroesse}px;color:${v.schriftfarbe};background:#fff;padding:32px}
-      table{width:100%;border-collapse:collapse;margin-bottom:16px}
-      thead th{background:${v.tabellenfarbe};color:#fff;padding:9px 12px;text-align:left;font-size:12px}
-      tbody td{padding:9px 12px;border-bottom:1px solid #e5e7eb}
-      .right{text-align:right}
-    </style></head><body>
-    ${wasserzeichenHTML}
-    ${headerContent}
-    ${v.header_trennlinie ? `<hr style="border:none;border-top:${v.header_trennlinie_staerke}px solid ${v.header_trennlinie_farbe};margin:14px 0">` : '<div style="margin-bottom:14px"></div>'}
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
-      <div>
-        <div style="font-size:8px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px">Rechnung an</div>
-        <div style="font-weight:600">${b.kaeufername}</div>
-        <div style="font-size:11px;color:#666">${b.kaeuferstrasse}</div>
-        <div style="font-size:11px;color:#666">${b.kaeuferplz} ${b.kaeuferort}</div>
-        <div style="font-size:11px;color:#666">${b.kaeuferland}</div>
-      </div>
-      <div style="text-align:right">
-        <div style="font-size:${v.titelgroesse}px;font-weight:700;color:${v.akzentfarbe}">${v.titeltext}</div>
-        <div style="font-size:12px;color:#555;margin-top:4px">${b.rechnungnr}</div>
-        <div style="font-size:11px;color:#888">Datum: ${b.datum}</div>
-        ${b.order_id ? `<div style="font-size:11px;color:#888">Bestellnr.: ${b.order_id}</div>` : ''}
-      </div>
-    </div>
-    ${einlText ? `<p style="font-size:12px;color:#555;margin-bottom:14px">${einlText}</p>` : ''}
-    <table>
-      <thead><tr>
-        ${v.tabelle_zeige_artnr ? `<th>${v.tabelle_kopfzeilen.artnr}</th>` : ''}
-        <th>${v.tabelle_kopfzeilen.bezeichnung}</th>
-        ${v.tabelle_zeige_menge ? `<th class="right">${v.tabelle_kopfzeilen.menge}</th>` : ''}
-        ${v.tabelle_zeige_einzelpreis ? `<th class="right">${v.tabelle_kopfzeilen.einzelpreis}</th>` : ''}
-        ${v.tabelle_zeige_betrag ? `<th class="right">${v.tabelle_kopfzeilen.betrag}</th>` : ''}
-      </tr></thead>
-      <tbody>
-        <tr>
-          ${v.tabelle_zeige_artnr ? `<td>${b.artikelnr}</td>` : ''}
-          <td>${b.artikelname}</td>
-          ${v.tabelle_zeige_menge ? `<td class="right">${b.menge}</td>` : ''}
-          ${v.tabelle_zeige_einzelpreis ? `<td class="right">${fmt(b.einzelpreis)} ${w}</td>` : ''}
-          ${v.tabelle_zeige_betrag ? `<td class="right">${fmt(b.nettobetrag)} ${w}</td>` : ''}
-        </tr>
-        <tr><td colspan="5" style="padding:8px 14px;text-align:right;font-size:12px;color:#666">Netto</td><td style="display:none"></td></tr>
-        <tr>
-          <td colspan="${[v.tabelle_zeige_artnr,v.tabelle_zeige_menge,v.tabelle_zeige_einzelpreis].filter(Boolean).length + 1}" style="padding:8px 14px;text-align:right;font-size:12px;color:#666">Netto</td>
-          <td style="padding:8px 14px;text-align:right">${fmt(b.nettobetrag)} ${w}</td>
-        </tr>
-        ${steuerZeile}
-        ${v.zeige_zahlungshinweis && v.zahlungshinweis ? `<tr><td colspan="5" style="padding:4px 14px;font-size:11px;color:#888;font-style:italic">${v.zahlungshinweis}</td></tr>` : ''}
-        <tr style="background:${v.akzentfarbe}10">
-          <td colspan="${[v.tabelle_zeige_artnr,v.tabelle_zeige_menge,v.tabelle_zeige_einzelpreis].filter(Boolean).length + 1}" style="padding:10px 14px;text-align:right;font-weight:700">Gesamt Brutto</td>
-          <td style="padding:10px 14px;text-align:right;font-weight:700;color:${v.akzentfarbe}">${fmt(b.bruttobetrag)} ${w}</td>
-        </tr>
-      </tbody>
-    </table>
-    <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:${v.footerfarbe};line-height:1.8">
-      ${v.footertext ? `<div>${v.footertext}</div>` : ''}
-      <div style="margin-top:6px">${bankBlock} ${steuerBlock}</div>
-    </div>
-    </body></html>`;
-  });
-=======
 <!-- EINLEITUNGSTEXT -->
 ${(v.einleitungstext || '') ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('[order_id]', b.order_id).replace('[datum]', b.datum)}</div>` : ''}
 
@@ -370,7 +276,6 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   }
 
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
->>>>>>> Stashed changes
 </script>
 
 <div class="page">
@@ -575,16 +480,9 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
             <input id="titeltext" bind:value={vorlage.titeltext} placeholder="Rechnung">
           </div>
           <div class="form-group">
-<<<<<<< Updated upstream
-            <label for="einleitungstext">Einleitungstext</label>
-            <textarea id="einleitungstext" bind:value={vorlage.einleitungstext} rows="2"
-              placeholder="Ihre Bestellung Nr. {order_id} vom {datum}."></textarea>
-            <span class="hint">Platzhalter: {'{order_id}'}, {'{datum}'}</span>
-=======
             <label>Einleitungstext</label>
             <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. [order_id] vom [datum]."></textarea>
             <span class="hint">Platzhalter: &#123;order_id&#125;, &#123;datum&#125;</span>
->>>>>>> Stashed changes
           </div>
           {/if}
         </div>
