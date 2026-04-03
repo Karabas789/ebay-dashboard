@@ -3,25 +3,16 @@
   import { currentUser, showToast } from '$lib/stores.js';
   import { apiCall } from '$lib/api.js';
 
-  // Tabs
+  // ── Tabs ──────────────────────────────────────────────────────────────────
   let aktiverTab = $state('vorlage'); // 'vorlage' | 'vorschau'
 
-  // Sektionen aufklappbar
-  let offeneSektionen = $state(new Set(['logo', 'farben', 'firma', 'header', 'tabelle', 'footer']));
-  function toggleSektion(key) {
-    const neu = new Set(offeneSektionen);
-    neu.has(key) ? neu.delete(key) : neu.add(key);
-    offeneSektionen = neu;
-  }
-
-  const schriftarten = ['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana'];
-
-  // Vorlage-State
+  // ── Vorlage-State ─────────────────────────────────────────────────────────
   let vorlage = $state({
     // Logo
     logo_base64: '',
-    logo_position: 'links', // links | rechts | mitte
+    logo_position: 'links',   // links | rechts | mitte
     logo_breite: 120,
+
     // Farben & Schrift
     akzentfarbe: '#2563eb',
     schriftfarbe: '#1e293b',
@@ -29,6 +20,7 @@
     tabellenfarbe: '#2563eb',
     schriftart: 'Arial',
     schriftgroesse: 13,
+
     // Header
     header_zeige_logo: true,
     header_zeige_firmenname: true,
@@ -37,23 +29,26 @@
     header_trennlinie: true,
     header_trennlinie_farbe: '#2563eb',
     header_trennlinie_staerke: 3,
+
     // Rechnungstitel
-    titeltext: 'Rechnung',
-    titelgroesse: 24,
-    // Absenderblock / Firmendaten
-    firmaname: '',
-    firmastrasse: '',
-    firmaplz: '',
-    firmaort: '',
-    firmaland: 'Deutschland',
-    firmatelefon: '',
-    firmaemail: '',
-    firmawebsite: '',
-    firmasteuernr: '',
-    firmaustidnr: '',
-    firmabankiban: '',
-    firmabankbic: '',
-    firmabankname: '',
+    titel_text: 'Rechnung',
+    titel_groesse: 24,
+
+    // Absenderblock (Firmendaten)
+    firma_name: '',
+    firma_strasse: '',
+    firma_plz: '',
+    firma_ort: '',
+    firma_land: 'Deutschland',
+    firma_telefon: '',
+    firma_email: '',
+    firma_website: '',
+    firma_steuernr: '',
+    firma_ust_idnr: '',
+    firma_bank_iban: '',
+    firma_bank_bic: '',
+    firma_bank_name: '',
+
     // Einleitungstext
     einleitungstext: 'Ihre Bestellung Nr. [order_id] vom [datum].',
 
@@ -67,76 +62,80 @@
       bezeichnung: 'Bezeichnung',
       menge: 'Menge',
       einzelpreis: 'Einzelpreis',
-      betrag: 'Betrag',
+      betrag: 'Betrag'
     },
-    // Footer
-    footertext: 'Vielen Dank für Ihre Bestellung bei eBay.',
+
+    // Fußzeile
+    footer_text: 'Vielen Dank für Ihre Bestellung bei eBay.',
     footer_zeige_bank: true,
     footer_zeige_steuernr: true,
     footer_zeige_seite: true,
-    footerfarbe: '#64748b',
+    footer_farbe: '#64748b',
+
     // Zahlungshinweis
     zahlungshinweis: 'Bereits bezahlt über eBay',
     zeige_zahlungshinweis: true,
+
     // Kleinunternehmer
     kleinunternehmer: false,
-    kleinunternehmertext: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.',
+    kleinunternehmer_text: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.',
+
     // Wasserzeichen
     wasserzeichen: false,
-    wasserzeichentext: 'ENTWURF',
+    wasserzeichen_text: 'ENTWURF',
   });
 
   let vorlageLaeuft = $state(false);
   let vorlageGeladen = $state(false);
 
-  // Vorschau
+  // ── Vorschau ──────────────────────────────────────────────────────────────
   let vorschauPDF = $state('');
   let vorschauLaeuft = $state(false);
-  const beispiel = {
-    rechnungnr: 'RE-2026-00042',
-    datum: '02.04.2026',
-    order_id: '22-14426-19402',
-    kaeufername: 'Hermann Jakob',
-    kaeuferstrasse: 'Gneisenaustr. 12',
-    kaeuferplz: '85051',
-    kaeuferort: 'Ingolstadt',
-    kaeuferland: 'Deutschland',
-    artikelname: 'Jemako Intensivreiniger KalkEx Plus',
-    artikelnr: '1054',
-    menge: 1,
-    einzelpreis: 15.9579,
-    nettobetrag: 15.96,
-    steuerbetrag: 3.03,
-    bruttobetrag: 18.99,
-    steuersatz: 19,
-  };
-
-  let vorschauHTML = $derived(generiereHTML(vorlage, beispiel));
 
   // Beispieldaten für Vorschau
+  const beispiel = {
+    rechnung_nr: 'RE-2026-00042',
+    datum: '02.04.2026',
+    order_id: '22-14426-19402',
+    kaeufer_name: 'Hermann Jakob',
+    kaeufer_strasse: 'Gneisenaustr. 12',
+    kaeufer_plz: '85051',
+    kaeufer_ort: 'Ingolstadt',
+    kaeufer_land: 'Deutschland',
+    artikel_name: 'Jemako Intensivreiniger KalkEx Plus',
+    artikel_nr: '1054',
+    menge: 1,
+    einzelpreis: 15.9579,
+    netto_betrag: 15.96,
+    steuer_betrag: 3.03,
+    brutto_betrag: 18.99,
+    steuersatz: 19
+  };
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(async () => {
     if ($currentUser) await ladeVorlage();
   });
 
-  async function ladeVorlage() {
-    const timeout = setTimeout(() => { vorlageGeladen = true; }, 5000);
-    try {
-      const data = await apiCall('vorlage-laden', { userid: $currentUser.id });
-      if (data?.vorlage) vorlage = { ...vorlage, ...data.vorlage };
-    } catch(e) {
-      // Webhook noch nicht vorhanden — Standardwerte nutzen
-    } finally {
-      clearTimeout(timeout);
-      vorlageGeladen = true;
+ async function ladeVorlage() {
+  vorlageGeladen = true;
+  try {
+    const data = await apiCall('vorlage-laden', { user_id: $currentUser.id });
+    if (data && data.vorlage) {
+      vorlage = { ...vorlage, ...data.vorlage };
     }
+  } catch(e) {
+    // Workflow noch nicht aktiv — Standardwerte werden verwendet
   }
+}
 
   async function speichereVorlage() {
     vorlageLaeuft = true;
     try {
-      await apiCall('vorlage-speichern', { userid: $currentUser.id, vorlage });
+      await apiCall('vorlage-speichern', {
+        user_id: $currentUser.id,
+        vorlage
+      });
       showToast('Vorlage gespeichert ✓');
     } catch(e) {
       showToast('Fehler: ' + e.message);
@@ -149,8 +148,12 @@
     vorschauLaeuft = true;
     aktiverTab = 'vorschau';
     try {
-      const data = await apiCall('rechnung-vorschau', { userid: $currentUser.id, vorlage, beispiel });
-      vorschauPDF = data.pdfbase64;
+      const data = await apiCall('rechnung-vorschau', {
+        user_id: $currentUser.id,
+        vorlage,
+        beispiel
+      });
+      vorschauPDF = data.pdf_base64 || '';
     } catch(e) {
       showToast('Vorschau-Fehler: ' + e.message);
     } finally {
@@ -158,7 +161,7 @@
     }
   }
 
-  // Logo Upload
+  // ── Logo Upload ───────────────────────────────────────────────────────────
   function handleLogoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -167,57 +170,88 @@
     reader.onload = (ev) => { vorlage.logo_base64 = ev.target.result; };
     reader.readAsDataURL(file);
   }
-  function logoEntfernen() { vorlage.logo_base64 = ''; }
 
+  function logoEntfernen() {
+    vorlage.logo_base64 = '';
+  }
 
   // ── Live HTML-Vorschau (inline, kein Backend nötig) ──────────────────────
-  function generiereHTML(v, b) {
+  let vorschauHTML = $derived.by(() => {
+    const v = vorlage;
+    const b = beispiel;
     const fmt = (n) => Number(n||0).toLocaleString('de-DE', {minimumFractionDigits:2,maximumFractionDigits:2});
     const w = 'EUR';
 
     const logoHTML = v.logo_base64
-      ? `<img src="${v.logo_base64}" style="height:${v.logo_breite/2}px;max-width:${v.logo_breite}px;object-fit:contain" alt="Logo">`
+      ? `<img src="${v.logo_base64}" style="height:${v.logo_breite/2}px;max-width:${v.logo_breite}px;object-fit:contain;" alt="Logo">`
       : '';
 
     const firmaBlock = `
-      <div style="font-size:15px;font-weight:700;margin-bottom:2px">${v.firmaname || 'Firmenname'}</div>
-      ${v.header_zeige_adresse && v.firmastrasse ? `<div style="font-size:11px;color:#888;margin-bottom:2px">${v.firmastrasse}, ${v.firmaplz} ${v.firmaort}</div>` : ''}
-      ${v.firmaustidnr ? `<div style="font-size:11px;color:#888">USt-IdNr. ${v.firmaustidnr}</div>` : ''}
+      <div style="font-size:11px;color:#888;margin-bottom:2px;">${v.firma_strasse ? v.firma_strasse+' · '+v.firma_plz+' '+v.firma_ort : ''}</div>
+      ${v.firma_ust_idnr ? `<div style="font-size:11px;color:#888;">USt-IdNr.: ${v.firma_ust_idnr}</div>` : ''}
     `;
 
     const kontaktBlock = v.header_zeige_kontakt ? `
-      <div style="font-size:12px;color:#555;line-height:1.8">
-        ${v.firmatelefon ? `<div>Tel ${v.firmatelefon}</div>` : ''}
-        ${v.firmaemail ? `<div>E-Mail ${v.firmaemail}</div>` : ''}
-        ${v.firmawebsite ? `<div>Web ${v.firmawebsite}</div>` : ''}
-        ${v.firmasteuernr ? `<div>Steuer-Nr. ${v.firmasteuernr}</div>` : ''}
+      <div style="font-size:12px;color:#555;line-height:1.8;">
+        ${v.firma_telefon ? `<div>Tel: ${v.firma_telefon}</div>` : ''}
+        ${v.firma_email ? `<div>E-Mail: ${v.firma_email}</div>` : ''}
+        ${v.firma_website ? `<div>Web: ${v.firma_website}</div>` : ''}
+        ${v.firma_steuernr ? `<div>Steuer-Nr.: ${v.firma_steuernr}</div>` : ''}
+        ${v.firma_ust_idnr ? `<div>USt-IdNr.: ${v.firma_ust_idnr}</div>` : ''}
       </div>` : '';
 
     const steuerZeile = v.kleinunternehmer
-      ? `<tr><td colspan="4" style="padding:8px 14px;font-size:11px;font-style:italic;color:#666">${v.kleinunternehmertext}</td></tr>`
-      : `<tr>
-          <td colspan="3" style="padding:8px 14px;text-align:right;font-size:12px;color:#666">MwSt. ${b.steuersatz}%</td>
-          <td style="padding:8px 14px;text-align:right">${fmt(b.steuerbetrag)} ${w}</td>
-         </tr>`;
+      ? `<tr><td colspan="4" style="padding:8px 14px;font-size:11px;font-style:italic;color:#666;">${v.kleinunternehmer_text}</td></tr>`
+      : `<tr><td colspan="3" style="padding:8px 14px;text-align:right;font-size:12px;color:#666;">MwSt. ${b.steuersatz}%</td><td style="padding:8px 14px;text-align:right;">${fmt(b.steuer_betrag)} ${w}</td></tr>`;
 
     const wasserzeichenHTML = v.wasserzeichen
-      ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;color:rgba(0,0,0,0.06);font-weight:900;pointer-events:none;z-index:0">${v.wasserzeichentext}</div>`
+      ? `<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:80px;color:rgba(0,0,0,0.06);font-weight:900;pointer-events:none;z-index:0;">${v.wasserzeichen_text}</div>`
       : '';
 
-    const einlText = v.einleitungstext
-      .replace('{order_id}', b.order_id)
-      .replace('{datum}', b.datum);
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:${v.schriftart},Arial,sans-serif;font-size:${v.schriftgroesse}px;color:${v.schriftfarbe};background:#fff;padding:32px;}
+table{width:100%;border-collapse:collapse;margin-bottom:16px}
+thead th{background:${v.tabellenfarbe};color:#fff;padding:9px 12px;text-align:left;font-size:12px;}
+tbody td{padding:9px 12px;border-bottom:1px solid #e2e8f0}
+.right{text-align:right}
+.total td{font-weight:700;color:${v.akzentfarbe};background:${v.hintergrundfarbe}}
+</style></head><body>
+${wasserzeichenHTML}
 
-    const bankBlock = v.footer_zeige_bank && (v.firmabankiban || v.firmabankname)
-      ? `<span style="margin-right:16px">Bank: ${v.firmabankname} | IBAN: ${v.firmabankiban} | BIC: ${v.firmabankbic}</span>`
-      : '';
+<!-- HEADER -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:16px;border-bottom:${v.header_trennlinie ? v.header_trennlinie_staerke+'px solid '+v.header_trennlinie_farbe : 'none'};">
+  <div>
+    ${v.header_zeige_logo && logoHTML ? `<div style="margin-bottom:10px;">${logoHTML}</div>` : ''}
+    ${v.header_zeige_firmenname && v.firma_name ? `<div style="font-size:18px;font-weight:800;color:${v.akzentfarbe}">${v.firma_name}</div>` : ''}
+    ${v.header_zeige_adresse ? firmaBlock : ''}
+  </div>
+  <div style="text-align:right">
+    ${kontaktBlock}
+  </div>
+</div>
 
-    const steuerBlock = v.footer_zeige_steuernr && v.firmasteuernr
-      ? `<span>Steuer-Nr. ${v.firmasteuernr}</span>`
-      : '';
+<!-- RECHNUNGSINFO -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;">
+  <div style="padding:12px;background:${v.hintergrundfarbe};border-radius:6px;">
+    <div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;margin-bottom:6px;">Rechnungsempfänger</div>
+    <div style="font-weight:700;font-size:13px;">${b.kaeufer_name}</div>
+    <div style="font-size:12px;color:#555;">${b.kaeufer_strasse}</div>
+    <div style="font-size:12px;color:#555;">${b.kaeufer_plz} ${b.kaeufer_ort}</div>
+    <div style="font-size:12px;color:#555;">${b.kaeufer_land}</div>
+  </div>
+  <div style="padding:12px;background:${v.hintergrundfarbe};border-radius:6px;text-align:right;">
+    <div style="font-size:9px;font-weight:700;color:#999;text-transform:uppercase;margin-bottom:6px;">Rechnung</div>
+    <div style="font-size:22px;font-weight:800;color:${v.akzentfarbe};">${v.titel_text}</div>
+    <div style="color:#555;margin-top:4px;">Nr: <strong>${b.rechnung_nr}</strong></div>
+    <div style="font-size:12px;color:#666;">Datum: ${b.datum}</div>
+    <div style="font-size:12px;color:#666;">Bestellung: ${b.order_id}</div>
+  </div>
+</div>
 
 <!-- EINLEITUNGSTEXT -->
-${(v.einleitungstext || '') ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('[order_id]', b.order_id).replace('[datum]', b.datum)}</div>` : ''}
+${v.einleitungstext ? `<div style="margin-bottom:20px;font-size:13px;color:#555;padding:10px 14px;background:${v.hintergrundfarbe};border-radius:6px;">${v.einleitungstext.replace('[order_id]', b.order_id).replace('[datum]', b.datum)}</div>` : ''}
 
 <!-- POSITIONEN -->
 <table>
@@ -262,24 +296,37 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   ${v.footer_zeige_steuernr && v.firma_steuernr ? `<div>Steuer-Nr.: ${v.firma_steuernr}${v.firma_ust_idnr ? ' · USt-IdNr.: '+v.firma_ust_idnr : ''}</div>` : ''}
 </div>
 </body></html>`;
-}
+  });
 
   // Sektion-Accordion
   let offeneSektionen = $state(new Set(['logo', 'farben', 'firma', 'header', 'tabelle', 'footer']));
+  function toggleSektion(s) {
+    const neu = new Set(offeneSektionen);
+    neu.has(s) ? neu.delete(s) : neu.add(s);
+    offeneSektionen = neu;
+  }
 
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 </script>
 
-<div class="page">
-  <div class="page-hdr">
+<div class="vb-container">
+
+  <!-- Topbar -->
+  <div class="vb-topbar">
     <div>
-      <div class="page-title">Rechnungsvorlage</div>
-      <div class="page-sub">Gestalte deine persönliche Rechnungsvorlage</div>
+      <div class="vb-title">Rechnungsvorlage</div>
+      <div class="vb-sub">Gestalte deine persönliche Rechnungsvorlage</div>
     </div>
-    <div class="hdr-actions">
-      <button class="tab-btn" class:active={aktiverTab === 'vorlage'} onclick={() => aktiverTab = 'vorlage'}>⚙️ Einstellungen</button>
-      <button class="tab-btn" class:active={aktiverTab === 'vorschau'} onclick={() => aktiverTab = 'vorschau'}>👁 Vorschau</button>
-      <button class="btn-secondary" onclick={generiereVorschau} disabled={vorschauLaeuft}>
+    <div class="vb-topbar-actions">
+      <div class="tab-switcher">
+        <button class="tab-btn {aktiverTab === 'vorlage' ? 'active' : ''}" onclick={() => aktiverTab = 'vorlage'}>
+          ⚙️ Einstellungen
+        </button>
+        <button class="tab-btn {aktiverTab === 'vorschau' ? 'active' : ''}" onclick={() => aktiverTab = 'vorschau'}>
+          👁 Vorschau
+        </button>
+      </div>
+      <button class="btn-ghost" onclick={generiereVorschau} disabled={vorschauLaeuft}>
         {vorschauLaeuft ? '⏳ Lädt…' : '🖨 PDF-Vorschau'}
       </button>
       <button class="btn-primary" onclick={speichereVorlage} disabled={vorlageLaeuft}>
@@ -288,42 +335,45 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
     </div>
   </div>
 
-  <div class="main-layout">
-    <!-- LINKE SPALTE: Einstellungen -->
+  <!-- Body: Split-Layout -->
+  <div class="vb-body">
+
+    <!-- LINKE SEITE: Einstellungen -->
     {#if aktiverTab === 'vorlage'}
-    <div class="einstellungen-spalte">
+    <div class="vb-settings">
 
       <!-- LOGO -->
       <div class="sektion">
         <button class="sektion-hdr" onclick={() => toggleSektion('logo')}>
-          🖼 Logo
-          <span class="sektion-arrow">{offeneSektionen.has('logo') ? '▲' : '▼'}</span>
+          <span>🖼 Logo</span>
+          <span class="chevron {offeneSektionen.has('logo') ? 'offen' : ''}">›</span>
         </button>
         {#if offeneSektionen.has('logo')}
         <div class="sektion-body">
           {#if vorlage.logo_base64}
-            <div class="logo-preview-row">
-              <img src={vorlage.logo_base64} alt="Logo" style="max-height:60px;max-width:120px;object-fit:contain;border-radius:4px;border:1px solid var(--border)">
-              <button class="btn-ghost btn-sm" onclick={logoEntfernen}>Entfernen</button>
+            <div class="logo-preview">
+              <img src={vorlage.logo_base64} alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;" />
+              <button class="btn-danger btn-sm" onclick={logoEntfernen}>Entfernen</button>
             </div>
           {:else}
-            <label class="upload-label">
-              Logo hochladen (PNG, SVG, JPG — max. 2 MB)
-              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none">
+            <label class="upload-zone">
+              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none" />
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span>Logo hochladen (PNG, SVG, JPG — max. 2 MB)</span>
             </label>
           {/if}
           <div class="form-row">
             <div class="form-group">
-              <label for="logo-pos">Position</label>
-              <select id="logo-pos" bind:value={vorlage.logo_position}>
+              <label>Position</label>
+              <select bind:value={vorlage.logo_position}>
                 <option value="links">Links</option>
                 <option value="rechts">Rechts</option>
                 <option value="mitte">Mitte</option>
               </select>
             </div>
             <div class="form-group">
-              <label for="logo-breite">Breite (px)</label>
-              <input id="logo-breite" type="number" min="40" max="300" bind:value={vorlage.logo_breite}>
+              <label>Breite (px)</label>
+              <input type="number" min="40" max="300" bind:value={vorlage.logo_breite} />
             </div>
           </div>
         </div>
@@ -333,72 +383,76 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       <!-- FARBEN & SCHRIFT -->
       <div class="sektion">
         <button class="sektion-hdr" onclick={() => toggleSektion('farben')}>
-          🎨 Farben & Schrift
-          <span class="sektion-arrow">{offeneSektionen.has('farben') ? '▲' : '▼'}</span>
+          <span>🎨 Farben & Schrift</span>
+          <span class="chevron {offeneSektionen.has('farben') ? 'offen' : ''}">›</span>
         </button>
         {#if offeneSektionen.has('farben')}
         <div class="sektion-body">
           <div class="form-row">
             <div class="form-group">
-              <label for="akzentfarbe">Akzentfarbe</label>
+              <label>Akzentfarbe</label>
               <div class="color-row">
-                <input id="akzentfarbe" type="color" bind:value={vorlage.akzentfarbe} class="color-input">
-                <span class="color-val">{vorlage.akzentfarbe}</span>
+                <input type="color" bind:value={vorlage.akzentfarbe} class="color-input" />
+                <input type="text" bind:value={vorlage.akzentfarbe} class="color-text" />
               </div>
             </div>
             <div class="form-group">
-              <label for="tabellenfarbe">Tabellenfarbe</label>
+              <label>Tabellenfarbe</label>
               <div class="color-row">
-                <input id="tabellenfarbe" type="color" bind:value={vorlage.tabellenfarbe} class="color-input">
-                <span class="color-val">{vorlage.tabellenfarbe}</span>
-              </div>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="schriftfarbe">Schriftfarbe</label>
-              <div class="color-row">
-                <input id="schriftfarbe" type="color" bind:value={vorlage.schriftfarbe} class="color-input">
-                <span class="color-val">{vorlage.schriftfarbe}</span>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="hintergrundfarbe">Hintergrund</label>
-              <div class="color-row">
-                <input id="hintergrundfarbe" type="color" bind:value={vorlage.hintergrundfarbe} class="color-input">
-                <span class="color-val">{vorlage.hintergrundfarbe}</span>
+                <input type="color" bind:value={vorlage.tabellenfarbe} class="color-input" />
+                <input type="text" bind:value={vorlage.tabellenfarbe} class="color-text" />
               </div>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label for="schriftart">Schriftart</label>
-              <select id="schriftart" bind:value={vorlage.schriftart}>
+              <label>Schriftfarbe</label>
+              <div class="color-row">
+                <input type="color" bind:value={vorlage.schriftfarbe} class="color-input" />
+                <input type="text" bind:value={vorlage.schriftfarbe} class="color-text" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Hintergrund</label>
+              <div class="color-row">
+                <input type="color" bind:value={vorlage.hintergrundfarbe} class="color-input" />
+                <input type="text" bind:value={vorlage.hintergrundfarbe} class="color-text" />
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Schriftart</label>
+              <select bind:value={vorlage.schriftart}>
                 {#each schriftarten as s}
                   <option value={s}>{s}</option>
                 {/each}
               </select>
             </div>
             <div class="form-group">
-              <label for="schriftgroesse">Schriftgröße (px)</label>
-              <input id="schriftgroesse" type="number" min="10" max="18" bind:value={vorlage.schriftgroesse}>
+              <label>Schriftgröße (px)</label>
+              <input type="number" min="10" max="18" bind:value={vorlage.schriftgroesse} />
             </div>
           </div>
-          <!-- Schnellauswahl Farbthema -->
+          <!-- Farbthemen Schnellauswahl -->
           <div class="form-group">
             <label>Schnellauswahl Farbthema</label>
             <div class="themen-grid">
               {#each [
-                { name:'Blau',   a:'#2563eb', t:'#2563eb', bg:'#f8fafc' },
-                { name:'Grün',   a:'#16a34a', t:'#16a34a', bg:'#f0fdf4' },
-                { name:'Rot',    a:'#dc2626', t:'#dc2626', bg:'#fef2f2' },
-                { name:'Lila',   a:'#7c3aed', t:'#7c3aed', bg:'#f5f3ff' },
-                { name:'Grau',   a:'#374151', t:'#374151', bg:'#f9fafb' },
+                { name:'Blau', a:'#2563eb', t:'#2563eb', bg:'#f8fafc' },
+                { name:'Grün', a:'#16a34a', t:'#16a34a', bg:'#f0fdf4' },
+                { name:'Rot', a:'#dc2626', t:'#dc2626', bg:'#fef2f2' },
+                { name:'Lila', a:'#7c3aed', t:'#7c3aed', bg:'#f5f3ff' },
+                { name:'Grau', a:'#374151', t:'#374151', bg:'#f9fafb' },
                 { name:'Orange', a:'#ea580c', t:'#ea580c', bg:'#fff7ed' },
               ] as thema}
-                <button class="thema-btn" style="background:{thema.bg};border-color:{thema.a}"
-                  onclick={() => { vorlage.akzentfarbe = thema.a; vorlage.tabellenfarbe = thema.t; vorlage.header_trennlinie_farbe = thema.a; vorlage.hintergrundfarbe = thema.bg; }}>
-                  <span style="color:{thema.a}">{thema.name}</span>
+                <button
+                  class="thema-btn"
+                  style="border-color:{thema.a}"
+                  onclick={() => { vorlage.akzentfarbe = thema.a; vorlage.tabellenfarbe = thema.t; vorlage.header_trennlinie_farbe = thema.a; vorlage.hintergrundfarbe = thema.bg; }}
+                >
+                  <span class="thema-farbe" style="background:{thema.a}"></span>
+                  {thema.name}
                 </button>
               {/each}
             </div>
@@ -410,31 +464,31 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       <!-- FIRMENDATEN -->
       <div class="sektion">
         <button class="sektion-hdr" onclick={() => toggleSektion('firma')}>
-          🏢 Firmendaten
-          <span class="sektion-arrow">{offeneSektionen.has('firma') ? '▲' : '▼'}</span>
+          <span>🏢 Firmendaten</span>
+          <span class="chevron {offeneSektionen.has('firma') ? 'offen' : ''}">›</span>
         </button>
         {#if offeneSektionen.has('firma')}
         <div class="sektion-body">
-          <div class="form-group"><label for="firmaname">Firmenname *</label><input id="firmaname" bind:value={vorlage.firmaname} placeholder="Meine Firma GmbH"></div>
-          <div class="form-group"><label for="firmastrasse">Straße & Hausnr.</label><input id="firmastrasse" bind:value={vorlage.firmastrasse} placeholder="Musterstr. 1"></div>
+          <div class="form-group"><label>Firmenname *</label><input bind:value={vorlage.firma_name} placeholder="Meine Firma GmbH" /></div>
+          <div class="form-group"><label>Straße & Hausnr.</label><input bind:value={vorlage.firma_strasse} placeholder="Musterstr. 1" /></div>
           <div class="form-row">
-            <div class="form-group"><label for="firmaplz">PLZ</label><input id="firmaplz" bind:value={vorlage.firmaplz} placeholder="12345"></div>
-            <div class="form-group"><label for="firmaort">Ort</label><input id="firmaort" bind:value={vorlage.firmaort} placeholder="Berlin"></div>
+            <div class="form-group"><label>PLZ</label><input bind:value={vorlage.firma_plz} placeholder="12345" /></div>
+            <div class="form-group"><label>Ort</label><input bind:value={vorlage.firma_ort} placeholder="Berlin" /></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label for="firmatelefon">Telefon</label><input id="firmatelefon" bind:value={vorlage.firmatelefon} placeholder="+49 221"></div>
-            <div class="form-group"><label for="firmaemail">E-Mail</label><input id="firmaemail" bind:value={vorlage.firmaemail} placeholder="info@firma.de"></div>
+            <div class="form-group"><label>Telefon</label><input bind:value={vorlage.firma_telefon} placeholder="+49 221 …" /></div>
+            <div class="form-group"><label>E-Mail</label><input bind:value={vorlage.firma_email} placeholder="info@firma.de" /></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label for="firmawebsite">Website</label><input id="firmawebsite" bind:value={vorlage.firmawebsite} placeholder="www.firma.de"></div>
-            <div class="form-group"><label for="firmasteuernr">Steuer-Nr.</label><input id="firmasteuernr" bind:value={vorlage.firmasteuernr} placeholder="34/250/58211"></div>
+            <div class="form-group"><label>Website</label><input bind:value={vorlage.firma_website} placeholder="www.firma.de" /></div>
+            <div class="form-group"><label>Steuer-Nr.</label><input bind:value={vorlage.firma_steuernr} placeholder="342/5058/2211" /></div>
           </div>
-          <div class="form-group"><label for="firmaustidnr">USt-IdNr.</label><input id="firmaustidnr" bind:value={vorlage.firmaustidnr} placeholder="DE123456789"></div>
+          <div class="form-group"><label>USt-IdNr.</label><input bind:value={vorlage.firma_ust_idnr} placeholder="DE123456789" /></div>
           <div class="form-row">
-            <div class="form-group"><label for="firmabankiban">IBAN</label><input id="firmabankiban" bind:value={vorlage.firmabankiban} placeholder="DE12 3456 7890"></div>
-            <div class="form-group"><label for="firmabankbic">BIC</label><input id="firmabankbic" bind:value={vorlage.firmabankbic} placeholder="COBADEFFXXX"></div>
+            <div class="form-group"><label>IBAN</label><input bind:value={vorlage.firma_bank_iban} placeholder="DE12 3456 7890 …" /></div>
+            <div class="form-group"><label>BIC</label><input bind:value={vorlage.firma_bank_bic} placeholder="COBADEFFXXX" /></div>
           </div>
-          <div class="form-group"><label for="firmabankname">Bankname</label><input id="firmabankname" bind:value={vorlage.firmabankname} placeholder="Commerzbank"></div>
+          <div class="form-group"><label>Bankname</label><input bind:value={vorlage.firma_bank_name} placeholder="Commerzbank" /></div>
         </div>
         {/if}
       </div>
@@ -442,64 +496,67 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       <!-- HEADER -->
       <div class="sektion">
         <button class="sektion-hdr" onclick={() => toggleSektion('header')}>
-          📄 Header
-          <span class="sektion-arrow">{offeneSektionen.has('header') ? '▲' : '▼'}</span>
+          <span>📄 Header</span>
+          <span class="chevron {offeneSektionen.has('header') ? 'offen' : ''}">›</span>
         </button>
         {#if offeneSektionen.has('header')}
         <div class="sektion-body">
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_logo}> <span>Logo anzeigen</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_firmenname}> <span>Firmenname anzeigen</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_adresse}> <span>Adresse anzeigen</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_kontakt}> <span>Kontaktdaten anzeigen</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_trennlinie}> <span>Trennlinie</span></label>
+          <div class="toggle-list">
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_logo} /><span>Logo anzeigen</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_firmenname} /><span>Firmenname anzeigen</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_adresse} /><span>Adresse anzeigen</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_zeige_kontakt} /><span>Kontaktdaten anzeigen</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.header_trennlinie} /><span>Trennlinie</span></label>
+          </div>
           {#if vorlage.header_trennlinie}
           <div class="form-row">
             <div class="form-group">
-              <label for="trennliniefarbe">Linienfarbe</label>
+              <label>Linienfarbe</label>
               <div class="color-row">
-                <input id="trennliniefarbe" type="color" bind:value={vorlage.header_trennlinie_farbe} class="color-input">
+                <input type="color" bind:value={vorlage.header_trennlinie_farbe} class="color-input" />
+                <input type="text" bind:value={vorlage.header_trennlinie_farbe} class="color-text" />
               </div>
             </div>
             <div class="form-group">
-              <label for="trennliniestaerke">Linienstärke (px)</label>
-              <input id="trennliniestaerke" type="number" min="1" max="10" bind:value={vorlage.header_trennlinie_staerke}>
+              <label>Linienstärke (px)</label>
+              <input type="number" min="1" max="10" bind:value={vorlage.header_trennlinie_staerke} />
             </div>
           </div>
           {/if}
-          {#if vorlage.header_zeige_firmenname}
           <div class="form-group">
-            <label for="titeltext">Rechnungstitel</label>
-            <input id="titeltext" bind:value={vorlage.titeltext} placeholder="Rechnung">
+            <label>Rechnungstitel</label>
+            <input bind:value={vorlage.titel_text} placeholder="Rechnung" />
           </div>
           <div class="form-group">
             <label>Einleitungstext</label>
             <textarea bind:value={vorlage.einleitungstext} rows="2" placeholder="Ihre Bestellung Nr. [order_id] vom [datum]."></textarea>
             <span class="hint">Platzhalter: &#123;order_id&#125;, &#123;datum&#125;</span>
           </div>
-          {/if}
         </div>
         {/if}
       </div>
 
-      <!-- POSITIONSTABELLE -->
+      <!-- TABELLE -->
       <div class="sektion">
         <button class="sektion-hdr" onclick={() => toggleSektion('tabelle')}>
-          📋 Positionstabelle
-          <span class="sektion-arrow">{offeneSektionen.has('tabelle') ? '▲' : '▼'}</span>
+          <span>📋 Positionstabelle</span>
+          <span class="chevron {offeneSektionen.has('tabelle') ? 'offen' : ''}">›</span>
         </button>
         {#if offeneSektionen.has('tabelle')}
         <div class="sektion-body">
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_artnr}> <span>Art.-Nr. Spalte</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_menge}> <span>Menge Spalte</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_einzelpreis}> <span>Einzelpreis Spalte</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_betrag}> <span>Betrag Spalte</span></label>
-          <div class="form-group"><label for="kz-artnr">Kopfzeile „Art.-Nr."</label><input id="kz-artnr" bind:value={vorlage.tabelle_kopfzeilen.artnr}></div>
-          <div class="form-group"><label for="kz-bezeichnung">Kopfzeile „Bezeichnung"</label><input id="kz-bezeichnung" bind:value={vorlage.tabelle_kopfzeilen.bezeichnung}></div>
-          <div class="form-row">
-            <div class="form-group"><label for="kz-menge">Kopfzeile „Menge"</label><input id="kz-menge" bind:value={vorlage.tabelle_kopfzeilen.menge}></div>
-            <div class="form-group"><label for="kz-einzelpreis">Kopfzeile „Einzelpreis"</label><input id="kz-einzelpreis" bind:value={vorlage.tabelle_kopfzeilen.einzelpreis}></div>
+          <div class="toggle-list">
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_artnr} /><span>Art.-Nr. Spalte</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_menge} /><span>Menge Spalte</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_einzelpreis} /><span>Einzelpreis Spalte</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.tabelle_zeige_betrag} /><span>Betrag Spalte</span></label>
           </div>
-          <div class="form-group"><label for="kz-betrag">Kopfzeile „Betrag"</label><input id="kz-betrag" bind:value={vorlage.tabelle_kopfzeilen.betrag}></div>
+          <div class="form-group"><label>Kopfzeile „Art.-Nr."</label><input bind:value={vorlage.tabelle_kopfzeilen.artnr} /></div>
+          <div class="form-group"><label>Kopfzeile „Bezeichnung"</label><input bind:value={vorlage.tabelle_kopfzeilen.bezeichnung} /></div>
+          <div class="form-row">
+            <div class="form-group"><label>Kopfzeile „Menge"</label><input bind:value={vorlage.tabelle_kopfzeilen.menge} /></div>
+            <div class="form-group"><label>Kopfzeile „Einzelpreis"</label><input bind:value={vorlage.tabelle_kopfzeilen.einzelpreis} /></div>
+          </div>
+          <div class="form-group"><label>Kopfzeile „Betrag"</label><input bind:value={vorlage.tabelle_kopfzeilen.betrag} /></div>
         </div>
         {/if}
       </div>
@@ -507,44 +564,48 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       <!-- FOOTER & SONSTIGES -->
       <div class="sektion">
         <button class="sektion-hdr" onclick={() => toggleSektion('footer')}>
-          🦶 Footer & Sonstiges
-          <span class="sektion-arrow">{offeneSektionen.has('footer') ? '▲' : '▼'}</span>
+          <span>🦶 Footer & Sonstiges</span>
+          <span class="chevron {offeneSektionen.has('footer') ? 'offen' : ''}">›</span>
         </button>
         {#if offeneSektionen.has('footer')}
         <div class="sektion-body">
           <div class="form-group">
-            <label for="footertext">Fußtext</label>
-            <textarea id="footertext" bind:value={vorlage.footertext} rows="2"></textarea>
+            <label>Fußtext</label>
+            <textarea bind:value={vorlage.footer_text} rows="2" placeholder="Vielen Dank für Ihre Bestellung."></textarea>
           </div>
           <div class="form-group">
-            <label for="footerfarbe">Fußtext-Farbe</label>
+            <label>Fußtext-Farbe</label>
             <div class="color-row">
-              <input id="footerfarbe" type="color" bind:value={vorlage.footerfarbe} class="color-input">
-              <span class="color-val">{vorlage.footerfarbe}</span>
+              <input type="color" bind:value={vorlage.footer_farbe} class="color-input" />
+              <input type="text" bind:value={vorlage.footer_farbe} class="color-text" />
             </div>
           </div>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.footer_zeige_bank}> <span>Bankdaten im Footer</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.footer_zeige_steuernr}> <span>Steuernummer im Footer</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.footer_zeige_seite}> <span>Seitennummer</span></label>
+          <div class="toggle-list">
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.footer_zeige_bank} /><span>Bankdaten im Footer</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.footer_zeige_steuernr} /><span>Steuernummer im Footer</span></label>
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.footer_zeige_seite} /><span>Seitenummer</span></label>
+          </div>
           <div class="form-group" style="margin-top:12px">
-            <label for="zahlungshinweis">Zahlungshinweis</label>
-            <input id="zahlungshinweis" bind:value={vorlage.zahlungshinweis} placeholder="Bereits bezahlt über eBay">
+            <label>Zahlungshinweis</label>
+            <input bind:value={vorlage.zahlungshinweis} placeholder="Bereits bezahlt über eBay" />
           </div>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.zeige_zahlungshinweis}> <span>Zahlungshinweis anzeigen</span></label>
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.kleinunternehmer}> <span>Kleinunternehmer (§ 19 UStG)</span></label>
-          {#if vorlage.kleinunternehmer}
-          <div class="form-group" style="margin-top:8px">
-            <label for="kleinunternehmertext">Hinweistext</label>
-            <textarea id="kleinunternehmertext" bind:value={vorlage.kleinunternehmertext} rows="2"></textarea>
+          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.zeige_zahlungshinweis} /><span>Zahlungshinweis anzeigen</span></label>
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+            <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.kleinunternehmer} /><span>Kleinunternehmer (§ 19 UStG)</span></label>
+            {#if vorlage.kleinunternehmer}
+              <div class="form-group" style="margin-top:8px">
+                <label>Hinweistext</label>
+                <textarea bind:value={vorlage.kleinunternehmer_text} rows="2"></textarea>
+              </div>
+            {/if}
+            <label class="toggle-item" style="margin-top:10px"><input type="checkbox" bind:checked={vorlage.wasserzeichen} /><span>Wasserzeichen</span></label>
+            {#if vorlage.wasserzeichen}
+              <div class="form-group" style="margin-top:8px">
+                <label>Wasserzeichen-Text</label>
+                <input bind:value={vorlage.wasserzeichen_text} placeholder="ENTWURF" />
+              </div>
+            {/if}
           </div>
-          {/if}
-          <label class="toggle-item"><input type="checkbox" bind:checked={vorlage.wasserzeichen}> <span>Wasserzeichen</span></label>
-          {#if vorlage.wasserzeichen}
-          <div class="form-group" style="margin-top:8px">
-            <label for="wasserzeichentext">Wasserzeichen-Text</label>
-            <input id="wasserzeichentext" bind:value={vorlage.wasserzeichentext} placeholder="ENTWURF">
-          </div>
-          {/if}
         </div>
         {/if}
       </div>
@@ -552,79 +613,173 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
     </div>
     {/if}
 
-    <!-- RECHTE SPALTE: Live-Vorschau -->
-    <div class="vorschau-spalte" class:vollbild={aktiverTab === 'vorschau'}>
-      <div class="vorschau-header">
-        <span class="vorschau-label">Live-Vorschau</span>
-        <span class="vorschau-hint">Aktualisiert sich automatisch</span>
+    <!-- RECHTE SEITE: Live-Vorschau -->
+    <div class="vb-preview" class:vb-preview-fullscreen={aktiverTab === 'vorschau'}>
+      <div class="preview-hdr">
+        <span>Live-Vorschau</span>
+        <span class="preview-hint">Aktualisiert sich automatisch</span>
       </div>
-      {#if aktiverTab === 'vorschau' && vorschauPDF}
-        <iframe
-          title="PDF-Vorschau"
-          src={"data:application/pdf;base64," + vorschauPDF}
-          class="pdf-frame"
-        ></iframe>
-      {:else}
-        <iframe
-          title="HTML-Vorschau"
-          srcdoc={vorschauHTML}
-          class="vorschau-frame"
-        ></iframe>
-      {/if}
+      <div class="preview-frame-wrap">
+        {#if aktiverTab === 'vorschau' && vorschauPDF}
+          <!-- PDF-Vorschau via base64 -->
+          <iframe
+            src="data:application/pdf;base64,{vorschauPDF}"
+            title="PDF Vorschau"
+            class="pdf-iframe"
+          ></iframe>
+        {:else}
+          <!-- Live HTML-Vorschau -->
+          <iframe
+            srcdoc={vorschauHTML}
+            title="HTML Vorschau"
+            class="preview-iframe"
+            sandbox="allow-same-origin"
+          ></iframe>
+        {/if}
+      </div>
     </div>
 
   </div>
 </div>
 
 <style>
-  .page { display: flex; flex-direction: column; gap: 16px; padding: 24px; width: 100%; box-sizing: border-box; }
-  .page-hdr { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .page-title { font-size: 1.4rem; font-weight: 700; color: var(--text); }
-  .page-sub { font-size: 0.83rem; color: var(--text2); margin-top: 2px; }
-  .hdr-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .tab-btn { background: transparent; border: 1px solid var(--border); color: var(--text2); padding: 7px 14px; border-radius: 8px; font-size: 0.84rem; cursor: pointer; transition: all 0.15s; }
-  .tab-btn.active { background: var(--surface2); color: var(--text); border-color: var(--primary); font-weight: 600; }
-  .btn-primary { background: var(--primary); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-size: 0.84rem; cursor: pointer; transition: background 0.15s; }
-  .btn-primary:hover:not(:disabled) { background: var(--primary-hover, #1d4ed8); }
+  .vb-container {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 56px);
+    background: var(--bg);
+    margin: -28px -32px;
+  }
+  .vb-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 10px; flex-shrink: 0;
+  }
+  .vb-title { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+  .vb-sub   { font-size: 0.78rem; color: var(--text2); }
+  .vb-topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tab-switcher { display: flex; background: var(--surface2); border-radius: 8px; padding: 3px; gap: 2px; }
+  .tab-btn { background: transparent; border: none; padding: 5px 12px; border-radius: 6px; font-size: 0.8rem; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+  .tab-btn.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .btn-primary { background: var(--primary); color: #fff; border: none; padding: 7px 14px; border-radius: 8px; font-size: 0.83rem; cursor: pointer; transition: background 0.15s; }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-  .btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 8px; font-size: 0.84rem; cursor: pointer; }
-  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); padding: 7px 14px; border-radius: 8px; font-size: 0.84rem; cursor: pointer; }
-  .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
-  .main-layout { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: flex-start; }
-  .einstellungen-spalte { display: flex; flex-direction: column; gap: 10px; }
-  .vorschau-spalte { position: sticky; top: 16px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
-  .vorschau-spalte.vollbild { grid-column: 1 / -1; }
-  .vorschau-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); }
-  .vorschau-label { font-size: 0.82rem; font-weight: 600; color: var(--text); }
-  .vorschau-hint { font-size: 0.75rem; color: var(--text3); }
-  .vorschau-frame, .pdf-frame { width: 100%; height: 700px; border: none; background: #fff; }
-  .sektion { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  .sektion-hdr { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface2); border: none; color: var(--text); font-size: 0.88rem; font-weight: 600; cursor: pointer; text-align: left; }
-  .sektion-arrow { font-size: 0.7rem; color: var(--text3); }
-  .sektion-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); padding: 7px 12px; border-radius: 8px; font-size: 0.83rem; cursor: pointer; transition: all 0.15s; }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .btn-ghost:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-danger { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
+  .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
+
+  .vb-body { display: flex; flex: 1; overflow: hidden; }
+
+  /* Einstellungen-Panel: breiter für gut lesbare Felder */
+  .vb-settings {
+    width: 440px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sektion { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .sektion-hdr {
+    width: 100%; background: var(--surface2); border: none;
+    padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.83rem; font-weight: 600; color: var(--text); cursor: pointer; transition: background 0.15s;
+  }
+  .sektion-hdr:hover { background: var(--border); }
+  .chevron { font-size: 1rem; color: var(--text2); transform: rotate(90deg); transition: transform 0.2s; }
+  .chevron.offen { transform: rotate(270deg); }
+  .sektion-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
-  .form-group label { font-size: 0.78rem; color: var(--text2); font-weight: 500; }
+  .form-group label { font-size: 0.73rem; color: var(--text2); font-weight: 500; }
   .form-group input, .form-group select, .form-group textarea {
-    background: var(--surface); border: 1px solid var(--border); color: var(--text);
-    padding: 7px 10px; border-radius: 8px; font-size: 0.84rem; outline: none;
-    transition: border-color 0.15s;
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 10px; border-radius: 7px; font-size: 0.83rem; outline: none;
+    transition: border-color 0.15s; font-family: inherit;
+    width: 100%; box-sizing: border-box;
   }
   .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
-  .color-row { display: flex; align-items: center; gap: 8px; }
-  .color-input { width: 36px; height: 36px; padding: 2px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; }
-  .color-val { font-size: 0.78rem; color: var(--text2); font-family: monospace; }
-  .hint { font-size: 0.73rem; color: var(--text3); }
-  .toggle-item { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.84rem; color: var(--text); }
-  .toggle-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
-  .themen-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
-  .thema-btn { border: 2px solid; border-radius: 8px; padding: 6px 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
-  .thema-btn:hover { opacity: 0.8; }
-  .upload-label { display: block; border: 2px dashed var(--border); border-radius: 8px; padding: 16px; text-align: center; font-size: 0.82rem; color: var(--text2); cursor: pointer; transition: border-color 0.15s; }
-  .upload-label:hover { border-color: var(--primary); color: var(--primary); }
-  .logo-preview-row { display: flex; align-items: center; gap: 12px; }
+  .form-group textarea { resize: vertical; min-height: 52px; }
+  .hint { font-size: 0.71rem; color: var(--text3); }
+  .color-row { display: flex; gap: 6px; align-items: center; }
+  .color-input { width: 36px; height: 32px; padding: 2px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; background: var(--bg); flex-shrink: 0; }
+  .color-text { flex: 1; min-width: 0; }
+  .toggle-list { display: flex; flex-direction: column; gap: 8px; }
+  .toggle-item { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text); cursor: pointer; }
+  .toggle-item input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); flex-shrink: 0; }
+  .themen-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .thema-btn {
+    display: flex; align-items: center; gap: 5px; padding: 5px 8px;
+    background: var(--bg); border: 2px solid transparent; border-radius: 8px;
+    font-size: 0.75rem; color: var(--text); cursor: pointer; transition: all 0.15s;
+  }
+  .thema-btn:hover { background: var(--surface2); }
+  .thema-farbe { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .upload-zone {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 16px; border: 2px dashed var(--border); border-radius: 10px;
+    cursor: pointer; color: var(--text2); font-size: 0.81rem; text-align: center;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .upload-zone:hover { border-color: var(--primary); background: var(--surface2); color: var(--primary); }
+  .logo-preview { display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); }
+
+  /* Vorschau-Panel: scrollbar, A4-Seite zentriert */
+  .vb-preview {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #cbd5e1;
+    overflow: hidden;
+  }
+  .vb-preview-fullscreen { flex: 1; }
+  .preview-hdr {
+    padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border);
+    font-size: 0.81rem; font-weight: 600; color: var(--text);
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+  }
+  .preview-hint { font-size: 0.73rem; color: var(--text3); font-weight: 400; }
+
+  /* Scrollbarer Bereich — A4 zentriert */
+  .preview-frame-wrap {
+    flex: 1;
+    overflow: auto;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  /* A4 bei 96dpi = 794×1123px */
+  .preview-iframe {
+    width: 794px;
+    height: 1123px;
+    flex-shrink: 0;
+    background: white;
+    border: none;
+    border-radius: 2px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  .pdf-iframe {
+    width: 794px;
+    height: 1123px;
+    flex-shrink: 0;
+    background: white;
+    border: none;
+    border-radius: 2px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+
+  @media (max-width: 1200px) {
+    .vb-settings { width: 380px; }
+  }
   @media (max-width: 900px) {
-    .main-layout { grid-template-columns: 1fr; }
-    .vorschau-spalte { position: static; }
+    .vb-body { flex-direction: column; }
+    .vb-settings { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 45vh; }
+    .preview-iframe, .pdf-iframe { width: 100%; height: 600px; }
   }
 </style>
