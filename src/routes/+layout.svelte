@@ -47,13 +47,19 @@
   {#if isLoginPage}
     <slot />
   {:else}
-    <div class="app-shell">
-      <Sidebar />
-      <main class="main-content" class:sidebar-collapsed={collapsed} class:no-page-scroll={noPageScroll}>
-        <div class="page-wrapper animate-in" class:page-wrapper-fill={noPageScroll}>
-          <slot />
-        </div>
-      </main>
+    <div class="layout-wrapper">
+      <div class="top-strip">
+        <img src="https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/logo_9-isvHGkTKpAcAmGO4.webp" alt="logo" class="top-strip-logo" />
+        <span class="top-strip-title">eBay Dashboard</span>
+      </div>
+      <div class="app-shell">
+        <Sidebar />
+        <main class="main-content" class:sidebar-collapsed={collapsed} class:no-page-scroll={noPageScroll}>
+          <div class="page-wrapper animate-in" class:page-wrapper-fill={noPageScroll}>
+            <slot />
+          </div>
+        </main>
+      </div>
     </div>
   {/if}
   <Toast />
@@ -65,20 +71,46 @@
 {/if}
 
 <style>
+  .layout-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  .top-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 24px;
+    height: 48px;
+    background: linear-gradient(90deg, #1e2f6f 0%, #2f5fe3 55%, #3b82f6 100%);
+    flex-shrink: 0;
+    width: 100%;
+  }
+  .top-strip-logo {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    object-fit: contain;
+  }
+  .top-strip-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: 0.2px;
+  }
   .app-shell {
     display: flex;
-    height: 100vh;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
   .main-content {
     flex: 1;
     margin-left: var(--sidebar-width);
-    height: 100vh;
+    height: 100%;
     overflow-y: auto;
     transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    /* Kein overflow-x:hidden — das erzeugt einen Stacking Context der position:fixed bricht */
   }
-  /* Seiten mit eigenem Scroll-Container (z.B. Rechnungsvorlage) brauchen overflow:hidden
-     damit der innere Container (vb-settings) seinen eigenen Scrollbalken bekommt */
   .main-content.no-page-scroll {
     overflow: hidden;
     display: flex;
@@ -91,7 +123,6 @@
     padding: 28px 32px;
     min-height: 100%;
   }
-  /* Wenn kein page-scroll: wrapper füllt den ganzen Platz ohne padding */
   .page-wrapper-fill {
     padding: 0;
     min-height: unset;
