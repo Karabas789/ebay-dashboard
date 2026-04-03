@@ -14,6 +14,9 @@
 
   $: isLoginPage = $page.url.pathname === '/login';
 
+  // Seiten die ihren eigenen Scroll-Container haben (kein overflow-y:auto auf main-content)
+  $: noPageScroll = $page.url.pathname === '/rechnungsvorlage';
+
   sidebarCollapsed.subscribe(v => collapsed = v);
 
   onMount(() => {
@@ -46,8 +49,8 @@
   {:else}
     <div class="app-shell">
       <Sidebar />
-      <main class="main-content" class:sidebar-collapsed={collapsed}>
-        <div class="page-wrapper animate-in">
+      <main class="main-content" class:sidebar-collapsed={collapsed} class:no-page-scroll={noPageScroll}>
+        <div class="page-wrapper animate-in" class:page-wrapper-fill={noPageScroll}>
           <slot />
         </div>
       </main>
@@ -74,11 +77,28 @@
     transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     /* Kein overflow-x:hidden — das erzeugt einen Stacking Context der position:fixed bricht */
   }
+  /* Seiten mit eigenem Scroll-Container (z.B. Rechnungsvorlage) brauchen overflow:hidden
+     damit der innere Container (vb-settings) seinen eigenen Scrollbalken bekommt */
+  .main-content.no-page-scroll {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
   .main-content.sidebar-collapsed {
     margin-left: var(--sidebar-collapsed-width, 68px);
   }
   .page-wrapper {
     padding: 28px 32px;
     min-height: 100%;
+  }
+  /* Wenn kein page-scroll: wrapper füllt den ganzen Platz ohne padding */
+  .page-wrapper-fill {
+    padding: 0;
+    min-height: unset;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 </style>
