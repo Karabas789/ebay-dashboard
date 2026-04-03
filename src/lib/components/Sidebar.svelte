@@ -139,8 +139,8 @@
       <div class="sidebar-logo">
         <img src="https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/logo_9-isvHGkTKpAcAmGO4.webp" alt="Logo" class="logo-img" />
         <div class="logo-text">
-          <span class="logo-title">{user?.ebay_user_id || user?.email || 'Account'}</span>
-          <span class="logo-version">eBay Account</span>
+          <span class="logo-title">eBay Dashboard</span>
+          <span class="logo-version">v2.0</span>
         </div>
       </div>
     {:else}
