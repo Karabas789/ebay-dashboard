@@ -169,9 +169,6 @@
   }
   function logoEntfernen() { vorlage.logo_base64 = ''; }
 
-  function logoEntfernen() {
-    vorlage.logo_base64 = '';
-  }
 
   // ── Live HTML-Vorschau (inline, kein Backend nötig) ──────────────────────
   function generiereHTML(v, b) {
@@ -269,11 +266,6 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
   // Sektion-Accordion
   let offeneSektionen = $state(new Set(['logo', 'farben', 'firma', 'header', 'tabelle', 'footer']));
-  function toggleSektion(s) {
-    const neu = new Set(offeneSektionen);
-    neu.has(s) ? neu.delete(s) : neu.add(s);
-    offeneSektionen = neu;
-  }
 
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 </script>
