@@ -363,7 +363,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
     <!-- LINKE SEITE: Einstellungen -->
     {#if aktiverTab === 'vorlage'}
-    <div class="vb-settings" style="width:{settingsBreite}px; min-width:{settingsBreite}px;">
+    <div class="vb-settings" style="width:{settingsBreite}px; min-width:{settingsBreite}px; max-width:{settingsBreite}px;">
 
       <div class="gruppe-label">📐 Layout &amp; Design</div>
 
@@ -705,11 +705,20 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   .btn-danger { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-  .vb-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+  /* ── KEY FIX: vb-body ist der Flex-Container, der die volle Restfläche bekommt.
+     vb-settings darf NICHT über diese Höhe hinauswachsen → align-self: stretch
+     + overflow-y: auto sorgt für den Scrollbalken statt Stauchung. ── */
+  .vb-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;        /* verhindert, dass Flex-Kind den Container aufbläht */
+    overflow: hidden;
+  }
 
   .vb-settings {
     flex-shrink: 0;
-    /* FIX: min-height:0 erlaubt dem Flex-Kind zu scrollen statt zu wachsen */
+    align-self: stretch;  /* füllt genau die Höhe von vb-body */
+    height: 100%;         /* explizite Höhe → overflow-y: auto greift */
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -718,6 +727,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
     display: flex;
     flex-direction: column;
     gap: 10px;
+    box-sizing: border-box;
   }
 
   .gruppe-label {
@@ -848,11 +858,11 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   }
 
   @media (max-width: 1200px) {
-    .vb-settings { width: 380px; }
+    .vb-settings { width: 380px !important; min-width: 380px !important; max-width: 380px !important; }
   }
   @media (max-width: 900px) {
     .vb-body { flex-direction: column; }
-    .vb-settings { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 45vh; }
+    .vb-settings { width: 100% !important; min-width: unset !important; max-width: unset !important; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
     .preview-iframe, .pdf-iframe { width: 100%; height: 600px; }
   }
 </style>
