@@ -39,11 +39,11 @@
   });
 
   const nav = [
-    { path: '/nachrichten',      icon: '📩', label: 'Nachrichten' },
-    { path: '/produkte',         icon: '📦', label: 'Produkte' },
-    { path: '/bestellungen',     icon: '🛒', label: 'Bestellungen' },
-    { path: '/rechnungen',       icon: '🧾', label: 'Rechnungen' },
-    { path: '/rechnungsvorlage', icon: '🖨',  label: 'Rechnungsvorlage' },
+    { path: '/nachrichten',      icon: '\u{1F4E9}', label: 'Nachrichten',      section: 'main' },
+    { path: '/produkte',         icon: '\u{1F4E6}', label: 'Produkte',          section: 'main' },
+    { path: '/bestellungen',     icon: '\u{1F6D2}', label: 'Bestellungen',      section: 'main' },
+    { path: '/rechnungen',       icon: '\u{1F9FE}', label: 'Rechnungen',        section: 'main' },
+    { path: '/rechnungsvorlage', icon: '\u{1F5A8}', label: 'Rechnungsvorlage',  section: 'main' },
   ];
 
   function toggleSidebar() {
@@ -69,7 +69,6 @@
     const userId = user?.id || '';
     const ebayUsername = user?.ebay_user_id || '';
     const state = ebayUsername + '_uid_' + userId;
-
     const params = new URLSearchParams({
       client_id: 'VitaliDu-TestAPI-PRD-2b448418d-05f39944',
       redirect_uri: 'Vitali_Dubs-VitaliDu-TestAP-lnbmshlxd',
@@ -77,7 +76,6 @@
       state: state,
       scope: 'https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.finances https://api.ebay.com/oauth/api_scope/commerce.message'
     });
-
     ebayModalUser = ebayUsername || 'unbekannt';
     ebayOAuthUrl = 'https://auth.ebay.com/oauth2/authorize?' + params.toString();
     showEbayModal = true;
@@ -123,9 +121,7 @@
 
   onMount(() => {
     const saved = localStorage.getItem('sidebar_collapsed');
-    if (saved === 'true') {
-      sidebarCollapsed.set(true);
-    }
+    if (saved === 'true') sidebarCollapsed.set(true);
   });
 
   $: currentPath = $page.url.pathname;
@@ -133,86 +129,89 @@
 
 <aside class="sidebar" class:collapsed>
 
-  <!-- Header: Logo + Toggle -->
-  <div class="sidebar-header">
+  <!-- Logo + Toggle -->
+  <div class="sidebar-logo">
     {#if !collapsed}
-      <div class="sidebar-logo">
-        <img src="https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/logo_9-isvHGkTKpAcAmGO4.webp" alt="Logo" class="logo-img" />
-        <div class="logo-text">
-          <span class="logo-title">eBay Dashboard</span>
-          <span class="logo-version">v2.0</span>
-        </div>
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-text">eBay Dashboard</div>
+        <div class="logo-sub">Verkäufer Übersicht</div>
       </div>
     {:else}
-      <img src="https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/logo_9-isvHGkTKpAcAmGO4.webp" alt="Logo" class="logo-img-small" />
+      <div class="logo-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <path d="M8 21h8M12 17v4"/>
+        </svg>
+      </div>
     {/if}
-    <button class="toggle-btn" on:click={toggleSidebar} title={collapsed ? 'Sidebar ausklappen' : 'Sidebar einklappen'}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="3" width="18" height="18" rx="2"/>
-        <line x1="9" y1="3" x2="9" y2="21"/>
+    <button class="toggle-btn" on:click={toggleSidebar} title={collapsed ? 'Ausklappen' : 'Einklappen'}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        {#if collapsed}
+          <polyline points="9 18 15 12 9 6"/>
+        {:else}
+          <polyline points="15 18 9 12 15 6"/>
+        {/if}
       </svg>
     </button>
   </div>
 
-  <!-- Navigation -->
+  <!-- Nav -->
   <nav class="sidebar-nav">
-    {#each nav as item}
+    <div class="nav-section">
+      {#if !collapsed}<div class="nav-label">Übersicht</div>{/if}
+      {#each nav as item}
+        <a
+          href={item.path}
+          class="nav-item"
+          class:active={currentPath === item.path || currentPath.startsWith(item.path)}
+          data-tooltip={item.label}
+        >
+          <span class="nav-icon-wrap">{item.icon}</span>
+          {#if !collapsed}<span class="nav-label-text">{item.label}</span>{/if}
+        </a>
+      {/each}
+    </div>
+    <div class="nav-section">
+      {#if !collapsed}<div class="nav-label">Verwaltung</div>{/if}
       <a
-        href={item.path}
+        href="/einstellungen"
         class="nav-item"
-        class:active={currentPath === item.path || currentPath.startsWith(item.path)}
-        data-tooltip={item.label}
+        class:active={currentPath.startsWith('/einstellungen')}
+        data-tooltip="Einstellungen"
       >
-        <span class="nav-icon">{item.icon}</span>
-        {#if !collapsed}
-          <span class="nav-label">{item.label}</span>
-        {/if}
+        <span class="nav-icon-wrap">⚙️</span>
+        {#if !collapsed}<span class="nav-label-text">Einstellungen</span>{/if}
       </a>
-    {/each}
+    </div>
   </nav>
-
-  <!-- Bottom: Einstellungen -->
-  <div class="sidebar-bottom">
-    <a
-      href="/einstellungen"
-      class="nav-item"
-      class:active={currentPath.startsWith('/einstellungen')}
-      data-tooltip="Einstellungen"
-    >
-      <span class="nav-icon">⚙️</span>
-      {#if !collapsed}
-        <span class="nav-label">Einstellungen</span>
-      {/if}
-    </a>
-  </div>
 
   <!-- Footer: User + Actions -->
   <div class="sidebar-footer">
-    <div class="sidebar-user">
+    <div class="user-card">
       <div class="user-avatar">
-        {user?.ebay_user_id?.charAt(0)?.toUpperCase() || '?'}
+        {user?.ebay_user_id?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || '?'}
       </div>
       {#if !collapsed}
         <div class="user-info">
-          <span class="user-name">{user?.ebay_user_id || user?.email || '—'}</span>
-          <span class="user-email">{user?.email || ''}</span>
+          <div class="user-name">{user?.ebay_user_id || user?.email || '—'}</div>
+          <div class="user-sub">{user?.email || ''}</div>
         </div>
       {/if}
     </div>
     <div class="sidebar-actions">
-      <button class="sidebar-action" on:click={toggleTheme} data-tooltip-action={isDark ? 'Helles Design' : 'Dunkles Design'}>
+      <button class="sidebar-action-btn" on:click={toggleTheme} title={isDark ? 'Hell' : 'Dunkel'}>
         {isDark ? '☀️' : '🌙'}
       </button>
       {#if !collapsed}
-        <button class="sidebar-action" on:click={ebayOAuthLogin} data-tooltip-action="eBay verbinden">
-          🔑
-        </button>
-        <button class="sidebar-action" on:click={openSessionModal} data-tooltip-action="Session erneuern">
-          🔄
-        </button>
-        <button class="sidebar-action" on:click={logout} data-tooltip-action="Ausloggen">
-          🚪
-        </button>
+        <button class="sidebar-action-btn" on:click={ebayOAuthLogin} title="eBay verbinden">🔑</button>
+        <button class="sidebar-action-btn" on:click={openSessionModal} title="Session erneuern">🔄</button>
+        <button class="sidebar-action-btn" on:click={logout} title="Ausloggen">🚪</button>
       {/if}
     </div>
   </div>
@@ -226,9 +225,7 @@
     <div class="session-modal">
       <div class="session-title">🔄 Session erneuern</div>
       {#if $sessionExpired}
-        <div class="session-banner">
-          ⚠️ Deine Session ist abgelaufen. Bitte melde dich erneut an.
-        </div>
+        <div class="session-banner">⚠️ Deine Session ist abgelaufen. Bitte melde dich erneut an.</div>
       {:else}
         <p class="session-desc">Melde dich erneut an, um fortzufahren.</p>
       {/if}
@@ -241,9 +238,7 @@
         <input type="password" bind:value={sessionPassword} placeholder="••••••••"
           on:keydown={(e) => { if (e.key === 'Enter') doSessionRenew(); }} />
       </div>
-      {#if sessionError}
-        <div class="session-error">{sessionError}</div>
-      {/if}
+      {#if sessionError}<div class="session-error">{sessionError}</div>{/if}
       <div class="session-actions">
         {#if !$sessionExpired}
           <button class="session-btn-cancel" on:click={() => showSessionModal = false}>Abbrechen</button>
@@ -264,165 +259,124 @@
 />
 
 <style>
+  /* ── Sidebar Shell ── */
   .sidebar {
-    width: var(--sidebar-width);
+    width: var(--sidebar-width, 220px);
     height: 100vh;
     background: var(--surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     position: fixed;
-    left: 0;
-    top: 0;
+    left: 0; top: 0;
     z-index: 50;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 0.25s cubic-bezier(0.4,0,0.2,1);
   }
   .sidebar.collapsed { width: var(--sidebar-collapsed-width, 68px); }
 
-  .sidebar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 14px;
-    border-bottom: 1px solid var(--border);
-    min-height: 64px;
-    gap: 8px;
-  }
-  .sidebar.collapsed .sidebar-header {
-    justify-content: center;
-    padding: 16px 10px;
-    flex-direction: column;
-    gap: 10px;
-  }
-
+  /* ── Logo Row ── */
   .sidebar-logo {
     display: flex;
     align-items: center;
-    gap: 12px;
-    overflow: hidden;
-    white-space: nowrap;
-    min-width: 0;
+    gap: 10px;
+    padding: 18px 14px 14px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+    min-height: 64px;
   }
-  .logo-img { width: 32px; height: 32px; border-radius: 8px; object-fit: contain; flex-shrink: 0; }
-  .logo-img-small { width: 30px; height: 30px; border-radius: 8px; object-fit: contain; }
-  .logo-text { display: flex; flex-direction: column; }
-  .logo-title { font-size: 15px; font-weight: 800; color: var(--text); }
-  .logo-version { font-size: 11px; color: var(--text3); font-weight: 500; }
-
+  .sidebar.collapsed .sidebar-logo {
+    justify-content: center;
+    flex-direction: column;
+    padding: 14px 10px;
+    gap: 8px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--primary);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #fff;
+  }
+  .logo-text { font-size: 14px; font-weight: 800; color: var(--text); }
+  .logo-sub  { font-size: 10px; color: var(--text3); margin-top: 1px; }
   .toggle-btn {
+    margin-left: auto;
     background: none;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    width: 32px; height: 32px;
+    border-radius: 6px;
+    width: 26px; height: 26px;
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: var(--text2);
-    transition: background 0.15s, color 0.15s;
+    cursor: pointer;
+    color: var(--text3);
+    transition: all 0.15s;
     flex-shrink: 0;
   }
-  .toggle-btn:hover { background: var(--surface2); color: var(--text); }
+  .sidebar.collapsed .toggle-btn { margin-left: 0; }
+  .toggle-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
 
+  /* ── Nav ── */
   .sidebar-nav {
     flex: 1;
-    padding: 12px 10px;
+    padding: 4px 12px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 16px;
     overflow-y: auto;
     overflow-x: hidden;
   }
-
-  .sidebar-bottom {
-    padding: 0 10px 8px;
-    border-top: 1px solid var(--border);
-    padding-top: 8px;
+  .sidebar.collapsed .sidebar-nav { padding: 4px 8px; }
+  .nav-section { display: flex; flex-direction: column; gap: 1px; }
+  .nav-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 8px 8px 4px;
   }
-
   .nav-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    border-radius: 10px;
-    font-size: 13px;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 12.5px;
     font-weight: 500;
     color: var(--text2);
     text-decoration: none;
-    transition: all 0.1s;
+    transition: all 0.12s;
     cursor: pointer;
-    position: relative;
     white-space: nowrap;
     overflow: hidden;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
   }
-  .nav-item:hover { background: var(--surface2); color: var(--text); }
-  .nav-item.active { background: var(--surface2); color: var(--text); font-weight: 700; }
-  .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
-  .nav-label { flex: 1; }
-
+  .nav-item:hover  { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+  .nav-icon-wrap { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+  .nav-label-text { flex: 1; }
   .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
-  .sidebar.collapsed .nav-item::after {
-    content: attr(data-tooltip);
-    position: absolute; left: calc(100% + 12px); top: 50%;
-    transform: translateY(-50%);
-    background: var(--text); color: var(--surface);
-    padding: 5px 12px; border-radius: 6px;
-    font-size: 12px; font-weight: 500; white-space: nowrap;
-    opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 200;
-  }
-  .sidebar.collapsed .nav-item:hover::after { opacity: 1; }
 
-  .sidebar-footer {
-    padding: 12px 14px 16px;
-    border-top: 1px solid var(--border);
-  }
-  .sidebar-user {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 6px; overflow: hidden;
-  }
-  .sidebar.collapsed .sidebar-user { justify-content: center; padding: 8px 0; }
-
-  .user-avatar {
-    width: 34px; height: 34px; border-radius: 10px;
-    background: #3777CF; color: white;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 800; flex-shrink: 0;
-  }
-  .user-info { display: flex; flex-direction: column; min-width: 0; }
-  .user-name {
-    font-size: 13px; font-weight: 600; color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .user-email {
-    font-size: 11px; color: var(--text3);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-
-  .sidebar-actions { display: flex; gap: 4px; padding: 6px 4px 0; }
-  .sidebar.collapsed .sidebar-actions { justify-content: center; }
-
-  .sidebar-action {
-    flex: 1;
-    display: flex; align-items: center; justify-content: center;
-    padding: 8px; border-radius: 8px; font-size: 16px;
-    background: var(--surface2); border: 1px solid var(--border);
-    cursor: pointer; transition: all 0.15s;
-  }
-  .sidebar.collapsed .sidebar-action { flex: none; width: 38px; }
-  .sidebar-action:hover { background: var(--border); }
-
-  .sidebar-action {
+  /* Tooltip when collapsed */
+  .sidebar.collapsed .nav-item {
     position: relative;
   }
-  .sidebar-action[data-tooltip-action]::after {
-    content: attr(data-tooltip-action);
+  .sidebar.collapsed .nav-item::after {
+    content: attr(data-tooltip);
     position: absolute;
-    left: calc(100% + 10px);
+    left: calc(100% + 12px);
     top: 50%;
     transform: translateY(-50%);
     background: var(--text);
     color: var(--surface);
-    padding: 5px 10px;
+    padding: 5px 12px;
     border-radius: 6px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     white-space: nowrap;
     opacity: 0;
@@ -430,11 +384,54 @@
     transition: opacity 0.15s;
     z-index: 200;
   }
-  .sidebar-action[data-tooltip-action]:hover::after {
-    opacity: 1;
-  }
+  .sidebar.collapsed .nav-item:hover::after { opacity: 1; }
 
-  /* Session Modal */
+  /* ── Footer ── */
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .user-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+    margin-bottom: 8px;
+  }
+  .user-card:hover { background: var(--surface2); }
+  .sidebar.collapsed .user-card { justify-content: center; }
+  .user-avatar {
+    width: 30px; height: 30px;
+    background: var(--primary-light);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    color: var(--primary);
+    flex-shrink: 0;
+  }
+  .user-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .user-sub  { font-size: 10px; color: var(--text3); }
+  .sidebar-actions { display: flex; gap: 4px; }
+  .sidebar.collapsed .sidebar-actions { justify-content: center; }
+  .sidebar-action-btn {
+    flex: 1;
+    padding: 7px;
+    border-radius: 7px;
+    font-size: 15px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sidebar.collapsed .sidebar-action-btn { flex: none; width: 38px; }
+  .sidebar-action-btn:hover { background: var(--border); }
+
+  /* ── Session Modal ── */
   .session-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.6);
@@ -451,43 +448,42 @@
     box-shadow: 0 20px 60px rgba(0,0,0,0.25);
   }
   .session-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
-  .session-desc { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
+  .session-desc  { font-size: 13px; color: var(--text2); margin-bottom: 20px; line-height: 1.6; }
   .session-banner {
-    background: rgba(239, 68, 68, 0.08);
-    border: 1.5px solid rgba(239, 68, 68, 0.25);
+    background: rgba(239,68,68,0.08);
+    border: 1.5px solid rgba(239,68,68,0.25);
     border-radius: 10px;
     padding: 12px 14px;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 13px; font-weight: 600;
     color: #ef4444;
-    margin-bottom: 20px;
-    line-height: 1.5;
+    margin-bottom: 20px; line-height: 1.5;
   }
   .session-field { margin-bottom: 14px; }
-  .session-field label {
-    display: block; font-size: 12px; font-weight: 600;
-    color: var(--text2); margin-bottom: 6px;
-  }
+  .session-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
   .session-field input {
     width: 100%; padding: 10px 12px;
     border: 1.5px solid var(--border);
-    border-radius: 9px; background: var(--surface2); color: var(--text);
-    font-family: inherit; font-size: 13px; outline: none; box-sizing: border-box;
+    border-radius: 9px;
+    background: var(--surface2); color: var(--text);
+    font-family: inherit; font-size: 13px;
+    outline: none; box-sizing: border-box;
   }
   .session-field input:focus { border-color: var(--primary); }
   .session-error { color: #ef4444; font-size: 12px; margin-top: 6px; margin-bottom: 4px; }
   .session-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
   .session-btn-cancel {
     background: var(--surface2); border: 1.5px solid var(--border);
-    border-radius: 9px; padding: 10px 18px; color: var(--text2);
-    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    border-radius: 9px; padding: 10px 18px;
+    color: var(--text2); font-family: inherit;
+    font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .session-btn-cancel:hover { border-color: var(--text3); }
   .session-btn-ok {
-    background: var(--primary); border: none; border-radius: 9px;
-    padding: 10px 22px; color: white; font-family: inherit;
+    background: var(--primary); border: none;
+    border-radius: 9px; padding: 10px 22px;
+    color: white; font-family: inherit;
     font-size: 13px; font-weight: 700; cursor: pointer;
   }
-  .session-btn-ok:hover { background: var(--primary-dark, #2d6ab8); }
+  .session-btn-ok:hover { background: var(--primary-dark); }
   .session-btn-ok:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
