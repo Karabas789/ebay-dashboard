@@ -299,7 +299,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   });
 
   // Sektion-Accordion
-  let offeneSektionen = $state(new Set()); // Alle zu beim Start
+  let offeneSektionen = $state(new Set());
   function toggleSektion(s) {
     const neu = new Set(offeneSektionen);
     neu.has(s) ? neu.delete(s) : neu.add(s);
@@ -308,9 +308,8 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 
-  // ── Resizable Divider ────────────────────────────────────────────────────
   let bodyEl = $state(null);
-  let settingsBreite = $state(420);
+  let settingsBreite = $state(null);
   let isDragging = $state(false);
 
   function startDrag(e) {
@@ -320,7 +319,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       if (!bodyEl) return;
       const rect = bodyEl.getBoundingClientRect();
       const x = (ev.clientX ?? ev.touches?.[0]?.clientX) - rect.left;
-      settingsBreite = Math.min(Math.max(x, 280), rect.width - 250);
+      settingsBreite = Math.min(Math.max(x - 2, 260), rect.width - 220);
     };
     const onUp = () => {
       isDragging = false;
@@ -363,7 +362,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
     <!-- LINKE SEITE: Einstellungen -->
     {#if aktiverTab === 'vorlage'}
-    <div class="vb-settings" style="width:{settingsBreite}px; min-width:{settingsBreite}px; max-width:{settingsBreite}px;">
+    <div class="vb-settings" style={settingsBreite ? `width:${settingsBreite}px;flex:none;` : ""}>
 
       <div class="gruppe-label">📐 Layout &amp; Design</div>
 
@@ -640,14 +639,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
     </div>
     {/if}
 
-    <!-- DIVIDER -->
-    <div
-      class="vb-divider"
-      class:dragging={isDragging}
-      onmousedown={startDrag}
-      role="separator"
-      aria-label="Breite anpassen"
-    ></div>
+    <div class="vb-divider" class:dragging={isDragging} onmousedown={startDrag} role="separator" aria-label="Breite anpassen"></div>
 
     <!-- RECHTE SEITE: Live-Vorschau -->
     <div class="vb-preview" class:vb-preview-fullscreen={aktiverTab === 'vorschau'}>
@@ -705,70 +697,25 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   .btn-danger { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-  /* ── KEY FIX: vb-body ist der Flex-Container, der die volle Restfläche bekommt.
-     vb-settings darf NICHT über diese Höhe hinauswachsen → align-self: stretch
-     + overflow-y: auto sorgt für den Scrollbalken statt Stauchung. ── */
-  .vb-body {
-    display: flex;
-    flex: 1;
-    min-height: 0;        /* verhindert, dass Flex-Kind den Container aufbläht */
-    overflow: hidden;
-  }
+  .vb-body { display: flex; flex: 1; overflow: hidden; }
 
+  /* Einstellungen-Panel: breiter für gut lesbare Felder */
   .vb-settings {
+    width: 440px;
     flex-shrink: 0;
-    align-self: stretch;  /* füllt genau die Höhe von vb-body */
-    height: 100%;         /* explizite Höhe → overflow-y: auto greift */
-    min-height: 0;
     overflow-y: auto;
-    overflow-x: hidden;
+    border-right: 1px solid var(--border);
     background: var(--surface);
-    padding: 16px 14px;
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    box-sizing: border-box;
+    gap: 8px;
   }
-
-  .gruppe-label {
-    font-size: 0.67rem;
-    font-weight: 800;
-    color: var(--text3);
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    padding: 4px 2px 2px;
-    margin-top: 4px;
-  }
-
-  .vb-divider {
-    width: 4px;
-    flex-shrink: 0;
-    background: var(--border);
-    cursor: col-resize;
-    transition: background 0.15s, width 0.1s;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .vb-divider::after {
-    content: '';
-    width: 2px;
-    height: 32px;
-    background: var(--text3);
-    border-radius: 2px;
-    opacity: 0.5;
-  }
-  .vb-divider:hover { background: var(--primary); width: 5px; }
-  .vb-divider:hover::after { background: white; opacity: 1; }
-  .vb-divider.dragging { background: var(--primary); width: 5px; }
-  .vb-divider.dragging::after { background: white; opacity: 1; }
-  .sektion { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.15s; }
-  .sektion:has(.sektion-body) { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .sektion { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .sektion-hdr {
     width: 100%; background: var(--surface2); border: none;
-    padding: 13px 16px; display: flex; justify-content: space-between; align-items: center;
-    font-size: 0.84rem; font-weight: 700; color: var(--text); cursor: pointer; transition: background 0.15s;
+    padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.83rem; font-weight: 600; color: var(--text); cursor: pointer; transition: background 0.15s;
   }
   .sektion-hdr:hover { background: var(--border); }
   .chevron { font-size: 1rem; color: var(--text2); transform: rotate(90deg); transition: transform 0.2s; }
@@ -812,7 +759,6 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   /* Vorschau-Panel: scrollbar, A4-Seite zentriert */
   .vb-preview {
     flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
     background: #cbd5e1;
@@ -829,7 +775,6 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   /* Scrollbarer Bereich — A4 zentriert */
   .preview-frame-wrap {
     flex: 1;
-    min-height: 0;
     overflow: auto;
     padding: 24px;
     display: flex;
@@ -858,11 +803,11 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   }
 
   @media (max-width: 1200px) {
-    .vb-settings { width: 380px !important; min-width: 380px !important; max-width: 380px !important; }
+    .vb-settings { width: 380px; }
   }
   @media (max-width: 900px) {
     .vb-body { flex-direction: column; }
-    .vb-settings { width: 100% !important; min-width: unset !important; max-width: unset !important; height: 45vh; border-right: none; border-bottom: 1px solid var(--border); }
+    .vb-settings { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 45vh; }
     .preview-iframe, .pdf-iframe { width: 100%; height: 600px; }
   }
 </style>
