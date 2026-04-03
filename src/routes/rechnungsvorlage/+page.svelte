@@ -299,7 +299,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   });
 
   // Sektion-Accordion
-  let offeneSektionen = $state(new Set(['logo']));
+  let offeneSektionen = $state(new Set()); // Alle zu beim Start
   function toggleSektion(s) {
     const neu = new Set(offeneSektionen);
     neu.has(s) ? neu.delete(s) : neu.add(s);
@@ -308,28 +308,25 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 
-  // ── Resizable Divider ─────────────────────────────────────────────────────
+  // ── Resizable Divider ────────────────────────────────────────────────────
   let bodyEl = $state(null);
-  let settingsBreite = $state(440);
+  let settingsBreite = $state(420);
   let isDragging = $state(false);
 
   function startDrag(e) {
     isDragging = true;
     e.preventDefault();
-    
     const onMove = (ev) => {
       if (!bodyEl) return;
       const rect = bodyEl.getBoundingClientRect();
-      const x = (ev.clientX || ev.touches?.[0]?.clientX) - rect.left;
-      settingsBreite = Math.min(Math.max(x, 280), rect.width - 300);
+      const x = (ev.clientX ?? ev.touches?.[0]?.clientX) - rect.left;
+      settingsBreite = Math.min(Math.max(x, 280), rect.width - 250);
     };
-    
     const onUp = () => {
       isDragging = false;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-    
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }
@@ -366,9 +363,9 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
     <!-- LINKE SEITE: Einstellungen -->
     {#if aktiverTab === 'vorlage'}
-    <div class="vb-settings" style="width:{settingsBreite}px">
+    <div class="vb-settings" style="width:{settingsBreite}px; min-width:{settingsBreite}px;">
 
-      <div class="sektion-gruppe-label">📐 Layout & Design</div>
+      <div class="gruppe-label">📐 Layout &amp; Design</div>
 
       <!-- LOGO -->
       <div class="sektion">
@@ -489,7 +486,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
         {/if}
       </div>
 
-      <div class="sektion-gruppe-label" style="margin-top:4px;">📝 Inhalte & Daten</div>
+      <div class="gruppe-label">📝 Inhalte &amp; Daten</div>
 
       <!-- FIRMENDATEN -->
       <div class="sektion">
@@ -649,7 +646,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       class:dragging={isDragging}
       onmousedown={startDrag}
       role="separator"
-      aria-label="Panel-Breite anpassen"
+      aria-label="Breite anpassen"
     ></div>
 
     <!-- RECHTE SEITE: Live-Vorschau -->
@@ -710,51 +707,61 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
   .vb-body { display: flex; flex: 1; overflow: hidden; }
 
-  /* Einstellungen-Panel: breiter für gut lesbare Felder */
   .vb-settings {
     flex-shrink: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--surface);
-    padding: 16px;
+    padding: 16px 14px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
   }
+
+  .gruppe-label {
+    font-size: 0.67rem;
+    font-weight: 800;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    padding: 4px 2px 2px;
+    margin-top: 4px;
+  }
+
   .vb-divider {
-    width: 5px;
+    width: 4px;
     flex-shrink: 0;
     background: var(--border);
     cursor: col-resize;
-    transition: background 0.15s;
+    transition: background 0.15s, width 0.1s;
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .vb-divider::after {
-    content: '⋮';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: var(--text3);
-    font-size: 16px;
-    line-height: 1;
+    content: '';
+    width: 2px;
+    height: 32px;
+    background: var(--text3);
+    border-radius: 2px;
+    opacity: 0.5;
   }
-  .vb-divider:hover, .vb-divider.dragging {
-    background: var(--primary);
-    width: 5px;
-  }
-  .vb-divider.dragging::after { color: white; }
-  .sektion-gruppe-label { font-size: 0.68rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; padding: 0 2px; margin-bottom: -4px; }
-  .sektion { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .vb-divider:hover { background: var(--primary); width: 5px; }
+  .vb-divider:hover::after { background: white; opacity: 1; }
+  .vb-divider.dragging { background: var(--primary); width: 5px; }
+  .vb-divider.dragging::after { background: white; opacity: 1; }
+  .sektion { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.15s; }
+  .sektion:has(.sektion-body) { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   .sektion-hdr {
     width: 100%; background: var(--surface2); border: none;
-    padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+    padding: 13px 16px; display: flex; justify-content: space-between; align-items: center;
     font-size: 0.84rem; font-weight: 700; color: var(--text); cursor: pointer; transition: background 0.15s;
-    letter-spacing: 0.01em;
   }
   .sektion-hdr:hover { background: var(--border); }
   .chevron { font-size: 1rem; color: var(--text2); transform: rotate(90deg); transition: transform 0.2s; }
   .chevron.offen { transform: rotate(270deg); }
-  .sektion-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .sektion-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--border); }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
   .form-group label { font-size: 0.73rem; color: var(--text2); font-weight: 500; }
