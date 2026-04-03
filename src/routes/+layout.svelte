@@ -75,7 +75,10 @@
     height: 100vh;
     overflow-y: auto;
     transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Kein overflow-x:hidden — das erzeugt einen Stacking Context der position:fixed bricht */
   }
+  /* Seiten mit eigenem Scroll-Container (z.B. Rechnungsvorlage) brauchen overflow:hidden
+     damit der innere Container (vb-settings) seinen eigenen Scrollbalken bekommt */
   .main-content.no-page-scroll {
     overflow: hidden;
     display: flex;
@@ -88,6 +91,7 @@
     padding: 28px 32px;
     min-height: 100%;
   }
+  /* Wenn kein page-scroll: wrapper füllt den ganzen Platz ohne padding */
   .page-wrapper-fill {
     padding: 0;
     min-height: unset;
