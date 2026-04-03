@@ -299,7 +299,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   });
 
   // Sektion-Accordion
-  let offeneSektionen = $state(new Set());
+  let offeneSektionen = $state(new Set()); // Alle zu beim Start
   function toggleSektion(s) {
     const neu = new Set(offeneSektionen);
     neu.has(s) ? neu.delete(s) : neu.add(s);
@@ -308,8 +308,9 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
   const schriftarten = ['Arial', 'Helvetica', 'Georgia', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Tahoma', 'Calibri'];
 
+  // ── Resizable Divider ────────────────────────────────────────────────────
   let bodyEl = $state(null);
-  let settingsBreite = $state(null);
+  let settingsBreite = $state(420);
   let isDragging = $state(false);
 
   function startDrag(e) {
@@ -319,7 +320,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
       if (!bodyEl) return;
       const rect = bodyEl.getBoundingClientRect();
       const x = (ev.clientX ?? ev.touches?.[0]?.clientX) - rect.left;
-      settingsBreite = Math.min(Math.max(x - 2, 260), rect.width - 220);
+      settingsBreite = Math.min(Math.max(x, 280), rect.width - 250);
     };
     const onUp = () => {
       isDragging = false;
@@ -362,7 +363,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
     <!-- LINKE SEITE: Einstellungen -->
     {#if aktiverTab === 'vorlage'}
-    <div class="vb-settings" style={settingsBreite ? `width:${settingsBreite}px;flex:none;` : ""}>
+    <div class="vb-settings" style="width:{settingsBreite}px; min-width:{settingsBreite}px;">
 
       <div class="gruppe-label">📐 Layout &amp; Design</div>
 
@@ -639,7 +640,14 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
     </div>
     {/if}
 
-    <div class="vb-divider" class:dragging={isDragging} onmousedown={startDrag} role="separator" aria-label="Breite anpassen"></div>
+    <!-- DIVIDER -->
+    <div
+      class="vb-divider"
+      class:dragging={isDragging}
+      onmousedown={startDrag}
+      role="separator"
+      aria-label="Breite anpassen"
+    ></div>
 
     <!-- RECHTE SEITE: Live-Vorschau -->
     <div class="vb-preview" class:vb-preview-fullscreen={aktiverTab === 'vorschau'}>
@@ -699,23 +707,56 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
 
   .vb-body { display: flex; flex: 1; overflow: hidden; }
 
-  /* Einstellungen-Panel: breiter für gut lesbare Felder */
   .vb-settings {
-    width: 440px;
     flex-shrink: 0;
     overflow-y: auto;
-    border-right: 1px solid var(--border);
+    overflow-x: hidden;
     background: var(--surface);
-    padding: 14px;
+    padding: 16px 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
   }
-  .sektion { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+  .gruppe-label {
+    font-size: 0.67rem;
+    font-weight: 800;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    padding: 4px 2px 2px;
+    margin-top: 4px;
+  }
+
+  .vb-divider {
+    width: 4px;
+    flex-shrink: 0;
+    background: var(--border);
+    cursor: col-resize;
+    transition: background 0.15s, width 0.1s;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .vb-divider::after {
+    content: '';
+    width: 2px;
+    height: 32px;
+    background: var(--text3);
+    border-radius: 2px;
+    opacity: 0.5;
+  }
+  .vb-divider:hover { background: var(--primary); width: 5px; }
+  .vb-divider:hover::after { background: white; opacity: 1; }
+  .vb-divider.dragging { background: var(--primary); width: 5px; }
+  .vb-divider.dragging::after { background: white; opacity: 1; }
+  .sektion { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.15s; }
+  .sektion:has(.sektion-body) { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
   .sektion-hdr {
     width: 100%; background: var(--surface2); border: none;
-    padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
-    font-size: 0.83rem; font-weight: 600; color: var(--text); cursor: pointer; transition: background 0.15s;
+    padding: 13px 16px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.84rem; font-weight: 700; color: var(--text); cursor: pointer; transition: background 0.15s;
   }
   .sektion-hdr:hover { background: var(--border); }
   .chevron { font-size: 1rem; color: var(--text2); transform: rotate(90deg); transition: transform 0.2s; }
