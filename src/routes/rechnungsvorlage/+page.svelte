@@ -705,10 +705,12 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   .btn-danger { background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
   .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 
-  .vb-body { display: flex; flex: 1; overflow: hidden; }
+  .vb-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
 
   .vb-settings {
     flex-shrink: 0;
+    /* FIX: min-height:0 erlaubt dem Flex-Kind zu scrollen statt zu wachsen */
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     background: var(--surface);
@@ -800,6 +802,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   /* Vorschau-Panel: scrollbar, A4-Seite zentriert */
   .vb-preview {
     flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: #cbd5e1;
@@ -816,6 +819,7 @@ ${v.footer_zeige_bank && v.firma_bank_iban ? `<div style="margin-top:16px;paddin
   /* Scrollbarer Bereich — A4 zentriert */
   .preview-frame-wrap {
     flex: 1;
+    min-height: 0;
     overflow: auto;
     padding: 24px;
     display: flex;
