@@ -3,7 +3,6 @@
   import { currentUser, showToast } from '$lib/stores.js';
   import { apiCall } from '$lib/api.js';
 
-  // ── Beispieldaten (Vorschau) ────────────────────────────────────────────────
   const B = {
     rechnung_nr: '202658155', datum: '04.04.2026', order_id: '22-14426-19402',
     liefer_datum: '04.04.2026', zahlungsziel: '11.04.2026',
@@ -18,86 +17,42 @@
 
   const fmt = (n) => Number(n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  // ── Vorlagen-State ──────────────────────────────────────────────────────────
   let v = $state({
-    akzentfarbe: '#1a1a1a',
     schriftart: 'Arial',
+    akzentfarbe: '#1d4ed8',
     seitenrand: 28,
-
-    logo: { base64: '', breite: 130, position: 'rechts' }, // links | rechts
-
-    absenderzeile: {
-      text: 'Import & Produkte Vertrieb · Auf der Schläfe 1 · 57078 Siegen',
-      groesse: 8,
-      position: 'links', // links | mitte | rechts
-    },
-
-    empfaenger: {
-      position: 'links', // links | mitte | rechts
-      groesse: 11,
-    },
-
-    kontakt_block: {
-      titel: 'So erreichen Sie uns',
-      email: 'import_vertrieb@mail.de',
-      telefon: '0271 50149974',
-      mobil: '0177 6776548',
-      steuernr: '342/5058/2211',
-      ust_idnr: 'DE815720228',
-      groesse: 11,
-    },
-
-    einleitung: 'Sehr geehrte Damen und Herren,\nnachfolgend berechnen wir Ihnen wie vorab besprochen:',
-
+    logo: { base64: '', breite: 130 },
+    wasserzeichen: { sichtbar: true, text: 'Entwurf' },
+    block_absender: 'Import & Produkte Vertrieb · Auf der Schläfe 1 · 57078 Siegen',
+    block_empfaenger: 'Vitali Dubs\nPackstation 118\nPostnummer: 49045164\n57078 Siegen',
+    block_kontakt: 'So erreichen Sie uns\n\nE-Mail      import_vertrieb@mail.de\nTelefon    0271 50149974\nMobil       0177 6776548\n\nSteuer-Nr.   342/5058/2211\nUSt-IdNr.    DE815720228\n\nDatum       04.04.2026\nKunde       34025\nRechnung  202658155',
+    block_einleitung: 'Sehr geehrte Damen und Herren,\nnachfolgend berechnen wir Ihnen wie vorab besprochen:',
+    block_abschluss: 'Vielen Dank für Ihren Auftrag!\n\nBitte begleichen Sie den offenen Betrag bis zum 11.04.2026.\n\nMit freundlichen Grüßen\nImport & Produkte Vertrieb',
+    block_zahlung: 'Bereits bezahlt über eBay',
+    zahlung_sichtbar: true,
     tabelle: {
-      kopf_hg: '#1a1a1a',
+      kopf_hg: '#1d4ed8',
       kopf_farbe: '#ffffff',
       zeige_artnr: true,
       zeige_menge: true,
       zeige_ep: true,
       zeige_betrag: true,
     },
-
-    summen: {
-      breite: 280,
-      kleinunternehmer: false,
-    },
-
-    zahlung: {
-      text: 'Bereits bezahlt über eBay',
-      sichtbar: true,
-      position: 'links', // links | mitte | rechts
-    },
-
-    abschluss: {
-      text: 'Vielen Dank für Ihren Auftrag!\n\nBitte begleichen Sie den offenen Betrag bis zum [zahlungsziel].\n\nMit freundlichen Grüßen\nImport & Produkte Vertrieb',
-    },
-
-    wasserzeichen: { sichtbar: true, text: 'Entwurf' },
-
-    footer: {
-      spalte1_name: 'Import & Produkte Vertrieb',
-      spalte1_inh: 'Inh. Oxana Dubs',
-      spalte1_str: 'Auf der Schläfe 1',
-      spalte1_plz: 'DE 57078 Siegen',
-      spalte2_tel: 'Telefon: +49 271 50149974',
-      spalte2_mob: 'Mobil:    +49 177 6776548',
-      spalte2_mail: 'E-Mail:   ov-shop@mail.de',
-      spalte3_titel: 'Bankverbindung: N26 Bank',
-      spalte3_iban: 'IBAN: DE60 1001 1001 2829 9706 30',
-      spalte3_bic: 'BIC: NTSBDEB1XXX',
-      spalte4_titel: 'Finanzamt Siegen',
-      spalte4_stnr: 'St.Nr. 342/5058/2200',
-      spalte4_ust: 'USt. -ID: DE815720228',
-      groesse: 8,
-    },
+    summen: { breite: 280, kleinunternehmer: false },
+    footer_spalten: 4,
+    footer: [
+      'Import & Produkte Vertrieb\nInh. Oxana Dubs\nAuf der Schläfe 1\nDE 57078 Siegen',
+      'Telefon: +49 271 50149974\nMobil:    +49 177 6776548\nE-Mail:   ov-shop@mail.de',
+      'Bankverbindung: N26 Bank\nIBAN: DE60 1001 1001 2829 9706 30\nBIC: NTSBDEB1XXX',
+      'Finanzamt Siegen\nSt.Nr. 342/5058/2200\nUSt. -ID: DE815720228',
+    ],
   });
 
   let speichertLaeuft = $state(false);
   let pdfLaeuft = $state(false);
   let vorschauPDF = $state('');
   let zeigtPDF = $state(false);
-  let zeigtEinstellungen = $state(false);
+  let aktuellerFokus = $state('');
 
   onMount(async () => {
     if ($currentUser) {
@@ -145,41 +100,34 @@
     { n: 'Lila', c: '#6d28d9' }, { n: 'Orange', c: '#c2410c' },
   ];
 
-  // Hilfsfunktion: Text-Align aus Position
-  function posAlign(pos) {
-    return pos === 'rechts' ? 'flex-end' : pos === 'mitte' ? 'center' : 'flex-start';
-  }
-
-  function abschlussText() {
-    return v.abschluss.text
-      .replace('[zahlungsziel]', B.zahlungsziel)
-      .replace('[datum]', B.datum);
+  function footerText(i) { return v.footer[i] ?? ''; }
+  function setFooter(i, text) {
+    const arr = [...v.footer];
+    arr[i] = text;
+    v.footer = arr;
   }
 </script>
 
-<!-- ══════════════════════════════════════════════════════════════════════════ -->
-<!-- WRAPPER                                                                  -->
-<!-- ══════════════════════════════════════════════════════════════════════════ -->
 <div class="rw">
 
-  <!-- ── TOOLBAR ────────────────────────────────────────────────────────────── -->
+  <!-- TOOLBAR -->
   <div class="rw-bar">
     <div class="rw-bar-l">
       <b class="rw-title">🧾 Rechnungsvorlage</b>
       <div class="sep"></div>
 
-      <label class="rw-field-label">Schrift</label>
+      <label class="rw-lbl">Schrift</label>
       <select class="rw-sel" bind:value={v.schriftart}>
-        {#each ['Arial','Helvetica','Georgia','Times New Roman','Verdana','Tahoma'] as f}
+        {#each ['Arial','Helvetica','Georgia','Times New Roman','Verdana','Tahoma','Courier New'] as f}
           <option>{f}</option>
         {/each}
       </select>
 
       <div class="sep"></div>
-      <label class="rw-field-label">Farbthema</label>
+      <label class="rw-lbl">Farbthema</label>
       {#each themen as t}
         <button class="rw-dot" style="background:{t.c};"
-          class:rw-dot-active={v.akzentfarbe === t.c}
+          class:active={v.akzentfarbe === t.c}
           onclick={() => applyTheme(t.c)} title={t.n}></button>
       {/each}
 
@@ -189,322 +137,165 @@
         <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none" />
       </label>
       {#if v.logo.base64}
+        <input type="number" class="rw-num" min="40" max="300" bind:value={v.logo.breite} title="Logo-Breite px" />
         <button class="rw-btn" onclick={() => v.logo.base64 = ''}>✕ Logo</button>
       {/if}
 
       <div class="sep"></div>
-      <button class="rw-btn" onclick={() => zeigtEinstellungen = !zeigtEinstellungen}>
-        ⚙ Einstellungen {zeigtEinstellungen ? '▲' : '▼'}
-      </button>
+      <label class="rw-lbl">Footer-Spalten</label>
+      {#each [1,2,3,4] as n}
+        <button class="rw-col-btn" class:active={v.footer_spalten === n}
+          onclick={() => v.footer_spalten = n}>{n}</button>
+      {/each}
 
       <div class="sep"></div>
-      <label class="rw-btn" style="gap:5px;">
-        <input type="checkbox" bind:checked={v.wasserzeichen.sichtbar} />
-        Entwurf-Stempel
-      </label>
+      <label class="rw-lbl">Rand</label>
+      <input type="number" class="rw-num" min="10" max="60" bind:value={v.seitenrand} />px
+
+      <div class="sep"></div>
+      <label class="rw-check"><input type="checkbox" bind:checked={v.wasserzeichen.sichtbar} /> Entwurf</label>
+      <label class="rw-check"><input type="checkbox" bind:checked={v.zahlung_sichtbar} /> Bezahlt-Badge</label>
+      <label class="rw-check"><input type="checkbox" bind:checked={v.summen.kleinunternehmer} /> § 19 UStG</label>
     </div>
+
     <div class="rw-bar-r">
       {#if zeigtPDF}
         <button class="rw-btn" onclick={() => zeigtPDF = false}>← Editor</button>
       {:else}
-        <button class="rw-btn" onclick={pdfVorschau} disabled={pdfLaeuft}>{pdfLaeuft ? '⏳' : '🖨'} PDF Vorschau</button>
+        <button class="rw-btn" onclick={pdfVorschau} disabled={pdfLaeuft}>
+          {pdfLaeuft ? '⏳' : '🖨'} PDF
+        </button>
       {/if}
-      <button class="rw-btn rw-btn-save" onclick={speichern} disabled={speichertLaeuft}>
+      <button class="rw-btn rw-save" onclick={speichern} disabled={speichertLaeuft}>
         {speichertLaeuft ? 'Speichert…' : '💾 Speichern'}
       </button>
     </div>
   </div>
 
-  <!-- ── EINSTELLUNGS-PANEL ─────────────────────────────────────────────────── -->
-  {#if zeigtEinstellungen}
-  <div class="rw-panel">
-    <div class="rw-panel-grid">
-
-      <!-- Logo -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Logo</div>
-        <label class="rw-pl">Breite
-          <input type="number" class="rw-num" min="40" max="300" bind:value={v.logo.breite} />px
-        </label>
-        <label class="rw-pl">Position
-          <select class="rw-sel" bind:value={v.logo.position}>
-            <option value="links">Links</option>
-            <option value="rechts">Rechts</option>
-          </select>
-        </label>
-      </div>
-
-      <!-- Absenderzeile -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Absenderzeile</div>
-        <label class="rw-pl">Größe
-          <input type="number" class="rw-num" min="6" max="14" bind:value={v.absenderzeile.groesse} />pt
-        </label>
-        <label class="rw-pl">Position
-          <select class="rw-sel" bind:value={v.absenderzeile.position}>
-            <option value="links">Links</option>
-            <option value="mitte">Mitte</option>
-            <option value="rechts">Rechts</option>
-          </select>
-        </label>
-      </div>
-
-      <!-- Empfänger-Block -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Empfänger-Adresse</div>
-        <label class="rw-pl">Größe
-          <input type="number" class="rw-num" min="8" max="16" bind:value={v.empfaenger.groesse} />pt
-        </label>
-        <label class="rw-pl">Position
-          <select class="rw-sel" bind:value={v.empfaenger.position}>
-            <option value="links">Links</option>
-            <option value="mitte">Mitte</option>
-            <option value="rechts">Rechts</option>
-          </select>
-        </label>
-      </div>
-
-      <!-- Kontakt-Block -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Kontakt-Block</div>
-        <label class="rw-pl">Größe
-          <input type="number" class="rw-num" min="8" max="14" bind:value={v.kontakt_block.groesse} />pt
-        </label>
-      </div>
-
-      <!-- Tabelle -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Tabellen-Spalten</div>
-        <label class="rw-pl"><input type="checkbox" bind:checked={v.tabelle.zeige_artnr} /> Art.-Nr.</label>
-        <label class="rw-pl"><input type="checkbox" bind:checked={v.tabelle.zeige_menge} /> Menge</label>
-        <label class="rw-pl"><input type="checkbox" bind:checked={v.tabelle.zeige_ep} /> Einzelpreis</label>
-        <label class="rw-pl"><input type="checkbox" bind:checked={v.tabelle.zeige_betrag} /> Betrag</label>
-      </div>
-
-      <!-- Summen -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Summen</div>
-        <label class="rw-pl">Breite
-          <input type="number" class="rw-num" min="150" max="450" bind:value={v.summen.breite} />px
-        </label>
-        <label class="rw-pl"><input type="checkbox" bind:checked={v.summen.kleinunternehmer} /> § 19 UStG</label>
-      </div>
-
-      <!-- Zahlung-Button -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">„Bezahlt"-Badge</div>
-        <label class="rw-pl"><input type="checkbox" bind:checked={v.zahlung.sichtbar} /> Sichtbar</label>
-        <label class="rw-pl">Position
-          <select class="rw-sel" bind:value={v.zahlung.position}>
-            <option value="links">Links</option>
-            <option value="mitte">Mitte</option>
-            <option value="rechts">Rechts</option>
-          </select>
-        </label>
-      </div>
-
-      <!-- Footer -->
-      <div class="rw-pg">
-        <div class="rw-pg-title">Footer</div>
-        <label class="rw-pl">Schriftgröße
-          <input type="number" class="rw-num" min="6" max="11" bind:value={v.footer.groesse} />pt
-        </label>
-      </div>
-
-    </div>
-  </div>
-  {/if}
-
-  <!-- ── CANVAS ─────────────────────────────────────────────────────────────── -->
-  <div class="rw-canvas">
-
-    {#if zeigtPDF && vorschauPDF}
-      <iframe src="data:application/pdf;base64,{vorschauPDF}" title="PDF Vorschau" class="rw-pdf"></iframe>
-
+  <!-- SUBBAR: Tabelle + Hinweis -->
+  <div class="rw-sub">
+    <span class="rw-lbl">Tabellenspalten:</span>
+    <label><input type="checkbox" bind:checked={v.tabelle.zeige_artnr} /> Art.-Nr.</label>
+    <label><input type="checkbox" bind:checked={v.tabelle.zeige_menge} /> Menge</label>
+    <label><input type="checkbox" bind:checked={v.tabelle.zeige_ep} /> Einzelpreis</label>
+    <label><input type="checkbox" bind:checked={v.tabelle.zeige_betrag} /> Betrag</label>
+    <div class="sep"></div>
+    <span class="rw-lbl">Summen-Breite:</span>
+    <input type="number" class="rw-num" min="150" max="450" bind:value={v.summen.breite} />px
+    {#if aktuellerFokus}
+      <div class="sep"></div>
+      <span class="rw-hint">✏️ <b>{aktuellerFokus}</b> — Enter = neue Zeile &nbsp;·&nbsp; Leerzeilen für mehr Abstand</span>
     {:else}
-    <!-- ════════════════════════════════════════════════════════════════════ -->
-    <!-- A4 DOKUMENT                                                         -->
-    <!-- ════════════════════════════════════════════════════════════════════ -->
+      <div class="sep"></div>
+      <span class="rw-hint-idle">💡 Jeden Block anklicken und wie in Word bearbeiten — Enter drücken für neue Zeilen</span>
+    {/if}
+  </div>
+
+  <!-- CANVAS -->
+  <div class="rw-canvas">
+    {#if zeigtPDF && vorschauPDF}
+      <iframe src="data:application/pdf;base64,{vorschauPDF}" title="PDF" class="rw-pdf"></iframe>
+    {:else}
+
     <div class="rw-a4" style="font-family:{v.schriftart},sans-serif; --ak:{v.akzentfarbe}; --rand:{v.seitenrand}px;">
 
       {#if v.wasserzeichen.sichtbar}
         <div class="rw-wz">{v.wasserzeichen.text}</div>
       {/if}
 
-      <!-- ── KOPF ──────────────────────────────────────────────────────────── -->
-      <div class="rw-kopf" style="padding: var(--rand) var(--rand) 0;">
+      <!-- HEADER: Links (Logo+Absender+Empfänger) | Rechts (Kontakt) -->
+      <div class="rw-header" style="padding: var(--rand) var(--rand) 0;">
 
-        <!-- Logo + Absenderzeile: Layout abhängig von logo.position -->
-        <div class="rw-kopf-top" style="flex-direction: {v.logo.position === 'rechts' ? 'row' : 'row-reverse'};">
+        <div class="rw-hl">
+          {#if v.logo.base64}
+            <label class="rw-logo-img-lbl" title="Klicken zum Wechseln">
+              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none" />
+              <img src={v.logo.base64} alt="Logo"
+                style="width:{v.logo.breite}px; max-height:90px; object-fit:contain; display:block;" />
+            </label>
+          {:else}
+            <label class="rw-logo-drop" style="width:{v.logo.breite}px;">
+              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none" />
+              🖼 Logo hochladen
+            </label>
+          {/if}
 
-          <!-- Linke Seite: Absenderzeile + Empfänger-Adresse -->
-          <div class="rw-kopf-links" style="align-items:{posAlign(v.absenderzeile.position)};">
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="rw-e rw-absender"
+            contenteditable="true"
+            onfocus={() => aktuellerFokus = 'Absenderzeile'}
+            onblur={() => aktuellerFokus = ''}
+            oninput={(e) => v.block_absender = e.currentTarget.innerText}
+            data-label="Absenderzeile"
+          >{v.block_absender}</div>
 
-            <!-- Absenderzeile (klein, grau) -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e"
-              contenteditable="true"
-              style="font-size:{v.absenderzeile.groesse}px; color:#888; margin-bottom:10px; display:block;"
-              oninput={(e) => v.absenderzeile.text = e.currentTarget.innerText}
-              data-ph="Absenderzeile (Firmenname · Straße · PLZ Ort)"
-            >{v.absenderzeile.text}</div>
-
-            <!-- Empfänger-Adresse -->
-            <div style="align-self:{posAlign(v.empfaenger.position)};">
-              <div style="font-size:{v.empfaenger.groesse}px; font-weight:700; color:#1a1a1a; line-height:1.7;">
-                {B.kaeufer_name}
-              </div>
-              <div style="font-size:{v.empfaenger.groesse}px; color:#1a1a1a; line-height:1.7;">{B.kaeufer_strasse}</div>
-              {#if B.kaeufer_extra}
-                <div style="font-size:{v.empfaenger.groesse}px; color:#1a1a1a; line-height:1.7;">{B.kaeufer_extra}</div>
-              {/if}
-              <div style="font-size:{v.empfaenger.groesse}px; color:#1a1a1a; line-height:1.7;">{B.kaeufer_plz} {B.kaeufer_ort}</div>
-            </div>
-          </div>
-
-          <!-- Rechte Seite: Logo + Kontakt-Block -->
-          <div class="rw-kopf-rechts">
-
-            <!-- Logo -->
-            {#if v.logo.base64}
-              <div style="margin-bottom:16px; text-align:right;">
-                <img src={v.logo.base64} alt="Logo"
-                  style="width:{v.logo.breite}px; max-height:80px; object-fit:contain;" />
-              </div>
-            {:else}
-              <label class="rw-logo-drop" style="width:{v.logo.breite}px; margin-left:auto; margin-bottom:16px;">
-                <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none" />
-                🖼 Logo hochladen
-              </label>
-            {/if}
-
-            <!-- Kontakt-Block -->
-            <div class="rw-kontakt" style="font-size:{v.kontakt_block.groesse}px;">
-              <!-- Titel -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="rw-e rw-kontakt-titel"
-                contenteditable="true"
-                oninput={(e) => v.kontakt_block.titel = e.currentTarget.innerText}
-              >{v.kontakt_block.titel}</div>
-
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">E-Mail</span>
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <span class="rw-e rw-kv"
-                  contenteditable="true"
-                  oninput={(e) => v.kontakt_block.email = e.currentTarget.innerText}
-                  data-ph="—"
-                >{v.kontakt_block.email}</span>
-              </div>
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">Telefon</span>
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <span class="rw-e rw-kv"
-                  contenteditable="true"
-                  oninput={(e) => v.kontakt_block.telefon = e.currentTarget.innerText}
-                  data-ph="—"
-                >{v.kontakt_block.telefon}</span>
-              </div>
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">Mobil</span>
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <span class="rw-e rw-kv"
-                  contenteditable="true"
-                  oninput={(e) => v.kontakt_block.mobil = e.currentTarget.innerText}
-                  data-ph="—"
-                >{v.kontakt_block.mobil}</span>
-              </div>
-
-              <div class="rw-kontakt-spacer"></div>
-
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">Steuer-Nr.</span>
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <span class="rw-e rw-kv rw-kv-bold"
-                  contenteditable="true"
-                  oninput={(e) => v.kontakt_block.steuernr = e.currentTarget.innerText}
-                  data-ph="—"
-                >{v.kontakt_block.steuernr}</span>
-              </div>
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">USt-IdNr.</span>
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <span class="rw-e rw-kv rw-kv-bold"
-                  contenteditable="true"
-                  oninput={(e) => v.kontakt_block.ust_idnr = e.currentTarget.innerText}
-                  data-ph="—"
-                >{v.kontakt_block.ust_idnr}</span>
-              </div>
-
-              <div class="rw-kontakt-spacer"></div>
-
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">Datum</span>
-                <span class="rw-kv rw-kv-bold">{B.datum}</span>
-              </div>
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">Kunde</span>
-                <span class="rw-kv rw-kv-bold">{B.kunde_nr}</span>
-              </div>
-              <div class="rw-kontakt-row">
-                <span class="rw-kl">Rechnung</span>
-                <span class="rw-kv rw-kv-bold">{B.rechnung_nr}</span>
-              </div>
-            </div>
-
-          </div>
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="rw-e rw-empfaenger"
+            contenteditable="true"
+            onfocus={() => aktuellerFokus = 'Empfänger-Adresse'}
+            onblur={() => aktuellerFokus = ''}
+            oninput={(e) => v.block_empfaenger = e.currentTarget.innerText}
+            data-label="Empfänger-Adresse"
+          >{v.block_empfaenger}</div>
         </div>
 
-      </div><!-- /rw-kopf -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="rw-e rw-kontakt"
+          contenteditable="true"
+          onfocus={() => aktuellerFokus = 'Kontakt-Block (rechts)'}
+          onblur={() => aktuellerFokus = ''}
+          oninput={(e) => v.block_kontakt = e.currentTarget.innerText}
+          data-label="Kontakt-Block"
+        >{v.block_kontakt}</div>
 
-      <!-- ── TRENNLINIE ────────────────────────────────────────────────────── -->
-      <div style="padding:16px var(--rand) 0;">
-        <hr class="rw-hr-line" />
       </div>
 
-      <!-- ── INHALT (flex:1 — schiebt Footer nach unten) ────────────────────── -->
-      <div class="rw-body" style="padding:14px var(--rand) 0;">
+      <!-- TRENNLINIE -->
+      <div style="padding: 14px var(--rand) 0;">
+        <hr style="border:none; border-top:1px solid #bbb; margin:0;" />
+      </div>
 
-        <!-- Einleitung -->
+      <!-- BODY -->
+      <div class="rw-body" style="padding: 14px var(--rand) 0;">
+
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="rw-e"
+        <div class="rw-e rw-text"
           contenteditable="true"
-          style="font-size:11px; color:#333; margin-bottom:12px; white-space:pre-line; display:block; line-height:1.55;"
-          oninput={(e) => v.einleitung = e.currentTarget.innerText}
-          data-ph="Einleitungstext…"
-        >{v.einleitung}</div>
+          onfocus={() => aktuellerFokus = 'Einleitungstext'}
+          onblur={() => aktuellerFokus = ''}
+          oninput={(e) => v.block_einleitung = e.currentTarget.innerText}
+          data-label="Einleitungstext"
+        >{v.block_einleitung}</div>
 
-        <!-- Rechnungs-Titel -->
-        <div style="margin-bottom:2px;">
-          <div style="font-size:14px; font-weight:700; color:#1a1a1a;">Rechnung {B.rechnung_nr}</div>
-          <div style="font-size:9px; color:#888; margin-bottom:10px;">Das Rechnungsdatum entspricht dem Leistungsdatum</div>
+        <div style="margin:14px 0 2px;">
+          <div style="font-size:15px; font-weight:700; color:#1a1a1a;">Rechnung {B.rechnung_nr}</div>
+          <div style="font-size:9px; color:#999; margin-bottom:12px;">Das Rechnungsdatum entspricht dem Leistungsdatum</div>
         </div>
 
-        <!-- Positions-Tabelle -->
         <table class="rw-table">
           <thead>
             <tr style="background:{v.tabelle.kopf_hg};">
-              <th class="rw-th" style="color:{v.tabelle.kopf_farbe}; width:36px;">Pos</th>
+              <th class="rw-th" style="color:{v.tabelle.kopf_farbe}; width:32px;">Pos</th>
               {#if v.tabelle.zeige_artnr}
-                <th class="rw-th" style="color:{v.tabelle.kopf_farbe}; width:70px;">Art-Nr.</th>
+                <th class="rw-th" style="color:{v.tabelle.kopf_farbe}; width:68px;">Art-Nr.</th>
               {/if}
               <th class="rw-th" style="color:{v.tabelle.kopf_farbe};">Bezeichnung</th>
               {#if v.tabelle.zeige_menge}
-                <th class="rw-th rw-thr" style="color:{v.tabelle.kopf_farbe}; width:52px;">Menge</th>
+                <th class="rw-th rw-thr" style="color:{v.tabelle.kopf_farbe}; width:54px;">Menge</th>
               {/if}
               {#if v.tabelle.zeige_ep}
-                <th class="rw-th rw-thr" style="color:{v.tabelle.kopf_farbe}; width:90px;">Einzelpreis</th>
+                <th class="rw-th rw-thr" style="color:{v.tabelle.kopf_farbe}; width:88px;">Einzelpreis</th>
               {/if}
               {#if v.tabelle.zeige_betrag}
-                <th class="rw-th rw-thr" style="color:{v.tabelle.kopf_farbe}; width:80px;">Betrag</th>
+                <th class="rw-th rw-thr" style="color:{v.tabelle.kopf_farbe}; width:78px;">Betrag</th>
               {/if}
             </tr>
           </thead>
           <tbody>
-            <tr class="rw-tr">
+            <tr style="border-bottom:1px solid #e2e8f0;">
               <td class="rw-td">1</td>
               {#if v.tabelle.zeige_artnr}
-                <td class="rw-td" style="color:#555;">{B.artikel_nr}</td>
+                <td class="rw-td" style="color:#666;">{B.artikel_nr}</td>
               {/if}
               <td class="rw-td">{B.artikel_name}</td>
               {#if v.tabelle.zeige_menge}
@@ -520,386 +311,260 @@
           </tbody>
         </table>
 
-        <!-- Summen -->
-        <div style="width:{v.summen.breite}px; margin-left:auto; margin-top:0; margin-bottom:14px;">
-          <table class="rw-summen-table">
+        <div style="width:{v.summen.breite}px; margin-left:auto; margin-bottom:16px;">
+          <table class="rw-sum">
             <tbody>
               <tr>
-                <td class="rw-sum-l">Nettobetrag</td>
-                <td class="rw-sum-r">{fmt(B.netto_betrag)} €</td>
+                <td class="rw-sl">Nettobetrag</td>
+                <td class="rw-sr">{fmt(B.netto_betrag)} €</td>
               </tr>
               {#if v.summen.kleinunternehmer}
                 <tr>
-                  <td colspan="2" style="padding:5px 10px; font-size:9px; color:#888; font-style:italic;">
+                  <td colspan="2" style="padding:4px 8px; font-size:9px; color:#888; font-style:italic;">
                     Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.
                   </td>
                 </tr>
               {:else}
                 <tr>
-                  <td class="rw-sum-l">Umsatzsteuer {B.steuersatz}%</td>
-                  <td class="rw-sum-r">{fmt(B.steuer_betrag)} €</td>
+                  <td class="rw-sl">Umsatzsteuer {B.steuersatz}%</td>
+                  <td class="rw-sr">{fmt(B.steuer_betrag)} €</td>
                 </tr>
               {/if}
-              <tr class="rw-sum-total">
-                <td class="rw-sum-l" style="font-weight:700;">Rechnungsbetrag</td>
-                <td class="rw-sum-r" style="font-weight:700;">{fmt(B.brutto_betrag)} €</td>
+              <tr class="rw-stotal">
+                <td class="rw-sl" style="font-weight:700;">Rechnungsbetrag</td>
+                <td class="rw-sr" style="font-weight:700;">{fmt(B.brutto_betrag)} €</td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <!-- Abschlusstext -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="rw-e"
+        <div class="rw-e rw-text"
           contenteditable="true"
-          style="font-size:11px; color:#333; white-space:pre-line; display:block; line-height:1.6; margin-bottom:14px;"
-          oninput={(e) => v.abschluss.text = e.currentTarget.innerText}
-          data-ph="Abschlusstext…"
-        >{abschlussText()}</div>
+          onfocus={() => aktuellerFokus = 'Abschlusstext'}
+          onblur={() => aktuellerFokus = ''}
+          oninput={(e) => v.block_abschluss = e.currentTarget.innerText}
+          data-label="Abschlusstext"
+        >{v.block_abschluss}</div>
 
-        <!-- „Bereits bezahlt" Badge -->
-        {#if v.zahlung.sichtbar}
-          <div style="display:flex; justify-content:{posAlign(v.zahlung.position)}; margin-bottom:10px;">
+        {#if v.zahlung_sichtbar}
+          <div style="margin-top:14px;">
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <span class="rw-e rw-badge"
               contenteditable="true"
-              oninput={(e) => v.zahlung.text = e.currentTarget.innerText}
-            >{v.zahlung.text}</span>
+              onfocus={() => aktuellerFokus = 'Bezahlt-Badge'}
+              onblur={() => aktuellerFokus = ''}
+              oninput={(e) => v.block_zahlung = e.currentTarget.innerText}
+              data-label="Bezahlt-Badge"
+            >{v.block_zahlung}</span>
           </div>
         {/if}
 
-      </div><!-- /rw-body -->
-
-      <!-- ── FOOTER — margin-top:auto schiebt ihn ans Seitenende ────────────── -->
-      <div class="rw-footer" style="padding:8px var(--rand); font-size:{v.footer.groesse}px;">
-        <div class="rw-footer-grid">
-
-          <!-- Spalte 1: Firma + Adresse -->
-          <div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte1_name = e.currentTarget.innerText}
-              data-ph="Firmenname"
-            >{v.footer.spalte1_name}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte1_inh = e.currentTarget.innerText}
-              data-ph="Inhaber"
-            >{v.footer.spalte1_inh}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte1_str = e.currentTarget.innerText}
-              data-ph="Straße"
-            >{v.footer.spalte1_str}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte1_plz = e.currentTarget.innerText}
-              data-ph="PLZ Ort"
-            >{v.footer.spalte1_plz}</div>
-          </div>
-
-          <!-- Spalte 2: Telefon + Mobil + E-Mail -->
-          <div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte2_tel = e.currentTarget.innerText}
-              data-ph="Telefon"
-            >{v.footer.spalte2_tel}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte2_mob = e.currentTarget.innerText}
-              data-ph="Mobil"
-            >{v.footer.spalte2_mob}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte2_mail = e.currentTarget.innerText}
-              data-ph="E-Mail"
-            >{v.footer.spalte2_mail}</div>
-          </div>
-
-          <!-- Spalte 3: Bank -->
-          <div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte3_titel = e.currentTarget.innerText}
-              data-ph="Bankverbindung"
-            >{v.footer.spalte3_titel}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte3_iban = e.currentTarget.innerText}
-              data-ph="IBAN"
-            >{v.footer.spalte3_iban}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte3_bic = e.currentTarget.innerText}
-              data-ph="BIC"
-            >{v.footer.spalte3_bic}</div>
-          </div>
-
-          <!-- Spalte 4: Finanzamt -->
-          <div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte4_titel = e.currentTarget.innerText}
-              data-ph="Finanzamt"
-            >{v.footer.spalte4_titel}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte4_stnr = e.currentTarget.innerText}
-              data-ph="Steuer-Nr."
-            >{v.footer.spalte4_stnr}</div>
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="rw-e" contenteditable="true"
-              oninput={(e) => v.footer.spalte4_ust = e.currentTarget.innerText}
-              data-ph="USt-ID"
-            >{v.footer.spalte4_ust}</div>
-          </div>
-
-        </div>
       </div>
 
-    </div><!-- /rw-a4 -->
-    {/if}
+      <!-- FOOTER: 1–4 Spalten, jede ein freies Textfeld -->
+      <div class="rw-footer" style="padding: 8px var(--rand); grid-template-columns: repeat({v.footer_spalten}, 1fr);">
+        {#each Array(v.footer_spalten) as _, i}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="rw-e rw-fcol"
+            contenteditable="true"
+            onfocus={() => aktuellerFokus = `Footer Spalte ${i+1}`}
+            onblur={() => aktuellerFokus = ''}
+            oninput={(e) => setFooter(i, e.currentTarget.innerText)}
+            data-label="Footer Sp. {i+1}"
+          >{footerText(i)}</div>
+        {/each}
+      </div>
 
-  </div><!-- /rw-canvas -->
+    </div>
+    {/if}
+  </div>
 </div>
 
 <style>
-  /* ── Layout ────────────────────────────────────────────────────────────── */
-  .rw {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    width: 100%;
-    background: #dde1e7;
-    overflow: hidden;
-  }
+  .rw { display:flex; flex-direction:column; height:100%; width:100%; background:#d4d8de; overflow:hidden; }
 
-  /* ── Toolbar ──────────────────────────────────────────────────────────── */
   .rw-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 5px 14px;
-    background: #fff;
-    border-bottom: 1px solid #ddd;
-    flex-shrink: 0;
-    gap: 8px;
-    flex-wrap: wrap;
-    min-height: 44px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:4px 14px; background:#fff; border-bottom:1px solid #ddd;
+    flex-shrink:0; gap:5px; flex-wrap:wrap; min-height:42px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.07);
   }
-  .rw-bar-l { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .rw-bar-r { display: flex; align-items: center; gap: 8px; }
-  .rw-title { font-size: 0.85rem; font-weight: 700; color: #1e293b; white-space: nowrap; }
-  .sep { width: 1px; height: 20px; background: #e2e8f0; flex-shrink: 0; }
-  .rw-field-label { font-size: 0.72rem; color: #777; white-space: nowrap; }
+  .rw-bar-l { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .rw-bar-r { display:flex; align-items:center; gap:8px; }
 
+  .rw-sub {
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:4px 14px; background:#f8fafc; border-bottom:1px solid #e9ecef;
+    flex-shrink:0; font-size:0.72rem; color:#555;
+  }
+  .rw-sub label { display:flex; align-items:center; gap:3px; cursor:pointer; }
+  .rw-sub input[type=checkbox] { accent-color:var(--primary,#1d4ed8); }
+  .rw-hint { color:#2563eb; font-size:0.7rem; }
+  .rw-hint-idle { color:#94a3b8; font-size:0.7rem; font-style:italic; }
+
+  .rw-title { font-size:0.84rem; font-weight:700; color:#1e293b; white-space:nowrap; }
+  .sep { width:1px; height:18px; background:#e2e8f0; flex-shrink:0; }
+  .rw-lbl { font-size:0.71rem; color:#777; white-space:nowrap; }
   .rw-sel {
-    border: 1px solid #ddd; border-radius: 5px; padding: 3px 6px;
-    font-size: 0.76rem; background: #fff; color: #333; cursor: pointer; outline: none;
+    border:1px solid #ddd; border-radius:4px; padding:2px 5px;
+    font-size:0.74rem; background:#fff; color:#333; cursor:pointer; outline:none;
   }
   .rw-num {
-    width: 48px; border: 1px solid #ddd; border-radius: 5px; padding: 3px 5px;
-    font-size: 0.76rem; background: #fff; color: #333; outline: none;
+    width:46px; border:1px solid #ddd; border-radius:4px; padding:2px 4px;
+    font-size:0.74rem; background:#fff; color:#333; outline:none;
   }
   .rw-dot {
-    width: 16px; height: 16px; border-radius: 50%;
-    border: 1.5px solid rgba(0,0,0,0.15); cursor: pointer; flex-shrink: 0; transition: transform 0.1s;
+    width:15px; height:15px; border-radius:50%;
+    border:1.5px solid rgba(0,0,0,0.12); cursor:pointer; flex-shrink:0; transition:transform 0.1s;
   }
-  .rw-dot:hover { transform: scale(1.25); }
-  .rw-dot-active { outline: 2px solid #000; outline-offset: 2px; }
+  .rw-dot:hover { transform:scale(1.3); }
+  .rw-dot.active { outline:2.5px solid #111; outline-offset:2px; }
+
+  .rw-col-btn {
+    width:22px; height:22px; border-radius:4px;
+    border:1px solid #ddd; font-size:0.72rem; font-weight:600;
+    background:#fff; color:#555; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; transition:all 0.1s;
+  }
+  .rw-col-btn.active { background:var(--primary,#1d4ed8); color:#fff; border-color:var(--primary,#1d4ed8); }
 
   .rw-btn {
-    background: transparent; border: 1px solid #ddd; border-radius: 5px;
-    padding: 3px 9px; font-size: 0.76rem; color: #555; cursor: pointer;
-    display: flex; align-items: center; gap: 4px; font-family: inherit;
-    transition: all 0.12s; white-space: nowrap;
+    background:transparent; border:1px solid #ddd; border-radius:4px;
+    padding:3px 8px; font-size:0.74rem; color:#555; cursor:pointer;
+    display:flex; align-items:center; gap:3px; font-family:inherit;
+    transition:all 0.12s; white-space:nowrap;
   }
-  .rw-btn:hover { border-color: #999; color: #222; }
-  .rw-btn-save {
-    background: var(--primary, #2563eb); color: #fff;
-    border-color: var(--primary, #2563eb); font-weight: 600;
+  .rw-btn:hover { border-color:#999; color:#222; }
+  .rw-save {
+    background:var(--primary,#1d4ed8); color:#fff;
+    border-color:var(--primary,#1d4ed8); font-weight:600;
   }
-  .rw-btn-save:hover { filter: brightness(1.1); }
-  .rw-btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+  .rw-save:hover { filter:brightness(1.08); }
+  .rw-save:disabled { opacity:0.55; cursor:not-allowed; }
 
-  /* ── Einstellungs-Panel ────────────────────────────────────────────────── */
-  .rw-panel {
-    background: #f8fafc; border-bottom: 1px solid #e2e8f0;
-    padding: 10px 16px; flex-shrink: 0;
-    box-shadow: inset 0 -1px 0 #e2e8f0;
+  .rw-check {
+    display:flex; align-items:center; gap:4px;
+    font-size:0.73rem; color:#555; cursor:pointer; white-space:nowrap;
   }
-  .rw-panel-grid {
-    display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start;
-  }
-  .rw-pg {
-    display: flex; flex-direction: column; gap: 5px;
-    min-width: 130px;
-  }
-  .rw-pg-title {
-    font-size: 0.68rem; font-weight: 700; color: #94a3b8;
-    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px;
-  }
-  .rw-pl {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 0.75rem; color: #555; cursor: pointer;
-  }
+  .rw-check input { accent-color:var(--primary,#1d4ed8); }
 
-  /* ── Canvas ─────────────────────────────────────────────────────────────── */
   .rw-canvas {
-    flex: 1; overflow-y: auto; overflow-x: auto;
-    padding: 28px 20px 40px;
-    display: flex; flex-direction: column; align-items: center;
+    flex:1; overflow-y:auto; overflow-x:auto;
+    padding:24px 20px 40px;
+    display:flex; flex-direction:column; align-items:center;
   }
 
-  /* ── A4 — flex-column damit Footer via margin-top:auto ans Ende geht ─────── */
+  /* A4 — flex-column, Footer via margin-top:auto ans Ende */
   .rw-a4 {
-    width: 794px;
-    min-height: 1123px;
-    background: #fff;
-    box-shadow: 0 4px 28px rgba(0,0,0,0.18);
-    border-radius: 2px;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
+    width:794px; min-height:1123px; background:#fff;
+    box-shadow:0 4px 32px rgba(0,0,0,0.17);
+    border-radius:2px; position:relative;
+    display:flex; flex-direction:column; flex-shrink:0;
   }
 
-  /* ── Kopf-Bereich ────────────────────────────────────────────────────────── */
-  .rw-kopf-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 20px;
-  }
-  .rw-kopf-links {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-  .rw-kopf-rechts {
-    flex-shrink: 0;
-    min-width: 200px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-  }
-
-  /* ── Trennlinie ──────────────────────────────────────────────────────────── */
-  .rw-hr-line {
-    border: none;
-    border-top: 1px solid #aaa;
-    margin: 0;
-  }
-
-  /* ── Kontakt-Block (rechts oben) ─────────────────────────────────────────── */
-  .rw-kontakt { text-align: right; min-width: 200px; }
-  .rw-kontakt-titel {
-    font-size: 1em; font-weight: 700; text-decoration: underline;
-    margin-bottom: 4px; display: block;
-  }
-  .rw-kontakt-row {
-    display: flex; justify-content: flex-end; align-items: baseline;
-    gap: 10px; line-height: 1.75;
-  }
-  .rw-kl { color: #555; min-width: 65px; text-align: right; }
-  .rw-kv { color: #1a1a1a; }
-  .rw-kv-bold { font-weight: 700; }
-  .rw-kontakt-spacer { height: 6px; }
-
-  /* ── Logo Upload Placeholder ─────────────────────────────────────────────── */
-  .rw-logo-drop {
-    display: flex; align-items: center; justify-content: center;
-    height: 50px; background: #f1f5f9; border: 2px dashed #cbd5e1;
-    border-radius: 6px; font-size: 0.75rem; color: #94a3b8;
-    cursor: pointer; transition: all 0.15s;
-  }
-  .rw-logo-drop:hover { border-color: var(--ak, #1a1a1a); color: var(--ak, #1a1a1a); }
-
-  /* ── Wasserzeichen ───────────────────────────────────────────────────────── */
   .rw-wz {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%, -50%) rotate(-35deg);
-    font-size: 90px; font-weight: 900;
-    color: rgba(0,0,0,0.06); pointer-events: none; z-index: 10;
-    white-space: nowrap; user-select: none;
+    position:absolute; top:50%; left:50%;
+    transform:translate(-50%,-50%) rotate(-35deg);
+    font-size:90px; font-weight:900;
+    color:rgba(0,0,0,0.055); pointer-events:none; z-index:10;
+    white-space:nowrap; user-select:none;
   }
 
-  /* ── Inhalt (wächst → schiebt Footer ans Ende) ───────────────────────────── */
-  .rw-body { flex: 1; }
+  .rw-header { display:grid; grid-template-columns:1fr auto; gap:24px; align-items:flex-start; }
+  .rw-hl { display:flex; flex-direction:column; }
 
-  /* ── Tabelle ─────────────────────────────────────────────────────────────── */
-  .rw-table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-  .rw-th {
-    padding: 7px 10px; text-align: left;
-    font-size: 11px; font-weight: 700;
+  .rw-logo-img-lbl { display:inline-block; margin-bottom:8px; cursor:pointer; }
+  .rw-logo-drop {
+    display:flex; align-items:center; justify-content:center;
+    height:52px; background:#f1f5f9; border:2px dashed #cbd5e1;
+    border-radius:5px; font-size:0.73rem; color:#94a3b8;
+    cursor:pointer; margin-bottom:8px; transition:all 0.15s;
   }
-  .rw-thr { text-align: right; }
-  .rw-tr { border-bottom: 1px solid #e2e8f0; }
-  .rw-td { padding: 8px 10px; font-size: 11px; color: #1a1a1a; vertical-align: top; }
-  .rw-tdr { text-align: right; }
+  .rw-logo-drop:hover { border-color:var(--ak,#1d4ed8); color:var(--ak,#1d4ed8); }
 
-  /* ── Summen-Tabelle ──────────────────────────────────────────────────────── */
-  .rw-summen-table { width: 100%; border-collapse: collapse; border-top: 1px solid #ccc; }
-  .rw-sum-l { padding: 5px 10px; font-size: 11px; color: #555; text-align: right; }
-  .rw-sum-r { padding: 5px 10px; font-size: 11px; color: #1a1a1a; text-align: right; white-space: nowrap; }
-  .rw-sum-total { border-top: 1px solid #1a1a1a; border-bottom: 2px solid #1a1a1a; }
-  .rw-sum-total .rw-sum-l,
-  .rw-sum-total .rw-sum-r { font-weight: 700; font-size: 12px; padding: 6px 10px; }
+  .rw-body { flex:1; }
 
-  /* ── Bezahlt-Badge ───────────────────────────────────────────────────────── */
+  .rw-table { width:100%; border-collapse:collapse; margin-bottom:0; }
+  .rw-th { padding:7px 10px; text-align:left; font-size:11px; font-weight:700; }
+  .rw-thr { text-align:right; }
+  .rw-td { padding:8px 10px; font-size:11px; color:#1a1a1a; vertical-align:top; }
+  .rw-tdr { text-align:right; }
+
+  .rw-sum { width:100%; border-collapse:collapse; border-top:1px solid #ccc; }
+  .rw-sl { padding:5px 8px; font-size:11px; color:#555; text-align:right; }
+  .rw-sr { padding:5px 8px; font-size:11px; color:#1a1a1a; text-align:right; white-space:nowrap; }
+  .rw-stotal { border-top:1px solid #1a1a1a; border-bottom:2px solid #1a1a1a; }
+  .rw-stotal .rw-sl, .rw-stotal .rw-sr { font-size:12px; padding:6px 8px; }
+
   .rw-badge {
-    display: inline-block;
-    background: #f0fdf4; color: #15803d;
-    border: 1px solid #86efac; border-radius: 5px;
-    padding: 4px 14px; font-size: 11px; font-weight: 700;
+    display:inline-block;
+    background:#f0fdf4; color:#16a34a;
+    border:1.5px solid #86efac; border-radius:5px;
+    padding:4px 14px; font-size:11px; font-weight:700;
   }
 
-  /* ── Footer — margin-top:auto drückt ihn ans Ende der A4-Seite ──────────── */
+  /* Footer: margin-top:auto = immer unten */
   .rw-footer {
-    margin-top: auto;
-    border-top: 1px solid #ccc;
-    color: #333;
-    flex-shrink: 0;
+    margin-top:auto;
+    border-top:1px solid #ccc;
+    display:grid;
+    gap:10px;
+    flex-shrink:0;
   }
-  .rw-footer-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-  }
-  .rw-footer-grid > div {
-    line-height: 1.7;
-    font-family: monospace;
+  .rw-fcol {
+    font-size:8px !important;
+    line-height:1.75; color:#333;
+    white-space:pre-wrap; word-break:break-word;
   }
 
-  /* ── Direkt editierbare Elemente ─────────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════════
+     CONTENTEDITABLE BLOCKS — Word-Feeling
+     white-space:pre-wrap = Enter macht echte Leerzeilen
+  ═══════════════════════════════════════════════════════════════ */
   :global(.rw-e) {
-    outline: none; border-radius: 2px;
-    transition: background 0.12s, box-shadow 0.12s;
-    min-width: 6px;
+    outline:none; border-radius:2px;
+    transition:background 0.1s, box-shadow 0.1s;
+    min-height:1em;
+    white-space:pre-wrap;
+    word-break:break-word;
+    cursor:text;
+    position:relative;
   }
   :global(.rw-e:hover) {
-    background: rgba(37,99,235,0.05);
-    box-shadow: 0 0 0 1px rgba(37,99,235,0.2);
+    background:rgba(29,78,216,0.04);
+    box-shadow:0 0 0 1px rgba(29,78,216,0.2);
   }
   :global(.rw-e:focus) {
-    background: rgba(37,99,235,0.07);
-    box-shadow: 0 0 0 2px rgba(37,99,235,0.3);
+    background:rgba(29,78,216,0.06);
+    box-shadow:0 0 0 2px rgba(29,78,216,0.35);
   }
-  :global(.rw-e:empty::before) {
-    content: attr(data-ph);
-    color: #ccc; font-style: italic; pointer-events: none;
+  :global(.rw-e[data-label]:focus::before) {
+    content: attr(data-label);
+    display:block;
+    position:absolute; top:-18px; left:0;
+    font-size:9px; font-weight:700;
+    color:#fff; background:rgba(29,78,216,0.85);
+    padding:1px 6px; border-radius:3px;
+    pointer-events:none; white-space:nowrap; z-index:99;
+  }
+  :global(.rw-e:empty::after) {
+    content: '← hier klicken und bearbeiten';
+    color:#ccc; font-style:italic; pointer-events:none;
   }
 
-  /* ── PDF-Vorschau ────────────────────────────────────────────────────────── */
+  .rw-absender { font-size:8px; color:#888; margin-bottom:10px; display:block; }
+  .rw-empfaenger { font-size:11px; color:#1a1a1a; line-height:1.7; display:block; }
+  .rw-kontakt { font-size:11px; color:#333; line-height:1.75; text-align:right; min-width:180px; max-width:240px; }
+  .rw-text { font-size:11px; color:#333; line-height:1.6; margin-bottom:12px; display:block; }
+
   .rw-pdf {
-    width: 794px; height: 1123px; flex-shrink: 0;
-    background: #fff; border: none; border-radius: 2px;
-    box-shadow: 0 4px 28px rgba(0,0,0,0.18);
+    width:794px; height:1123px; flex-shrink:0;
+    background:#fff; border:none; border-radius:2px;
+    box-shadow:0 4px 28px rgba(0,0,0,0.18);
   }
 
-  @media (max-width: 860px) {
-    .rw-a4, .rw-pdf { width: 100%; min-width: 0; }
+  @media (max-width:860px) {
+    .rw-a4, .rw-pdf { width:100%; min-width:0; }
   }
 </style>
