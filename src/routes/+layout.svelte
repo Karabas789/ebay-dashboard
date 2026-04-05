@@ -80,10 +80,10 @@
   /* Seiten mit eigenem Scroll-Container (z.B. Rechnungsvorlage) brauchen overflow:hidden
      damit der innere Container (vb-settings) seinen eigenen Scrollbalken bekommt */
   .main-content.no-page-scroll {
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-  }
+  overflow: auto;  /* ← geändert */
+  display: flex;
+  flex-direction: column;
+}
   .main-content.sidebar-collapsed {
     margin-left: var(--sidebar-collapsed-width, 68px);
   }
@@ -92,7 +92,7 @@
     min-height: 100%;
   }
   /* Wenn kein page-scroll: wrapper füllt den ganzen Platz ohne padding */
-.page-wrapper-fill {
+  .page-wrapper-fill {
   padding: 0;
   min-height: unset;
   flex: 1;
