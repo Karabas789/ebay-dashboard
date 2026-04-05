@@ -322,7 +322,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="a4-page"
-            style="font-family:{v.schriftart},Arial,sans-serif; padding:{v.seitenrand}px; padding-bottom:80px; background:{v.hintergrundfarbe_seite}; --a4-pad:{v.seitenrand}px;"
+            style="font-family:{v.schriftart},Arial,sans-serif; padding:{v.seitenrand}px; padding-bottom:80px; background:{v.hintergrundfarbe_seite};"
             onclick={deselect}
           >
 
@@ -1002,6 +1002,7 @@
   /* A4 Seite */
   .a4-page {
     width: 794px;
+    height: 1123px;
     min-height: 1123px;
     flex-shrink: 0;
     background: white;
@@ -1010,18 +1011,18 @@
     position: relative;
     box-sizing: border-box;
     cursor: default;
-    padding-bottom: 80px; /* Platz für absolut positionierten Footer */
+    overflow: hidden;
   }
 
-  /* Footer immer am unteren Rand der A4-Seite */
-  .a4-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding-left: var(--a4-pad, 32px);
-    padding-right: var(--a4-pad, 32px);
-    margin: 0;
+  /* Footer immer am unteren Rand */
+  :global(.a4-footer) {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    padding-left: 32px;
+    padding-right: 32px;
   }
 
   /* Klickbare Blöcke */
@@ -1097,18 +1098,19 @@
     border-bottom:1px solid var(--border);
     scrollbar-width:thin;
     scrollbar-color: var(--border) transparent;
+    -webkit-overflow-scrolling: touch;
   }
   .panel-nav::-webkit-scrollbar { height:3px; }
   .panel-nav::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
   .nav-btn {
     display:flex; flex-direction:column; align-items:center; gap:1px;
-    padding:4px 5px; border:none; border-radius:6px 6px 0 0;
+    padding:4px 4px; border:none; border-radius:6px 6px 0 0;
     background:transparent; color:var(--text2); cursor:pointer;
-    font-size:0.6rem; white-space:nowrap; flex-shrink:0;
+    font-size:0.58rem; white-space:nowrap; flex-shrink:0;
     font-family:inherit; transition:all 0.15s;
-    border-bottom:2px solid transparent; min-width:38px;
+    border-bottom:2px solid transparent; min-width:34px;
   }
-  .nav-btn span { font-size:0.58rem; }
+  .nav-btn span { font-size:0.55rem; }
   .nav-btn:hover { background:var(--surface2); color:var(--text); }
   .nav-btn.aktiv { color:var(--primary); border-bottom-color:var(--primary); background:var(--surface2); font-weight:700; }
 
@@ -1181,7 +1183,6 @@
   @media (max-width:900px) {
     .vb-body { flex-direction:column; }
     .vb-panel { width:100% !important; max-height:50vh; border-left:none; border-top:1px solid var(--border); }
-    .a4-page, .pdf-iframe { width:100%; min-height:unset; padding-bottom:60px; }
-    .a4-footer { padding-left:16px; padding-right:16px; }
+    .a4-page, .pdf-iframe { width:100%; min-height:unset; }
   }
 </style>
