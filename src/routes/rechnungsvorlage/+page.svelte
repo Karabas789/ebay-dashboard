@@ -543,7 +543,7 @@
     <div class="rw-panel-group">
       <span class="rw-lbl-head">FOOTER</span>
       {#each [1,2,3,4] as n}
-        <button class="rw-tab" class:act={v.footer_spalten===n} onclick={()=>{v.footer_spalten=n;scheduleAutoSave();}>{n}Sp</button>
+        <button class="rw-tab" class:act={v.footer_spalten===n} onclick={()=>{v.footer_spalten=n;scheduleAutoSave();}}>{n}Sp</button>
       {/each}
       <label class="rw-check"><input type="checkbox" bind:checked={v.footer_trennlinie} onchange={scheduleAutoSave}/> Linie</label>
       <span class="rw-lbl">Gr.</span>
