@@ -322,7 +322,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="a4-page"
-            style="font-family:{v.schriftart},Arial,sans-serif; padding:{v.seitenrand}px; background:{v.hintergrundfarbe_seite};"
+            style="font-family:{v.schriftart},Arial,sans-serif; padding:{v.seitenrand}px; padding-bottom:80px; background:{v.hintergrundfarbe_seite}; --a4-pad:{v.seitenrand}px;"
             onclick={deselect}
           >
 
@@ -570,10 +570,10 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="editable-block"
+                class="editable-block a4-footer"
                 class:aktiv={aktiverBlock === 'footer'}
                 onclick={(e) => waehlBlock('footer', e)}
-                style="margin-top:20px; padding-top:12px; border-top:1px solid {v.footer.trennlinie_farbe}; font-size:{v.footer.groesse}px; color:{v.footer.farbe}; text-align:center;"
+                style="padding-top:12px; border-top:1px solid {v.footer.trennlinie_farbe}; font-size:{v.footer.groesse}px; color:{v.footer.farbe}; text-align:center;"
               >
                 {#if v.footer.text}<div>{v.footer.text}</div>{/if}
                 {#if v.footer.zeige_steuernr && v.kontakt.steuernr}<div>Steuer-Nr.: {v.kontakt.steuernr}{v.kontakt.ust_idnr ? ' · USt-IdNr.: ' + v.kontakt.ust_idnr : ''}</div>{/if}
@@ -1010,6 +1010,18 @@
     position: relative;
     box-sizing: border-box;
     cursor: default;
+    padding-bottom: 80px; /* Platz für absolut positionierten Footer */
+  }
+
+  /* Footer immer am unteren Rand der A4-Seite */
+  .a4-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding-left: var(--a4-pad, 32px);
+    padding-right: var(--a4-pad, 32px);
+    margin: 0;
   }
 
   /* Klickbare Blöcke */
@@ -1080,20 +1092,23 @@
 
   /* Panel Navigation */
   .panel-nav {
-    display:flex; gap:2px; padding:8px 8px 0;
+    display:flex; gap:1px; padding:6px 6px 0;
     overflow-x:auto; flex-shrink:0;
     border-bottom:1px solid var(--border);
     scrollbar-width:thin;
+    scrollbar-color: var(--border) transparent;
   }
+  .panel-nav::-webkit-scrollbar { height:3px; }
+  .panel-nav::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
   .nav-btn {
-    display:flex; flex-direction:column; align-items:center; gap:2px;
-    padding:5px 6px; border:none; border-radius:6px 6px 0 0;
+    display:flex; flex-direction:column; align-items:center; gap:1px;
+    padding:4px 5px; border:none; border-radius:6px 6px 0 0;
     background:transparent; color:var(--text2); cursor:pointer;
-    font-size:0.62rem; white-space:nowrap; flex-shrink:0;
+    font-size:0.6rem; white-space:nowrap; flex-shrink:0;
     font-family:inherit; transition:all 0.15s;
-    border-bottom:2px solid transparent; min-width:44px;
+    border-bottom:2px solid transparent; min-width:38px;
   }
-  .nav-btn span { font-size:0.6rem; }
+  .nav-btn span { font-size:0.58rem; }
   .nav-btn:hover { background:var(--surface2); color:var(--text); }
   .nav-btn.aktiv { color:var(--primary); border-bottom-color:var(--primary); background:var(--surface2); font-weight:700; }
 
@@ -1166,6 +1181,7 @@
   @media (max-width:900px) {
     .vb-body { flex-direction:column; }
     .vb-panel { width:100% !important; max-height:50vh; border-left:none; border-top:1px solid var(--border); }
-    .a4-page, .pdf-iframe { width:100%; min-height:unset; }
+    .a4-page, .pdf-iframe { width:100%; min-height:unset; padding-bottom:60px; }
+    .a4-footer { padding-left:16px; padding-right:16px; }
   }
 </style>
