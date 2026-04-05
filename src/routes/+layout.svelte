@@ -92,13 +92,12 @@
     min-height: 100%;
   }
   /* Wenn kein page-scroll: wrapper füllt den ganzen Platz ohne padding */
-  .page-wrapper-fill {
-    padding: 0;
-    min-height: unset;
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
+.page-wrapper-fill {
+  padding: 0;
+  min-height: unset;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;  /* ← geändert */
+}
 </style>
