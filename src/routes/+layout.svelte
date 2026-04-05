@@ -309,22 +309,24 @@
         <!-- Summen -->
         <div style="width:{v.summen.breite}px; margin-left:auto; margin-bottom:12px;">
           <table style="width:100%; border-collapse:collapse;">
-            <tr>
-              <td style="padding:6px 12px; color:#666; font-size:12px;">Nettobetrag</td>
-              <td style="padding:6px 12px; text-align:right; font-size:12px;">{fmt(B.netto_betrag)} EUR</td>
-            </tr>
-            {#if v.summen.kleinunternehmer}
-              <tr><td colspan="2" style="padding:6px 12px; font-size:10px; color:#888; font-style:italic;">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</td></tr>
-            {:else}
+            <tbody>
               <tr>
-                <td style="padding:6px 12px; color:#666; font-size:12px; text-align:right;">MwSt. {B.steuersatz}%</td>
-                <td style="padding:6px 12px; text-align:right; font-size:12px;">{fmt(B.steuer_betrag)} EUR</td>
+                <td style="padding:6px 12px; color:#666; font-size:12px;">Nettobetrag</td>
+                <td style="padding:6px 12px; text-align:right; font-size:12px;">{fmt(B.netto_betrag)} EUR</td>
               </tr>
-            {/if}
-            <tr style="background:{v.summen.total_hg};">
-              <td style="padding:9px 12px; font-weight:700; font-size:13px; color:{v.summen.total_farbe};">Gesamtbetrag</td>
-              <td style="padding:9px 12px; text-align:right; font-weight:700; font-size:13px; color:{v.summen.total_farbe};">{fmt(B.brutto_betrag)} EUR</td>
-            </tr>
+              {#if v.summen.kleinunternehmer}
+                <tr><td colspan="2" style="padding:6px 12px; font-size:10px; color:#888; font-style:italic;">Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.</td></tr>
+              {:else}
+                <tr>
+                  <td style="padding:6px 12px; color:#666; font-size:12px; text-align:right;">MwSt. {B.steuersatz}%</td>
+                  <td style="padding:6px 12px; text-align:right; font-size:12px;">{fmt(B.steuer_betrag)} EUR</td>
+                </tr>
+              {/if}
+              <tr style="background:{v.summen.total_hg};">
+                <td style="padding:9px 12px; font-weight:700; font-size:13px; color:{v.summen.total_farbe};">Gesamtbetrag</td>
+                <td style="padding:9px 12px; text-align:right; font-weight:700; font-size:13px; color:{v.summen.total_farbe};">{fmt(B.brutto_betrag)} EUR</td>
+              </tr>
+            </tbody>
           </table>
           <label class="rw-mini-toggle"><input type="checkbox" bind:checked={v.summen.kleinunternehmer} /> Kleinunternehmer § 19 UStG</label>
         </div>
