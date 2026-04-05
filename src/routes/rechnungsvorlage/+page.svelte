@@ -1,7 +1,10 @@
 <script>
   import { onMount } from 'svelte';
+  import { beforeNavigate } from '$app/navigation';
   import { currentUser, showToast } from '$lib/stores.js';
   import { apiCall } from '$lib/api.js';
+
+  const LS_KEY = 'rechnungsvorlage_draft';
 
   const B = {
     rechnung_nr: '202658155', datum: '04.04.2026', zahlungsziel: '11.04.2026',
@@ -63,29 +66,122 @@
   let dragging = $state(null);
   let resizing = $state(null);
 
+  // ── AUTO-SAVE: 3 Sicherheitsebenen ──────────────────────────────────────
+  // 1. localStorage (synchron, sofort — funktioniert IMMER)
+  // 2. API nach 2s Debounce (Server-Persistenz)
+  // 3. beforeNavigate + visibilitychange + beforeunload (beim Verlassen)
+
+  let autoSaveTimer = null;
+  let hatUngespeicherteAenderungen = $state(false);
+  let autoSaveStatus = $state(''); // '' | 'speichert' | 'gespeichert'
+
+  // Ebene 1: localStorage — synchron, keine Netzwerk-Abhängigkeit
+  function saveToLocalStorage() {
+    try {
+      collectDom();
+      localStorage.setItem(LS_KEY, JSON.stringify({ v, ts: Date.now() }));
+    } catch(e) {}
+  }
+
+  // Ebene 2: API-Autosave nach Debounce
+  function scheduleAutoSave() {
+    hatUngespeicherteAenderungen = true;
+    saveToLocalStorage(); // sofort lokal sichern
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(autoSave, 2000);
+  }
+
+  async function autoSave() {
+    if (!$currentUser) return;
+    collectDom();
+    autoSaveStatus = 'speichert';
+    try {
+      await apiCall('vorlage-speichern', { user_id: $currentUser.id, vorlage: v });
+      hatUngespeicherteAenderungen = false;
+      autoSaveStatus = 'gespeichert';
+      localStorage.removeItem(LS_KEY); // API erfolgreich → lokal löschen
+      setTimeout(() => { autoSaveStatus = ''; }, 2500);
+    } catch(e) {
+      autoSaveStatus = ''; // bleibt im localStorage als Fallback
+    }
+  }
+
+  // Ebene 3: Sofort beim Verlassen — localStorage sync + API fire-and-forget
+  function saveNow() {
+    if (!hatUngespeicherteAenderungen) return;
+    clearTimeout(autoSaveTimer);
+    saveToLocalStorage(); // synchron — immer erfolgreich
+    if ($currentUser) {
+      apiCall('vorlage-speichern', { user_id: $currentUser.id, vorlage: v }).catch(()=>{});
+    }
+    hatUngespeicherteAenderungen = false;
+  }
+
   onMount(async () => {
     // Google Fonts
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap';
-    document.head.appendChild(link);
+    if (!document.querySelector('link[data-poppins]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.dataset.poppins = '1';
+      link.href = 'https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap';
+      document.head.appendChild(link);
+    }
 
     syncDom();
 
     if ($currentUser) {
       try {
         const data = await apiCall('vorlage-laden', { user_id: $currentUser.id });
-        if (data?.vorlage) { v = { ...v, ...data.vorlage }; syncDom(); }
-      } catch(e) {}
+        if (data?.vorlage) {
+          v = { ...v, ...data.vorlage };
+          syncDom();
+        }
+      } catch(e) {
+        // API nicht erreichbar → localStorage-Entwurf wiederherstellen
+        try {
+          const draft = localStorage.getItem(LS_KEY);
+          if (draft) {
+            const parsed = JSON.parse(draft);
+            if (parsed?.v) { v = { ...v, ...parsed.v }; syncDom(); showToast('📋 Lokaler Entwurf wiederhergestellt'); }
+          }
+        } catch(le) {}
+      }
+    } else {
+      // Kein User eingeloggt → localStorage-Entwurf laden
+      try {
+        const draft = localStorage.getItem(LS_KEY);
+        if (draft) {
+          const parsed = JSON.parse(draft);
+          if (parsed?.v) { v = { ...v, ...parsed.v }; syncDom(); }
+        }
+      } catch(le) {}
     }
 
     // Selektion überwachen — speichert Range BEVOR Fokus verloren geht
     document.addEventListener('mouseup', onDocMouseup);
     document.addEventListener('keyup', onDocKeyup);
+
+    // Tab wechseln / Browser minimieren → sofort speichern
+    const onVisChange = () => { if (document.visibilityState === 'hidden') saveNow(); };
+    document.addEventListener('visibilitychange', onVisChange);
+
+    // Browser/Tab schließen oder URL wechseln
+    const onBeforeUnload = () => { saveNow(); };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
     return () => {
       document.removeEventListener('mouseup', onDocMouseup);
       document.removeEventListener('keyup', onDocKeyup);
+      document.removeEventListener('visibilitychange', onVisChange);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      saveNow();
     };
+  });
+
+  // SvelteKit interne Navigation abfangen (Klick auf anderen Tab im Dashboard)
+  beforeNavigate(({ cancel }) => {
+    saveNow(); // speichert synchron in localStorage + feuert API
+    // Kein cancel() — Navigation läuft weiter, Daten sind gesichert
   });
 
   function syncDom() {
@@ -110,8 +206,8 @@
     elFooter.forEach((el,i) => { if(el){const a=[...v.t_footer];a[i]=el.innerText;v.t_footer=a;} });
   }
 
-  function saveBlur(key, e) { v[key] = e.target.innerText; aktiverBlock=''; }
-  function saveFooter(i, e) { const a=[...v.t_footer];a[i]=e.target.innerText;v.t_footer=a; aktiverBlock=''; }
+  function saveBlur(key, e) { v[key] = e.target.innerText; aktiverBlock=''; scheduleAutoSave(); }
+  function saveFooter(i, e) { const a=[...v.t_footer]; a[i]=e.target.innerText; v.t_footer=a; aktiverBlock=''; scheduleAutoSave(); }
 
   // ── SELEKTION SPEICHERN (mouseup + keyup in contenteditable) ─────────────
   // Selektion wird gespeichert sobald Maus losgelassen → Format-Button
@@ -281,7 +377,7 @@
   }
   function onMouseup() { dragging=null; resizing=null; }
 
-  function applyTheme(c) { v.akzentfarbe=c; v.tabelle.kopf_hg=c; }
+  function applyTheme(c) { v.akzentfarbe=c; v.tabelle.kopf_hg=c; scheduleAutoSave(); }
 
   const themen=[
     {n:'Schwarz',c:'#1a1a1a'},{n:'Blau',c:'#1d4ed8'},{n:'Grün',c:'#15803d'},
@@ -309,15 +405,24 @@
       <button class="rw-tab" class:act={aktivesTab==='bilder'} onclick={()=>aktivesTab='bilder'}>🖼 Bilder</button>
     </div>
     <div class="rw-bar-r">
-      <label class="rw-check"><input type="checkbox" bind:checked={v.zahlung_sichtbar}/> Badge</label>
-      <label class="rw-check"><input type="checkbox" bind:checked={v.summen.kleinunternehmer}/> §19</label>
+      <!-- Auto-Save Status -->
+      {#if autoSaveStatus === 'speichert'}
+        <span class="rw-autosave rw-autosave-act">⏳ Speichert…</span>
+      {:else if autoSaveStatus === 'gespeichert'}
+        <span class="rw-autosave rw-autosave-ok">✓ Auto-gespeichert</span>
+      {:else if hatUngespeicherteAenderungen}
+        <span class="rw-autosave rw-autosave-pending">● Ungespeichert</span>
+      {/if}
+
+      <label class="rw-check"><input type="checkbox" bind:checked={v.zahlung_sichtbar} onchange={scheduleAutoSave}/> Badge</label>
+      <label class="rw-check"><input type="checkbox" bind:checked={v.summen.kleinunternehmer} onchange={scheduleAutoSave}/> §19</label>
       {#if zeigtPDF}
         <button class="rw-btn" onclick={()=>zeigtPDF=false}>← Editor</button>
       {:else}
         <button class="rw-btn" onclick={pdfVorschau} disabled={pdfLaeuft}>{pdfLaeuft?'⏳':'🖨'} PDF</button>
       {/if}
       <button class="rw-btn rw-save" onclick={speichern} disabled={speichertLaeuft}>
-        {speichertLaeuft?'…':'💾'} Speichern
+        {speichertLaeuft?'Speichert…':'💾 Speichern'}
       </button>
     </div>
   </div>
@@ -427,9 +532,9 @@
       </label>
       {#if v.logo.base64}
         <input type="number" class="rw-num" min="40" max="400" bind:value={v.logo.breite}/>px
-        <button class="rw-tab" class:act={v.logo.position==='links'} onclick={()=>v.logo.position='links'}>◀</button>
-        <button class="rw-tab" class:act={v.logo.position==='mitte'} onclick={()=>v.logo.position='mitte'}>▬</button>
-        <button class="rw-tab" class:act={v.logo.position==='rechts'} onclick={()=>v.logo.position='rechts'}>▶</button>
+        <button class="rw-tab" class:act={v.logo.position==='links'} onclick={()=>{v.logo.position='links';scheduleAutoSave();}}>◀</button>
+        <button class="rw-tab" class:act={v.logo.position==='mitte'} onclick={()=>{v.logo.position='mitte';scheduleAutoSave();}}>▬</button>
+        <button class="rw-tab" class:act={v.logo.position==='rechts'} onclick={()=>{v.logo.position='rechts';scheduleAutoSave();}}>▶</button>
         <button class="rw-btn rw-btn-x" onclick={()=>v.logo.base64=''}>✕</button>
       {/if}
     </div>
@@ -438,9 +543,9 @@
     <div class="rw-panel-group">
       <span class="rw-lbl-head">FOOTER</span>
       {#each [1,2,3,4] as n}
-        <button class="rw-tab" class:act={v.footer_spalten===n} onclick={()=>v.footer_spalten=n}>{n}Sp</button>
+        <button class="rw-tab" class:act={v.footer_spalten===n} onclick={()=>{v.footer_spalten=n;scheduleAutoSave();}>{n}Sp</button>
       {/each}
-      <label class="rw-check"><input type="checkbox" bind:checked={v.footer_trennlinie}/> Linie</label>
+      <label class="rw-check"><input type="checkbox" bind:checked={v.footer_trennlinie} onchange={scheduleAutoSave}/> Linie</label>
       <span class="rw-lbl">Gr.</span>
       <!-- NUR footer_schriftgroesse, nicht v.schriftgroesse! -->
       <input type="number" class="rw-num" min="6" max="14" bind:value={v.footer_schriftgroesse}/>pt
@@ -706,6 +811,12 @@
   .rw-save{background:#1d4ed8;color:#fff;border-color:#1d4ed8;font-weight:600;}
   .rw-save:hover{filter:brightness(1.08);}
   .rw-save:disabled{opacity:0.55;cursor:not-allowed;}
+
+  /* Auto-Save Status */
+  .rw-autosave{font-size:0.7rem;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+  .rw-autosave-act{color:#92400e;background:#fef3c7;}
+  .rw-autosave-ok{color:#15803d;background:#f0fdf4;}
+  .rw-autosave-pending{color:#6b7280;background:#f3f4f6;}
   .rw-check{display:flex;align-items:center;gap:4px;font-size:0.73rem;color:#555;cursor:pointer;white-space:nowrap;}
   .rw-check input{accent-color:#1d4ed8;}
   .rw-title{font-size:0.84rem;font-weight:700;color:#1e293b;white-space:nowrap;}
