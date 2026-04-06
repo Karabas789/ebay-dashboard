@@ -187,7 +187,18 @@
   // Bug 1 Fix: innerHTML statt innerText — speichert Formatierungen (Bold, Italic, Farbe, Ausrichtung)
   // \n in gespeicherten Strings → <br> beim Laden
   function nl2htmlbr(s) { return (s||'').split('\n').join('<br>'); }
-  function html2text(el) { return el ? el.innerHTML : ''; }
+  function cleanSavedHtml(html) {
+  if (!html) return '';
+  return html
+    .replace(/background(-color)?:\s*rgba\([^)]+\)[^;"']*/gi, '')
+    .replace(/box-shadow:\s*[^;"']*/gi, '')
+    .replace(/\s*style="\s*;?\s*"/gi, '')
+    .replace(/style="\s*"/gi, '');
+}
+function html2text(el) {
+  if (!el) return '';
+  return cleanSavedHtml(el.innerHTML);
+}
 
   function syncDom() {
     setTimeout(() => {
@@ -211,8 +222,8 @@
     elFooter.forEach((el,i) => { if(el){const a=[...v.t_footer];a[i]=html2text(el);v.t_footer=a;} });
   }
 
-  function saveBlur(key, e) { v[key] = e.target.innerHTML; aktiverBlock=''; scheduleAutoSave(); }
-  function saveFooter(i, e) { const a=[...v.t_footer]; a[i]=e.target.innerHTML; v.t_footer=a; aktiverBlock=''; scheduleAutoSave(); }
+  function saveBlur(key, e) { v[key] = cleanSavedHtml(e.target.innerHTML); aktiverBlock=''; scheduleAutoSave(); }
+  function saveFooter(i, e) { const a=[...v.t_footer]; a[i]=cleanSavedHtml(e.target.innerHTML); v.t_footer=a; aktiverBlock=''; scheduleAutoSave(); }
 
   // ── SELEKTION SPEICHERN (mouseup + keyup in contenteditable) ─────────────
   // Selektion wird gespeichert sobald Maus losgelassen → Format-Button
