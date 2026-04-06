@@ -280,6 +280,9 @@
       ladeAutoRechnungStatus();
     }
   });
+  let aktiveSumme = $derived(
+    bearbeitenPositionen.filter(p => !p.entfernt).reduce((s, p) => s + p.einzelpreis * p.menge, 0)
+  );
 
   // ── Funktionen ─────────────────────────────────────────────────────────────
   async function ladeRechnungen() {
@@ -998,7 +1001,6 @@
             </div>
           </div>
         {/each}
-        {@const aktiveSumme = bearbeitenPositionen.filter(p => !p.entfernt).reduce((s, p) => s + p.einzelpreis * p.menge, 0)}
         <div class="betraege-box" style="margin-top:12px;">
           <div class="betrag-zeile">
             <span>Netto (neu)</span>
