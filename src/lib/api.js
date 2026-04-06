@@ -25,6 +25,14 @@ function clearAuth() {
 
 async function apiCall(path, body = {}, method = 'POST') {
   const token = getToken();
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+
+  // NEU: Bei GET → body als Query-String anhängen
+  let url = API + '/' + cleanPath;
+  if (method === 'GET' && body && Object.keys(body).length > 0) {
+    url += '?' + new URLSearchParams(body).toString();
+  }
+
   const opts = {
     method,
     headers: {
@@ -33,10 +41,9 @@ async function apiCall(path, body = {}, method = 'POST') {
     }
   };
   if (method !== 'GET') opts.body = JSON.stringify(body);
-  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  const res = await fetch(API + '/' + cleanPath, opts);
 
-  // Token ungültig / abgelaufen → Session-Modal anzeigen
+  const res = await fetch(url, opts);
+
   if (res.status === 401) {
     sessionExpired.set(true);
     throw new Error('Session abgelaufen');
@@ -44,7 +51,6 @@ async function apiCall(path, body = {}, method = 'POST') {
 
   const data = await res.json();
 
-  // n8n gibt manchmal 200 zurück, aber success: false bei Auth-Problemen
   if (data && data.success === false && data.message && /token|autoris|auth/i.test(data.message)) {
     sessionExpired.set(true);
     throw new Error('Session abgelaufen');
