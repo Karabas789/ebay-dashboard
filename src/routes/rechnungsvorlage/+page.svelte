@@ -184,30 +184,35 @@
     // Kein cancel() — Navigation läuft weiter, Daten sind gesichert
   });
 
+  // Bug 1 Fix: innerHTML statt innerText — speichert Formatierungen (Bold, Italic, Farbe, Ausrichtung)
+  // \n in gespeicherten Strings → <br> beim Laden
+  function nl2htmlbr(s) { return (s||'').split('\n').join('<br>'); }
+  function html2text(el) { return el ? el.innerHTML : ''; }
+
   function syncDom() {
     setTimeout(() => {
-      if (elAbsender) elAbsender.innerText = v.t_absender;
-      if (elEmpfaenger) elEmpfaenger.innerText = v.t_empfaenger;
-      if (elKontakt) elKontakt.innerText = v.t_kontakt;
-      if (elEinleitung) elEinleitung.innerText = v.t_einleitung;
-      if (elAbschluss) elAbschluss.innerText = v.t_abschluss;
-      if (elZahlung) elZahlung.innerText = v.t_zahlung;
-      elFooter.forEach((el,i) => { if(el) el.innerText = v.t_footer[i]??''; });
+      if (elAbsender) elAbsender.innerHTML = nl2htmlbr(v.t_absender);
+      if (elEmpfaenger) elEmpfaenger.innerHTML = nl2htmlbr(v.t_empfaenger);
+      if (elKontakt) elKontakt.innerHTML = nl2htmlbr(v.t_kontakt);
+      if (elEinleitung) elEinleitung.innerHTML = nl2htmlbr(v.t_einleitung);
+      if (elAbschluss) elAbschluss.innerHTML = nl2htmlbr(v.t_abschluss);
+      if (elZahlung) elZahlung.innerHTML = nl2htmlbr(v.t_zahlung);
+      elFooter.forEach((el,i) => { if(el) el.innerHTML = nl2htmlbr(v.t_footer[i]??''); });
     }, 0);
   }
 
   function collectDom() {
-    if (elAbsender) v.t_absender = elAbsender.innerText;
-    if (elEmpfaenger) v.t_empfaenger = elEmpfaenger.innerText;
-    if (elKontakt) v.t_kontakt = elKontakt.innerText;
-    if (elEinleitung) v.t_einleitung = elEinleitung.innerText;
-    if (elAbschluss) v.t_abschluss = elAbschluss.innerText;
-    if (elZahlung) v.t_zahlung = elZahlung.innerText;
-    elFooter.forEach((el,i) => { if(el){const a=[...v.t_footer];a[i]=el.innerText;v.t_footer=a;} });
+    if (elAbsender) v.t_absender = html2text(elAbsender);
+    if (elEmpfaenger) v.t_empfaenger = html2text(elEmpfaenger);
+    if (elKontakt) v.t_kontakt = html2text(elKontakt);
+    if (elEinleitung) v.t_einleitung = html2text(elEinleitung);
+    if (elAbschluss) v.t_abschluss = html2text(elAbschluss);
+    if (elZahlung) v.t_zahlung = html2text(elZahlung);
+    elFooter.forEach((el,i) => { if(el){const a=[...v.t_footer];a[i]=html2text(el);v.t_footer=a;} });
   }
 
-  function saveBlur(key, e) { v[key] = e.target.innerText; aktiverBlock=''; scheduleAutoSave(); }
-  function saveFooter(i, e) { const a=[...v.t_footer]; a[i]=e.target.innerText; v.t_footer=a; aktiverBlock=''; scheduleAutoSave(); }
+  function saveBlur(key, e) { v[key] = e.target.innerHTML; aktiverBlock=''; scheduleAutoSave(); }
+  function saveFooter(i, e) { const a=[...v.t_footer]; a[i]=e.target.innerHTML; v.t_footer=a; aktiverBlock=''; scheduleAutoSave(); }
 
   // ── SELEKTION SPEICHERN (mouseup + keyup in contenteditable) ─────────────
   // Selektion wird gespeichert sobald Maus losgelassen → Format-Button
@@ -353,16 +358,19 @@
   function sendBack(id)   { const b=v.hintergrundbilder.find(x=>x.id===id); v.hintergrundbilder=[b,...v.hintergrundbilder.filter(x=>x.id!==id)]; }
 
   function onBildMousedown(e, bild) {
-    if(e.target.classList.contains('rw-resize')) return;
+    if(e.target.classList.contains('rw-rz')) return;
     e.preventDefault();
     const rect=a4El.getBoundingClientRect();
     const scale=rect.width/794;
     dragging={id:bild.id, startX:e.clientX, startY:e.clientY, origX:bild.x, origY:bild.y, scale};
   }
-  function onResizeMousedown(e,bild) {
+  function onResizeMousedown(e, bild, dir='se') {
     e.preventDefault(); e.stopPropagation();
     const rect=a4El.getBoundingClientRect();
-    resizing={id:bild.id, startX:e.clientX, origW:bild.breite, scale:rect.width/794};
+    const scale=rect.width/794;
+    resizing={id:bild.id, dir, startX:e.clientX, startY:e.clientY,
+      origW:bild.breite, origH:bild.hoehe||'auto',
+      origX:bild.x, origY:bild.y, scale};
   }
   function onMousemove(e) {
     if(dragging) {
@@ -372,7 +380,13 @@
       updateBild(dragging.id,'y',Math.max(0,dragging.origY+dy));
     }
     if(resizing) {
-      updateBild(resizing.id,'breite',Math.max(20,(e.clientX-resizing.startX)/resizing.scale+resizing.origW));
+      const dx=(e.clientX-resizing.startX)/resizing.scale;
+      const dy=(e.clientY-resizing.startY)/resizing.scale;
+      const d=resizing.dir;
+      // Breite: rechte Handles vergrößern, linke verkleinern
+      if(d.includes('e')) updateBild(resizing.id,'breite',Math.max(20,resizing.origW+dx));
+      if(d.includes('w')) { updateBild(resizing.id,'breite',Math.max(20,resizing.origW-dx)); updateBild(resizing.id,'x',resizing.origX+dx); }
+      if(d==='n'||d==='s') updateBild(resizing.id,'breite',Math.max(20,resizing.origW+(d==='s'?dy:-dy)));
     }
   }
   function onMouseup() { dragging=null; resizing=null; }
@@ -623,7 +637,14 @@
           onmousedown={(e)=>onBildMousedown(e,bild)}>
           <img src={bild.base64} alt="" style="width:100%;display:block;pointer-events:none;user-select:none;"/>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="rw-resize" onmousedown={(e)=>onResizeMousedown(e,bild)}></div>
+          <div class="rw-rz nw" onmousedown={(e)=>onResizeMousedown(e,bild,'nw')}></div>
+          <div class="rw-rz n"  onmousedown={(e)=>onResizeMousedown(e,bild,'n')}></div>
+          <div class="rw-rz ne" onmousedown={(e)=>onResizeMousedown(e,bild,'ne')}></div>
+          <div class="rw-rz e"  onmousedown={(e)=>onResizeMousedown(e,bild,'e')}></div>
+          <div class="rw-rz se" onmousedown={(e)=>onResizeMousedown(e,bild,'se')}></div>
+          <div class="rw-rz s"  onmousedown={(e)=>onResizeMousedown(e,bild,'s')}></div>
+          <div class="rw-rz sw" onmousedown={(e)=>onResizeMousedown(e,bild,'sw')}></div>
+          <div class="rw-rz w"  onmousedown={(e)=>onResizeMousedown(e,bild,'w')}></div>
         </div>
       {/each}
 
@@ -827,7 +848,15 @@
   /* Bilder hinter Inhalt */
   .rw-bild-wrap{position:absolute;cursor:move;}
   .rw-bild-wrap:hover{outline:1px dashed rgba(29,78,216,0.4);}
-  .rw-resize{position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;background:#1d4ed8;border-radius:2px;cursor:se-resize;z-index:99;}
+  .rw-rz{position:absolute;width:10px;height:10px;background:#1d4ed8;border:1.5px solid #fff;border-radius:2px;z-index:20;}
+  .rw-rz.nw{top:-5px;left:-5px;cursor:nw-resize;}
+  .rw-rz.n{top:-5px;left:calc(50% - 5px);cursor:n-resize;}
+  .rw-rz.ne{top:-5px;right:-5px;cursor:ne-resize;}
+  .rw-rz.e{top:calc(50% - 5px);right:-5px;cursor:e-resize;}
+  .rw-rz.se{bottom:-5px;right:-5px;cursor:se-resize;}
+  .rw-rz.s{bottom:-5px;left:calc(50% - 5px);cursor:s-resize;}
+  .rw-rz.sw{bottom:-5px;left:-5px;cursor:sw-resize;}
+  .rw-rz.w{top:calc(50% - 5px);left:-5px;cursor:w-resize;}
 
   /* Inhalt immer über Bildern */
   .rw-inhalt{position:relative;z-index:10;display:flex;flex-direction:column;flex:1;pointer-events:auto;}
