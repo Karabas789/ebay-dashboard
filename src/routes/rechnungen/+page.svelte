@@ -35,14 +35,58 @@
     menge: 1, einzelpreis: '', order_id: ''
   });
   let erstellenLaeuft = $state(false);
+  let bestellungLaeuft = $state(false);
+  let bestellungFehler = $state('');
+
+  function clearBestellungLaden() { bestellungFehler = ''; }
+
+  async function ladeBestellungDaten() {
+    if (!neueRechnung.order_id) return;
+    bestellungLaeuft = true;
+    bestellungFehler = '';
+    try {
+      // Suche in invoices nach bekannter order_id (bereits erstellte Rechnungen)
+      const data = await apiCall('bestellung-laden', {
+        user_id: $currentUser?.id,
+        order_id: neueRechnung.order_id
+      });
+      if (data?.bestellung) {
+        const b = data.bestellung;
+        neueRechnung = {
+          ...neueRechnung,
+          kaeufer_name: b.kaeufer_name || neueRechnung.kaeufer_name,
+          kaeufer_email: b.kaeufer_email || neueRechnung.kaeufer_email,
+          kaeufer_strasse: b.kaeufer_strasse || neueRechnung.kaeufer_strasse,
+          kaeufer_plz: b.kaeufer_plz || neueRechnung.kaeufer_plz,
+          kaeufer_ort: b.kaeufer_ort || neueRechnung.kaeufer_ort,
+          kaeufer_land: b.kaeufer_land || neueRechnung.kaeufer_land,
+          artikel_name: b.artikel_name || neueRechnung.artikel_name,
+          ebay_artikel_id: b.ebay_artikel_id || neueRechnung.ebay_artikel_id,
+          einzelpreis: b.brutto_betrag || neueRechnung.einzelpreis,
+          menge: b.artikel_menge || neueRechnung.menge,
+        };
+        showToast('✓ Bestelldaten geladen');
+      } else {
+        bestellungFehler = 'Keine Bestellung gefunden';
+      }
+    } catch(e) {
+      bestellungFehler = 'Fehler beim Laden';
+    } finally {
+      bestellungLaeuft = false;
+    }
+  }
 
   // ── Derived ────────────────────────────────────────────────────────────────
+  // Bug 4 Fix: Bei Suche immer alle Kategorien durchsuchen
   let gefiltert = $derived.by(() => {
     let liste = rechnungen;
-    if (aktiverFilter === 'rechnungen') liste = liste.filter(r => r.rechnung_typ === 'rechnung' && r.status !== 'storniert');
-    else if (aktiverFilter === 'stornos')    liste = liste.filter(r => r.rechnung_typ === 'storno');
-    else if (aktiverFilter === 'erstellt')   liste = liste.filter(r => r.status === 'erstellt');
-    else if (aktiverFilter === 'gesendet')   liste = liste.filter(r => r.status === 'gesendet');
+    // Wenn gesucht wird → kein Kategorie-Filter, alles durchsuchen
+    if (!suchbegriff.trim()) {
+      if (aktiverFilter === 'rechnungen') liste = liste.filter(r => r.rechnung_typ === 'rechnung' && r.status !== 'storniert');
+      else if (aktiverFilter === 'stornos')    liste = liste.filter(r => r.rechnung_typ === 'storno');
+      else if (aktiverFilter === 'erstellt')   liste = liste.filter(r => r.status === 'erstellt');
+      else if (aktiverFilter === 'gesendet')   liste = liste.filter(r => r.status === 'gesendet');
+    }
     if (suchbegriff.trim()) {
       const s = suchbegriff.toLowerCase();
       liste = liste.filter(r =>
@@ -599,14 +643,30 @@
               <input bind:value={neueRechnung.kaeufer_ort} placeholder="Berlin" />
             </div>
           </div>
+          <div class="form-group">
+            <label>eBay Bestellnr. <span style="font-size:0.75rem;color:#94a3b8;">(Eingeben → Daten automatisch laden)</span></label>
+            <div style="display:flex;gap:8px;">
+              <input
+                bind:value={neueRechnung.order_id}
+                placeholder="12-34567-89012"
+                style="flex:1;"
+                oninput={clearBestellungLaden}
+              />
+              <button
+                class="btn-primary btn-sm"
+                onclick={ladeBestellungDaten}
+                disabled={bestellungLaeuft || !neueRechnung.order_id}
+                style="white-space:nowrap;"
+              >
+                {bestellungLaeuft ? '⏳' : '🔍 Laden'}
+              </button>
+            </div>
+            {#if bestellungFehler}<p style="color:#ef4444;font-size:0.75rem;margin-top:4px;">{bestellungFehler}</p>{/if}
+          </div>
           <div class="form-group form-2col">
             <div class="form-group">
               <label>Land</label>
               <input bind:value={neueRechnung.kaeufer_land} placeholder="DE" />
-            </div>
-            <div class="form-group">
-              <label>eBay Bestellnr.</label>
-              <input bind:value={neueRechnung.order_id} placeholder="12-34567-89012" />
             </div>
           </div>
           <div class="form-group">
