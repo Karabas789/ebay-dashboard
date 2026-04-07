@@ -15,7 +15,7 @@
   $: isLoginPage = $page.url.pathname === '/login';
 
   // Seiten die ihren eigenen Scroll-Container haben (kein overflow-y:auto auf main-content)
-  $: noPageScroll = $page.url.pathname === '/rechnungsvorlage';
+  $: noPageScroll = $page.url.pathname === '//einstellungen/rechnungsvorlage';
 
   sidebarCollapsed.subscribe(v => collapsed = v);
 
