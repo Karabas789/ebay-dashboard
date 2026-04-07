@@ -370,8 +370,11 @@
     if (dragging) {
       const dx = (e.clientX-dragging.startX)/dragging.scale;
       const dy = (e.clientY-dragging.startY)/dragging.scale;
-      updateBild(dragging.id, 'x', Math.round(dragging.origX+dx));
-      updateBild(dragging.id, 'y', Math.round(dragging.origY+dy));
+      const newX = Math.round(dragging.origX+dx);
+      const newY = Math.round(dragging.origY+dy);
+      v.hintergrundbilder = v.hintergrundbilder.map(b =>
+        b.id===dragging.id ? {...b, x: newX, y: newY} : b
+      );
     }
     if (resizing) {
       const dx = (e.clientX-resizing.startX)/resizing.scale;
