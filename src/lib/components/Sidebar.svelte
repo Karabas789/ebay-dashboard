@@ -43,7 +43,6 @@
     { path: '/produkte',         icon: '\u{1F4E6}', label: 'Produkte',          section: 'main' },
     { path: '/bestellungen',     icon: '\u{1F6D2}', label: 'Bestellungen',      section: 'main' },
     { path: '/rechnungen',       icon: '\u{1F9FE}', label: 'Rechnungen',        section: 'main' },
-    { path: '/rechnungsvorlage', icon: '\u{1F5A8}', label: 'Rechnungsvorlage',  section: 'main' },
   ];
 
   function toggleSidebar() {
