@@ -340,8 +340,8 @@
     );
   }
   function removeBild(id) { v.hintergrundbilder = v.hintergrundbilder.filter(b => b.id!==id); }
-  function bringFront(id) { const b=v.hintergrundbilder.find(x=>x.id===id); v.hintergrundbilder=[...v.hintergrundbilder.filter(x=>x.id!==id),b]; }
-  function sendBack(id)   { const b=v.hintergrundbilder.find(x=>x.id===id); v.hintergrundbilder=[b,...v.hintergrundbilder.filter(x=>x.id!==id)]; }
+  function bringFront(id) { const b=v.hintergrundbilder.find(x=>x.id===id); if(!b) return; v.hintergrundbilder=[...v.hintergrundbilder.filter(x=>x.id!==id),{...b}]; scheduleAutoSave(); }
+  function sendBack(id)   { const b=v.hintergrundbilder.find(x=>x.id===id); if(!b) return; v.hintergrundbilder=[{...b},...v.hintergrundbilder.filter(x=>x.id!==id)]; scheduleAutoSave(); }
 
   // ── DRAG & RESIZE ────────────────────────────────────────────────────────
   function getScale() { return a4El ? a4El.getBoundingClientRect().width / A4W : 1; }
@@ -412,9 +412,9 @@
 
   function bildWrapStyle(bild) {
     const h = bild.hoehe || (bild.nat_h&&bild.nat_w ? Math.round(bild.breite*bild.nat_h/bild.nat_w) : bild.breite);
-    // Im Bilder-Tab: Bilder über Inhalt-Layer (z-index 15+), sonst darunter (z-index 1+)
-    const zi = aktivesTab === 'bilder' ? 15 + v.hintergrundbilder.indexOf(bild) : 1 + v.hintergrundbilder.indexOf(bild);
-    return `left:${bild.x}px;top:${bild.y}px;width:${bild.breite}px;height:${h}px;opacity:${bild.opacity};z-index:${zi};`;
+    const idx = v.hintergrundbilder.indexOf(bild);
+    const zi = aktivesTab === 'bilder' ? 15 + idx : 1 + idx;
+    return `left:${bild.x}px;top:${bild.y}px;width:${bild.breite}px;height:${h}px;opacity:${bild.opacity};z-index:${zi};pointer-events:${aktivesTab==='bilder'?'auto':'none'};`;
   }
   function bildImgStyle(bild) {
     const fit = bild.modus==='crop' ? 'cover' : 'fill';
