@@ -63,8 +63,9 @@
   let elAbsender, elEmpfaenger, elKontakt, elEinleitung, elAbschluss, elZahlung;
   let elFooter = [];
   let a4El;
-  let dragging = $state(null);
-  let resizing = $state(null);
+  // WICHTIG: kein $state — document-listener braucht direkte JS-Variable, nicht reaktiven Proxy
+  let dragging = null;
+  let resizing = null;
 
   let autoSaveTimer = null;
   let hatUngespeicherteAenderungen = $state(false);
