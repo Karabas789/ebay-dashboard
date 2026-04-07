@@ -100,7 +100,7 @@
   }
 
   onMount(async () => {
-    // FIX Bug 2: Poppins + alle weiteren Google Fonts vorab laden
+    // Google Fonts laden
     const googleFonts = ['Poppins','Roboto','Lato','Montserrat','Open Sans','Raleway','Nunito','Playfair Display'];
     const fontQuery = googleFonts.map(f => 'family=' + f.replace(/ /g,'+') + ':ital,wght@0,300;0,400;0,600;0,700;1,400').join('&');
     if (!document.querySelector('link[data-gfonts]')) {
@@ -126,12 +126,16 @@
         if (draft) { const p = JSON.parse(draft); if (p?.v) { v = { ...v, ...p.v }; syncDom(); } }
       } catch(le) {}
     }
+
+    // FIX DRAG: mousemove + mouseup auf document — funktioniert auch außerhalb scroll-container
+    document.addEventListener('mousemove', onDocMousemove);
     document.addEventListener('mouseup', onDocMouseup);
     document.addEventListener('keyup', onDocKeyup);
     const onVisChange = () => { if (document.visibilityState === 'hidden') saveNow(); };
     document.addEventListener('visibilitychange', onVisChange);
     window.addEventListener('beforeunload', saveNow);
     return () => {
+      document.removeEventListener('mousemove', onDocMousemove);
       document.removeEventListener('mouseup', onDocMouseup);
       document.removeEventListener('keyup', onDocKeyup);
       document.removeEventListener('visibilitychange', onVisChange);
@@ -191,7 +195,15 @@
       } catch(e) {}
     } else { hatAuswahl = false; }
   }
-  function onDocMouseup(e) { if (e.target.closest('.rw-fmt-btn')) return; captureSelection(); }
+  // FIX: onDocMouseup behandelt sowohl Drag-Ende als auch Text-Selektion
+  function onDocMouseup(e) {
+    if (dragging || resizing) {
+      dragging = null; resizing = null; scheduleAutoSave();
+      return;
+    }
+    if (e.target.closest('.rw-fmt-btn')) return;
+    captureSelection();
+  }
   function onDocKeyup() { captureSelection(); }
   function isInEditor(node) {
     let n = node?.nodeType===3 ? node.parentElement : node;
@@ -333,11 +345,10 @@
   // ── DRAG & RESIZE ────────────────────────────────────────────────────────
   function getScale() { return a4El ? a4El.getBoundingClientRect().width / A4W : 1; }
 
-  // FIX Bug 1: Drag nur starten wenn NICHT auf rw-inhalt geklickt wurde
   function onBildMousedown(e, bild) {
     if (e.target.classList.contains('rw-rz')) return;
-    if (e.target.closest('.rw-inhalt')) return; // Inhalt-Layer hat Priorität → kein Drag
     e.preventDefault();
+    e.stopPropagation();
     dragging = { id:bild.id, startX:e.clientX, startY:e.clientY, origX:bild.x, origY:bild.y, scale:getScale() };
   }
   function onResizeMousedown(e, bild, dir) {
@@ -352,12 +363,14 @@
       verhSperren:bild.verh_sperren,
     };
   }
-  function onMousemove(e) {
+
+  // FIX: document-level mousemove — funktioniert auch außerhalb des scroll-containers
+  function onDocMousemove(e) {
     if (dragging) {
       const dx = (e.clientX-dragging.startX)/dragging.scale;
       const dy = (e.clientY-dragging.startY)/dragging.scale;
-      updateBild(dragging.id, 'x', dragging.origX+dx);
-      updateBild(dragging.id, 'y', dragging.origY+dy);
+      updateBild(dragging.id, 'x', Math.round(dragging.origX+dx));
+      updateBild(dragging.id, 'y', Math.round(dragging.origY+dy));
     }
     if (resizing) {
       const dx = (e.clientX-resizing.startX)/resizing.scale;
@@ -374,11 +387,10 @@
         else { nw=Math.round(nh*ratio); if(d.includes('w')) nx=resizing.origX+(resizing.origW-nw); }
       }
       v.hintergrundbilder = v.hintergrundbilder.map(b =>
-        b.id===resizing.id ? {...b, breite:nw, hoehe:nh, x:nx, y:ny} : b
+        b.id===resizing.id ? {...b, breite:Math.round(nw), hoehe:Math.round(nh), x:Math.round(nx), y:Math.round(ny)} : b
       );
     }
   }
-  function onMouseup() { dragging=null; resizing=null; scheduleAutoSave(); }
 
   function applyTheme(c) { v.akzentfarbe=c; v.tabelle.kopf_hg=c; scheduleAutoSave(); }
 
@@ -396,7 +408,7 @@
 
   function bildWrapStyle(bild) {
     const h = bild.hoehe || (bild.nat_h&&bild.nat_w ? Math.round(bild.breite*bild.nat_h/bild.nat_w) : bild.breite);
-    // FIX Bug 1: z-index für Bilder immer über Inhalt wenn aktiv-tab=bilder, sonst darunter
+    // Im Bilder-Tab: Bilder über Inhalt-Layer (z-index 15+), sonst darunter (z-index 1+)
     const zi = aktivesTab === 'bilder' ? 15 + v.hintergrundbilder.indexOf(bild) : 1 + v.hintergrundbilder.indexOf(bild);
     return `left:${bild.x}px;top:${bild.y}px;width:${bild.breite}px;height:${h}px;opacity:${bild.opacity};z-index:${zi};`;
   }
@@ -409,8 +421,9 @@
   }
 </script>
 
+<!-- FIX: kein onmousemove/onmouseup auf rw-div — läuft über document (siehe onMount) -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="rw" onmousemove={onMousemove} onmouseup={onMouseup}>
+<div class="rw">
 
   <!-- TOOLBAR -->
   <div class="rw-bar">
@@ -576,43 +589,32 @@
           <div class="rw-bild-row">
             <img src={bild.base64} alt="" class="rw-bild-thumb"/>
             <span class="rw-lbl rw-bild-nr">#{i+1}</span>
-
             <button class="rw-tab rw-tab-sm" class:act={!bild.modus||bild.modus==='frei'}
-              onclick={()=>setBildFrei(bild.id)} title="Frei platzieren">Frei</button>
+              onclick={()=>setBildFrei(bild.id)}>Frei</button>
             <button class="rw-tab rw-tab-sm rw-tab-full" class:act={bild.modus==='vollseite'}
-              onclick={()=>setBildVollseite(bild.id)} title="Bild auf volle A4-Seite">⛶ Voll</button>
+              onclick={()=>setBildVollseite(bild.id)}>⛶ Voll</button>
             <button class="rw-tab rw-tab-sm rw-tab-crop" class:act={bild.modus==='crop'}
-              onclick={()=>setBildA4Crop(bild.id)} title="Kürzeste Seite auf A4, Rest abschneiden">✂ Crop</button>
-
+              onclick={()=>setBildA4Crop(bild.id)}>✂ Crop</button>
             <div class="sep-v" style="height:20px;"></div>
-
             <span class="rw-lbl">B:</span>
             <input type="number" class="rw-num rw-num-sm" min="10" max="1200"
-              value={Math.round(bild.breite)}
-              oninput={(e)=>updateBreite(bild.id,+e.target.value)}
+              value={Math.round(bild.breite)} oninput={(e)=>updateBreite(bild.id,+e.target.value)}
               disabled={bild.modus==='vollseite'}/>
-
             <span class="rw-lbl">H:</span>
             <input type="number" class="rw-num rw-num-sm" min="10" max="2000"
-              value={bildHoehe(bild)}
-              oninput={(e)=>updateHoehe(bild.id,+e.target.value)}
+              value={bildHoehe(bild)} oninput={(e)=>updateHoehe(bild.id,+e.target.value)}
               disabled={bild.modus==='vollseite'}/>
-
             <button class="rw-fmt-btn"
-              title={bild.verh_sperren?'Seitenverhältnis gesperrt':'Seitenverhältnis frei'}
               style={bild.verh_sperren?'color:#1d4ed8;border-color:#93c5fd;':''}
               onclick={()=>updateBild(bild.id,'verh_sperren',!bild.verh_sperren)}
               disabled={bild.modus==='vollseite'}>🔗</button>
-
             <div class="sep-v" style="height:20px;"></div>
-
             <span class="rw-lbl">Tr.:</span>
             <input type="range" min="0.03" max="1" step="0.03" value={bild.opacity}
               oninput={(e)=>updateBild(bild.id,'opacity',+e.target.value)} style="width:55px;"/>
             <span class="rw-lbl" style="min-width:28px;">{Math.round(bild.opacity*100)}%</span>
-
-            <button class="rw-fmt-btn" title="Nach vorne" onclick={()=>bringFront(bild.id)}>↑</button>
-            <button class="rw-fmt-btn" title="Nach hinten" onclick={()=>sendBack(bild.id)}>↓</button>
+            <button class="rw-fmt-btn" onclick={()=>bringFront(bild.id)}>↑</button>
+            <button class="rw-fmt-btn" onclick={()=>sendBack(bild.id)}>↓</button>
             <button class="rw-btn rw-btn-x" onclick={()=>removeBild(bild.id)}>🗑</button>
           </div>
         {/each}
@@ -637,9 +639,7 @@
       <!-- Hintergrundbilder -->
       {#each v.hintergrundbilder as bild}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="rw-bild-wrap"
-          style={bildWrapStyle(bild)}
-          onmousedown={(e)=>onBildMousedown(e,bild)}>
+        <div class="rw-bild-wrap" style={bildWrapStyle(bild)} onmousedown={(e)=>onBildMousedown(e,bild)}>
           <img src={bild.base64} alt="" style={bildImgStyle(bild)}/>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="rw-rz nw" onmousedown={(e)=>onResizeMousedown(e,bild,'nw')}></div>
@@ -653,10 +653,9 @@
         </div>
       {/each}
 
-      <!-- Inhalt: im Bilder-Tab pointer-events:none auf Inhalt → Bilder draggable -->
+      <!-- Inhalt: im Bilder-Tab pointer-events:none → Klicks gehen durch zum Bild-Wrap -->
       <div class="rw-inhalt" style={aktivesTab==='bilder' ? 'pointer-events:none;' : ''}>
 
-        <!-- LOGO -->
         {#if v.logo.base64}
           <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
             <label style="cursor:pointer;pointer-events:auto;" title="Klicken zum Wechseln">
@@ -666,11 +665,12 @@
           </div>
         {:else if aktivesTab==='layout'}
           <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
-            <label class="rw-logo-drop" style="pointer-events:auto;"><input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>🖼 Logo</label>
+            <label class="rw-logo-drop" style="pointer-events:auto;">
+              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>🖼 Logo
+            </label>
           </div>
         {/if}
 
-        <!-- HEADER -->
         <div class="rw-header" style="padding:{v.logo.base64?'10px':'var(--rand)'} var(--rand) 0;">
           <div class="rw-hl">
             <div class="rw-e" style="font-size:8px;color:#888;margin-bottom:8px;display:block;line-height:1.4;"
@@ -690,7 +690,6 @@
 
         <div style="padding:14px var(--rand) 0;"><hr style="border:none;border-top:1px solid #bbb;margin:0;"/></div>
 
-        <!-- BODY -->
         <div class="rw-body" style="padding:14px var(--rand) 0;">
           <div class="rw-e" style="line-height:{v.zeilenabstand};margin-bottom:12px;display:block;"
             contenteditable="true" bind:this={elEinleitung}
@@ -763,7 +762,6 @@
           {/if}
         </div>
 
-        <!-- FOOTER -->
         <div class="rw-footer" style="
           padding:8px var(--rand);
           grid-template-columns:repeat({v.footer_spalten},1fr);
