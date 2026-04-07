@@ -14,7 +14,6 @@
   };
   const fmtN = (n) => Number(n||0).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  // A4 Konstanten in px (96 dpi)
   const A4W = 794;
   const A4H = 1123;
 
@@ -101,10 +100,13 @@
   }
 
   onMount(async () => {
-    if (!document.querySelector('link[data-poppins]')) {
+    // FIX Bug 2: Poppins + alle weiteren Google Fonts vorab laden
+    const googleFonts = ['Poppins','Roboto','Lato','Montserrat','Open Sans','Raleway','Nunito','Playfair Display'];
+    const fontQuery = googleFonts.map(f => 'family=' + f.replace(/ /g,'+') + ':ital,wght@0,300;0,400;0,600;0,700;1,400').join('&');
+    if (!document.querySelector('link[data-gfonts]')) {
       const lnk = document.createElement('link');
-      lnk.rel = 'stylesheet'; lnk.dataset.poppins = '1';
-      lnk.href = 'https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap';
+      lnk.rel = 'stylesheet'; lnk.dataset.gfonts = '1';
+      lnk.href = 'https://fonts.googleapis.com/css2?' + fontQuery + '&display=swap';
       document.head.appendChild(lnk);
     }
     syncDom();
@@ -274,7 +276,7 @@
             nat_w: natW,
             nat_h: natH,
             opacity: 1.0,
-            modus: 'frei',      // 'frei' | 'vollseite' | 'crop'
+            modus: 'frei',
             verh_sperren: true,
           }];
         };
@@ -309,7 +311,6 @@
       b.id===id ? { ...b, x:0, y:0, breite:A4W, hoehe:A4H, modus:'vollseite', verh_sperren:false } : b
     );
   }
-  // Crop: kürzeste Seite auf A4 skalieren (object-fit:cover), zentriert
   function setBildA4Crop(id) {
     v.hintergrundbilder = v.hintergrundbilder.map(b => {
       if (b.id !== id) return b;
@@ -332,8 +333,10 @@
   // ── DRAG & RESIZE ────────────────────────────────────────────────────────
   function getScale() { return a4El ? a4El.getBoundingClientRect().width / A4W : 1; }
 
+  // FIX Bug 1: Drag nur starten wenn NICHT auf rw-inhalt geklickt wurde
   function onBildMousedown(e, bild) {
     if (e.target.classList.contains('rw-rz')) return;
+    if (e.target.closest('.rw-inhalt')) return; // Inhalt-Layer hat Priorität → kein Drag
     e.preventDefault();
     dragging = { id:bild.id, startX:e.clientX, startY:e.clientY, origX:bild.x, origY:bild.y, scale:getScale() };
   }
@@ -388,12 +391,14 @@
     {n:'Grün',f:'#16a34a',h:'#f0fdf4',r:'#86efac'},{n:'Blau',f:'#1d4ed8',h:'#eff6ff',r:'#93c5fd'},
     {n:'Grau',f:'#374151',h:'#f9fafb',r:'#d1d5db'},{n:'Orange',f:'#c2410c',h:'#fff7ed',r:'#fed7aa'},
   ];
-  const schriften=['Arial','Helvetica','Georgia','Times New Roman','Verdana','Garamond','Courier New','Poppins'];
+  const schriften=['Arial','Helvetica','Georgia','Times New Roman','Verdana','Garamond','Courier New','Poppins','Roboto','Lato','Montserrat','Open Sans','Raleway','Nunito','Playfair Display'];
   function logoJustify() { return v.logo.position==='links'?'flex-start':v.logo.position==='rechts'?'flex-end':'center'; }
 
   function bildWrapStyle(bild) {
     const h = bild.hoehe || (bild.nat_h&&bild.nat_w ? Math.round(bild.breite*bild.nat_h/bild.nat_w) : bild.breite);
-    return `left:${bild.x}px;top:${bild.y}px;width:${bild.breite}px;height:${h}px;opacity:${bild.opacity};`;
+    // FIX Bug 1: z-index für Bilder immer über Inhalt wenn aktiv-tab=bilder, sonst darunter
+    const zi = aktivesTab === 'bilder' ? 15 + v.hintergrundbilder.indexOf(bild) : 1 + v.hintergrundbilder.indexOf(bild);
+    return `left:${bild.x}px;top:${bild.y}px;width:${bild.breite}px;height:${h}px;opacity:${bild.opacity};z-index:${zi};`;
   }
   function bildImgStyle(bild) {
     const fit = bild.modus==='crop' ? 'cover' : 'fill';
@@ -443,8 +448,8 @@
     <div class="rw-panel-group">
       <span class="rw-lbl-head">GLOBAL</span>
       <span class="rw-lbl">Schrift</span>
-      <select class="rw-sel" bind:value={v.schriftart}>
-        {#each schriften as f}<option>{f}</option>{/each}
+      <select class="rw-sel" bind:value={v.schriftart} style="font-family:'{v.schriftart}',sans-serif;">
+        {#each schriften as f}<option style="font-family:'{f}',sans-serif;">{f}</option>{/each}
       </select>
       <span class="rw-lbl">Gr.</span>
       <input type="number" class="rw-num" min="7" max="20" bind:value={v.schriftgroesse}/>pt
@@ -554,7 +559,7 @@
     </div>
   </div>
 
-  <!-- ═══ PANEL BILDER ══════════════════════════════════════════════════════ -->
+  <!-- ═══ PANEL BILDER ═════════════════════════════════════════════════════ -->
   {:else if aktivesTab==='bilder'}
   <div class="rw-panel">
     <div class="rw-panel-group">
@@ -572,7 +577,6 @@
             <img src={bild.base64} alt="" class="rw-bild-thumb"/>
             <span class="rw-lbl rw-bild-nr">#{i+1}</span>
 
-            <!-- Modus-Buttons -->
             <button class="rw-tab rw-tab-sm" class:act={!bild.modus||bild.modus==='frei'}
               onclick={()=>setBildFrei(bild.id)} title="Frei platzieren">Frei</button>
             <button class="rw-tab rw-tab-sm rw-tab-full" class:act={bild.modus==='vollseite'}
@@ -623,7 +627,6 @@
       <iframe src="data:application/pdf;base64,{vorschauPDF}" title="PDF" class="rw-pdf"></iframe>
     {:else}
 
-    <!-- overflow:hidden → Crop-Bilder werden am A4-Rand abgeschnitten -->
     <div class="rw-a4" bind:this={a4El} style="
       font-family:'{v.schriftart}',sans-serif;
       font-size:{v.schriftgroesse}px;
@@ -632,10 +635,10 @@
     ">
 
       <!-- Hintergrundbilder -->
-      {#each v.hintergrundbilder as bild, idx}
+      {#each v.hintergrundbilder as bild}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="rw-bild-wrap"
-          style="{bildWrapStyle(bild)}z-index:{idx+1};"
+          style={bildWrapStyle(bild)}
           onmousedown={(e)=>onBildMousedown(e,bild)}>
           <img src={bild.base64} alt="" style={bildImgStyle(bild)}/>
           <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -650,20 +653,20 @@
         </div>
       {/each}
 
-      <!-- Inhalt: z-index 10 → immer über Bildern -->
-      <div class="rw-inhalt">
+      <!-- Inhalt: im Bilder-Tab pointer-events:none auf Inhalt → Bilder draggable -->
+      <div class="rw-inhalt" style={aktivesTab==='bilder' ? 'pointer-events:none;' : ''}>
 
         <!-- LOGO -->
         {#if v.logo.base64}
           <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
-            <label style="cursor:pointer;" title="Klicken zum Wechseln">
+            <label style="cursor:pointer;pointer-events:auto;" title="Klicken zum Wechseln">
               <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>
               <img src={v.logo.base64} alt="Logo" style="width:{v.logo.breite}px;max-height:100px;object-fit:contain;display:block;"/>
             </label>
           </div>
         {:else if aktivesTab==='layout'}
           <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
-            <label class="rw-logo-drop"><input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>🖼 Logo</label>
+            <label class="rw-logo-drop" style="pointer-events:auto;"><input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>🖼 Logo</label>
           </div>
         {/if}
 
@@ -839,11 +842,10 @@
   .rw-check input{accent-color:#1d4ed8;}
   .rw-title{font-size:0.84rem;font-weight:700;color:#1e293b;white-space:nowrap;}
   .rw-canvas{flex:1;overflow-y:auto;overflow-x:auto;padding:24px 20px 40px;display:flex;flex-direction:column;align-items:center;}
-  /* overflow:hidden → Crop-Bilder die über A4-Rand laufen werden abgeschnitten */
   .rw-a4{width:794px;min-height:1123px;background:#fff;box-shadow:0 4px 32px rgba(0,0,0,0.17);border-radius:2px;position:relative;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;}
   .rw-bild-wrap{position:absolute;cursor:move;}
   .rw-bild-wrap:hover{outline:1px dashed rgba(29,78,216,0.4);}
-  .rw-rz{position:absolute;width:10px;height:10px;background:#1d4ed8;border:1.5px solid #fff;border-radius:2px;z-index:20;}
+  .rw-rz{position:absolute;width:10px;height:10px;background:#1d4ed8;border:1.5px solid #fff;border-radius:2px;z-index:20;pointer-events:auto !important;}
   .rw-rz.nw{top:-5px;left:-5px;cursor:nw-resize;}
   .rw-rz.n{top:-5px;left:calc(50% - 5px);cursor:n-resize;}
   .rw-rz.ne{top:-5px;right:-5px;cursor:ne-resize;}
@@ -852,7 +854,7 @@
   .rw-rz.s{bottom:-5px;left:calc(50% - 5px);cursor:s-resize;}
   .rw-rz.sw{bottom:-5px;left:-5px;cursor:sw-resize;}
   .rw-rz.w{top:calc(50% - 5px);left:-5px;cursor:w-resize;}
-  .rw-inhalt{position:relative;z-index:10;display:flex;flex-direction:column;flex:1;pointer-events:auto;}
+  .rw-inhalt{position:relative;z-index:10;display:flex;flex-direction:column;flex:1;}
   .rw-logo-drop{display:flex;align-items:center;justify-content:center;height:46px;min-width:100px;background:#f1f5f9;border:2px dashed #cbd5e1;border-radius:5px;font-size:0.73rem;color:#94a3b8;cursor:pointer;transition:all 0.15s;}
   .rw-logo-drop:hover{border-color:#1d4ed8;color:#1d4ed8;}
   .rw-header{display:grid;grid-template-columns:1fr auto;gap:24px;align-items:flex-start;}
