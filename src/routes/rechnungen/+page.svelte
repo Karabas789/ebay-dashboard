@@ -90,7 +90,7 @@
 
   async function ladeAutoRechnungStatus() {
     try {
-      const data = await apiCall('auto-rechnung-einstellungen', {}, 'GET', `?user_id=${$currentUser.id}`);
+      const data = await apiCall('auto-rechnung-einstellungen', { user_id: $currentUser.id }, 'GET');
       autoRechnungAktiv = data?.auto_rechnung_aktiv ?? true;
     } catch(e) {}
   }
