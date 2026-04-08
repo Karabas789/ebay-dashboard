@@ -42,6 +42,10 @@
   let bearbeitenPositionen = $state([]);
   let bearbeitenLaeuft = $state(false);
 
+  // E-Rechnung Dropdown
+  let eRechnungMenuOffen = $state(false);
+  let eRechnungRechnung = $state(null);
+
   let neueRechnung = $state({
     kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
     kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
@@ -110,50 +114,49 @@
   }
 
   async function schnellsucheNachOrder() {
-  if (!schnellsucheOrderId.trim()) return;
-  const term = schnellsucheOrderId.trim().toLowerCase();
+    if (!schnellsucheOrderId.trim()) return;
+    const term = schnellsucheOrderId.trim().toLowerCase();
 
-  // Zuerst lokal in bereits geladenen Rechnungen suchen
-  const lokaleErgebnisse = rechnungen.filter(r =>
-    r.rechnung_nr?.toLowerCase().includes(term) ||
-    r.kaeufer_name?.toLowerCase().includes(term) ||
-    r.kaeufer_email?.toLowerCase().includes(term) ||
-    r.kaeufer_strasse?.toLowerCase().includes(term) ||
-    r.kaeufer_plz?.toLowerCase().includes(term) ||
-    r.kaeufer_ort?.toLowerCase().includes(term) ||
-    r.artikel_name?.toLowerCase().includes(term) ||
-    r.ebay_artikel_id?.toLowerCase().includes(term) ||
-    r.order_id?.toLowerCase().includes(term)
-  );
+    // Zuerst lokal in bereits geladenen Rechnungen suchen
+    const lokaleErgebnisse = rechnungen.filter(r =>
+      r.rechnung_nr?.toLowerCase().includes(term) ||
+      r.kaeufer_name?.toLowerCase().includes(term) ||
+      r.kaeufer_email?.toLowerCase().includes(term) ||
+      r.kaeufer_strasse?.toLowerCase().includes(term) ||
+      r.kaeufer_plz?.toLowerCase().includes(term) ||
+      r.kaeufer_ort?.toLowerCase().includes(term) ||
+      r.artikel_name?.toLowerCase().includes(term) ||
+      r.ebay_artikel_id?.toLowerCase().includes(term) ||
+      r.order_id?.toLowerCase().includes(term)
+    );
 
-  if (lokaleErgebnisse.length > 0) {
-    // Direkt Tabelle filtern statt Modal
-    suchbegriff = schnellsucheOrderId.trim();
-    schnellsucheOrderId = '';
-    return;
-  }
-
-  // Wenn nichts lokal gefunden: Backend (bestellung-laden) anfragen
-  schnellsucheLaeuft = true;
-  schnellsucheFehler = '';
-  schnellsucheErgebnis = null;
-  try {
-    const data = await apiCall('bestellung-laden', {
-      user_id: $currentUser.id,
-      order_id: schnellsucheOrderId.trim()
-    });
-    if (data?.bestellung) {
-      schnellsucheErgebnis = data.bestellung;
-      schnellsucheModalOffen = true;
-    } else {
-      schnellsucheFehler = 'Nichts gefunden';
+    if (lokaleErgebnisse.length > 0) {
+      suchbegriff = schnellsucheOrderId.trim();
+      schnellsucheOrderId = '';
+      return;
     }
-  } catch(e) {
-    schnellsucheFehler = 'Nichts gefunden';
-  } finally {
-    schnellsucheLaeuft = false;
+
+    // Wenn nichts lokal gefunden: Backend (bestellung-laden) anfragen
+    schnellsucheLaeuft = true;
+    schnellsucheFehler = '';
+    schnellsucheErgebnis = null;
+    try {
+      const data = await apiCall('bestellung-laden', {
+        user_id: $currentUser.id,
+        suchbegriff: schnellsucheOrderId.trim()
+      });
+      if (data?.bestellung) {
+        schnellsucheErgebnis = data.bestellung;
+        schnellsucheModalOffen = true;
+      } else {
+        schnellsucheFehler = 'Nichts gefunden';
+      }
+    } catch(e) {
+      schnellsucheFehler = 'Nichts gefunden';
+    } finally {
+      schnellsucheLaeuft = false;
+    }
   }
-}
 
   function schliesseSchnellsucheModal() {
     schnellsucheModalOffen = false;
@@ -238,6 +241,91 @@
     }
   }
 
+  // ── Bulk-Aktionen ────────────────────────────────────────
+  async function bulkDrucken() {
+    const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
+    for (const r of liste) {
+      await ladePDF(r);
+      await new Promise(res => setTimeout(res, 400));
+    }
+  }
+
+  async function bulkEmailSenden() {
+    const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
+    const ohneEmail = liste.filter(r => !r.kaeufer_email);
+    if (ohneEmail.length > 0) showToast(`${ohneEmail.length} ohne E-Mail werden übersprungen`);
+    let gesendet = 0;
+    for (const r of liste) {
+      if (!r.kaeufer_email) continue;
+      try {
+        await apiCall('rechnung-senden', { invoice_id: r.id, user_id: $currentUser.id, to_email: r.kaeufer_email });
+        gesendet++;
+      } catch(e) {}
+    }
+    showToast(`${gesendet} Rechnung(en) gesendet`);
+    await ladeRechnungen();
+  }
+
+  function bulkExportCSV() {
+    const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
+    const header = ['Rechnungsnr.','Datum','Kaeufer','E-Mail','Strasse','PLZ','Ort','Artikel','Bestellnr.','Netto','MwSt.','Brutto','Status'];
+    const zeilen = liste.map(r => [
+      r.rechnung_nr, fmtDatum(r.erstellt_am), r.kaeufer_name, r.kaeufer_email || '',
+      r.kaeufer_strasse || '', r.kaeufer_plz || '', r.kaeufer_ort || '',
+      r.artikel_name, r.order_id || '',
+      fmt(r.netto_betrag), fmt(r.steuer_betrag), fmt(r.brutto_betrag), r.status
+    ].map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(';'));
+    const csv = [header.join(';'), ...zeilen].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rechnungen-export-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
+  // ── E-Rechnung ────────────────────────────────────────────
+  function oeffneERechnungMenu(r, e) {
+    e.stopPropagation();
+    if (eRechnungRechnung?.id === r.id && eRechnungMenuOffen) {
+      eRechnungMenuOffen = false;
+      eRechnungRechnung = null;
+    } else {
+      eRechnungRechnung = r;
+      eRechnungMenuOffen = true;
+    }
+  }
+
+  async function erstelleERechnung(rechnung, format) {
+    eRechnungMenuOffen = false;
+    eRechnungRechnung = null;
+    showToast('E-Rechnung wird erstellt...');
+    try {
+      const data = await apiCall('e-rechnung-erstellen', {
+        invoice_id: rechnung.id,
+        user_id: $currentUser.id,
+        format
+      });
+      if (format === 'xrechnung') {
+        const blob = new Blob([data.xml], { type: 'application/xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = (rechnung.rechnung_nr || 'XRechnung') + '.xml';
+        a.click(); URL.revokeObjectURL(url);
+      } else {
+        const b64 = data.pdf_base64 || data.pdf;
+        if (!b64) { showToast('Kein Ergebnis erhalten.'); return; }
+        const blob = new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = (rechnung.rechnung_nr || 'ERechnung') + '.pdf';
+        a.click(); URL.revokeObjectURL(url);
+      }
+      showToast('E-Rechnung erstellt');
+    } catch(e) {
+      showToast('Fehler: ' + e.message);
+    }
+  }
+
   let gefiltert = $derived.by(() => {
     let liste = rechnungen;
     if (!suchbegriff.trim()) {
@@ -249,16 +337,16 @@
     if (suchbegriff.trim()) {
       const s = suchbegriff.toLowerCase();
       liste = liste.filter(r =>
-   r.rechnung_nr?.toLowerCase().includes(s) ||
-   r.kaeufer_name?.toLowerCase().includes(s) ||
-   r.kaeufer_email?.toLowerCase().includes(s) ||
-   r.kaeufer_strasse?.toLowerCase().includes(s) ||
-   r.kaeufer_plz?.toLowerCase().includes(s) ||
-   r.kaeufer_ort?.toLowerCase().includes(s) ||
-   r.artikel_name?.toLowerCase().includes(s) ||
-   r.ebay_artikel_id?.toLowerCase().includes(s) ||
-   r.order_id?.toLowerCase().includes(s)
-   );
+        r.rechnung_nr?.toLowerCase().includes(s) ||
+        r.kaeufer_name?.toLowerCase().includes(s) ||
+        r.kaeufer_email?.toLowerCase().includes(s) ||
+        r.kaeufer_strasse?.toLowerCase().includes(s) ||
+        r.kaeufer_plz?.toLowerCase().includes(s) ||
+        r.kaeufer_ort?.toLowerCase().includes(s) ||
+        r.artikel_name?.toLowerCase().includes(s) ||
+        r.ebay_artikel_id?.toLowerCase().includes(s) ||
+        r.order_id?.toLowerCase().includes(s)
+      );
     }
     return liste;
   });
@@ -386,7 +474,7 @@
 </script>
 
 <!-- PAGE -->
-<div class="page-container">
+<div class="page-container" onclick={() => { if (eRechnungMenuOffen) { eRechnungMenuOffen = false; eRechnungRechnung = null; } }}>
 
   <!-- Header -->
   <div class="page-hdr">
@@ -472,10 +560,25 @@
     </div>
   </div>
 
+  <!-- Bulk-Aktionsleiste -->
   {#if ausgewaehlt.size > 0}
     <div class="bulk-bar">
-      <span>{ausgewaehlt.size} ausgewaehlt</span>
-      <button class="btn-ghost btn-sm" onclick={() => { ausgewaehlt = new Set(); alleAusgewaehlt = false; }}>Auswahl aufheben</button>
+      <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn-ghost btn-sm" onclick={bulkDrucken} title="PDFs herunterladen">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          PDFs laden
+        </button>
+        <button class="btn-ghost btn-sm" onclick={bulkEmailSenden} title="An Käufer-Email senden">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Per E-Mail senden
+        </button>
+        <button class="btn-ghost btn-sm" onclick={bulkExportCSV} title="Als CSV exportieren">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          CSV exportieren
+        </button>
+        <button class="btn-ghost btn-sm" onclick={() => { ausgewaehlt = new Set(); alleAusgewaehlt = false; }}>Auswahl aufheben</button>
+      </div>
     </div>
   {/if}
 
@@ -499,7 +602,9 @@
         <table class="tabelle">
           <thead>
             <tr>
-              <th class="th-check"><input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} /></th>
+              <th class="th-check" onclick={(e) => e.stopPropagation()}>
+                <input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} />
+              </th>
               <th>Nummer</th><th>Datum</th><th>Kaeufer</th><th>Artikel</th>
               <th class="th-right">Netto</th><th class="th-right">MwSt.</th><th class="th-right">Brutto</th>
               <th>Status</th><th class="th-actions">Aktionen</th>
@@ -534,6 +639,19 @@
                     <button class="icon-btn icon-btn-edit" title="Bearbeiten" onclick={() => oeffneBearbeitenModal(r)}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
+                    <!-- E-Rechnung Dropdown -->
+                    <div class="erechnungs-wrap" onclick={(e) => e.stopPropagation()}>
+                      <button class="icon-btn icon-btn-erechnung" title="E-Rechnung" onclick={(e) => oeffneERechnungMenu(r, e)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      </button>
+                      {#if eRechnungMenuOffen && eRechnungRechnung?.id === r.id}
+                        <div class="erechnung-menu">
+                          <button onclick={() => erstelleERechnung(r, 'zugferd_en16931')}>ZUGFeRD 2.4 EN16931 PDF</button>
+                          <button onclick={() => erstelleERechnung(r, 'zugferd_extended')}>ZUGFeRD 2.4 EXTENDED PDF (BETA)</button>
+                          <button onclick={() => erstelleERechnung(r, 'xrechnung')}>XRechnung 3.0.2 XML</button>
+                        </div>
+                      {/if}
+                    </div>
                     <button class="icon-btn icon-btn-danger" title="Stornieren" onclick={() => oeffneStornoModal(r)}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
                     </button>
@@ -608,6 +726,17 @@
             <button class="btn-secondary btn-sm" onclick={() => ladePDF(vorschauRechnung)}>PDF</button>
             {#if vorschauRechnung.status !== 'storniert' && vorschauRechnung.rechnung_typ !== 'storno'}
               <button class="btn-secondary btn-sm" onclick={() => oeffneSendenModal(vorschauRechnung)}>E-Mail</button>
+              <!-- E-Rechnung im Vorschau-Panel -->
+              <div class="erechnungs-wrap" style="position:relative" onclick={(e) => e.stopPropagation()}>
+                <button class="btn-secondary btn-sm" onclick={(e) => oeffneERechnungMenu(vorschauRechnung, e)}>E-Rechnung ▾</button>
+                {#if eRechnungMenuOffen && eRechnungRechnung?.id === vorschauRechnung.id}
+                  <div class="erechnung-menu" style="bottom:auto;top:calc(100% + 4px)">
+                    <button onclick={() => erstelleERechnung(vorschauRechnung, 'zugferd_en16931')}>ZUGFeRD 2.4 EN16931 PDF</button>
+                    <button onclick={() => erstelleERechnung(vorschauRechnung, 'zugferd_extended')}>ZUGFeRD 2.4 EXTENDED PDF (BETA)</button>
+                    <button onclick={() => erstelleERechnung(vorschauRechnung, 'xrechnung')}>XRechnung 3.0.2 XML</button>
+                  </div>
+                {/if}
+              </div>
               <button class="btn-secondary btn-sm" onclick={() => oeffneBearbeitenModal(vorschauRechnung)}>Bearbeiten</button>
               <button class="btn-danger btn-sm" onclick={() => oeffneStornoModal(vorschauRechnung)}>Stornieren</button>
             {/if}
@@ -869,6 +998,11 @@
   .icon-btn:hover { color:var(--primary); background:var(--surface2); }
   .icon-btn-edit:hover { color:#7c3aed; background:#f5f3ff; }
   .icon-btn-danger:hover { color:#ef4444; background:#fef2f2; }
+  .icon-btn-erechnung:hover { color:#0891b2; background:#ecfeff; }
+  .erechnungs-wrap { position:relative; display:inline-flex; }
+  .erechnung-menu { position:absolute; bottom:calc(100% + 4px); right:0; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,0.14); z-index:200; min-width:230px; overflow:hidden; }
+  .erechnung-menu button { display:block; width:100%; text-align:left; padding:9px 14px; background:transparent; border:none; color:var(--text); font-size:0.81rem; cursor:pointer; white-space:nowrap; }
+  .erechnung-menu button:hover { background:var(--surface2); color:var(--primary); }
   .kpi-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
   .kpi-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
   .kpi-card-wide { grid-column:span 2; }
@@ -885,11 +1019,8 @@
   .tab-count { background:var(--border); color:var(--text2); font-size:0.72rem; padding:1px 6px; border-radius:99px; }
   .filter-tab.active .tab-count { background:var(--primary-light); color:var(--primary); }
   .toolbar-right { display:flex; gap:10px; align-items:center; }
-  .suche-input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:7px 12px; border-radius:8px; font-size:0.83rem; width:220px; outline:none; }
-  .suche-input:focus { border-color:var(--primary); }
-  .suche-input::placeholder { color:var(--text3); }
   .select-klein { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:8px; font-size:0.83rem; cursor:pointer; outline:none; }
-  .bulk-bar { display:flex; align-items:center; gap:12px; background:var(--primary-light); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:0.83rem; color:var(--primary); }
+  .bulk-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--primary-light); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:0.83rem; color:var(--primary); flex-wrap:wrap; }
   .haupt-bereich { display:flex; gap:16px; align-items:flex-start; }
   .tabellen-wrapper { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; min-width:0; }
   .tabelle { width:100%; border-collapse:collapse; font-size:0.83rem; }
@@ -897,7 +1028,7 @@
   .tabelle th { padding:10px 12px; text-align:left; font-weight:600; font-size:0.75rem; color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; }
   .th-check { width:36px; }
   .th-right { text-align:right; }
-  .th-actions { width:140px; }
+  .th-actions { width:170px; }
   .tbl-row { border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.12s; }
   .tbl-row:last-child { border-bottom:none; }
   .tbl-row:hover { background:var(--surface2); }
