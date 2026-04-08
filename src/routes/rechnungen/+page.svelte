@@ -562,24 +562,23 @@
 
   <!-- Bulk-Aktionsleiste -->
   {#if ausgewaehlt.size > 0}
-    <div class="bulk-bar">
-      <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn-ghost btn-sm" onclick={bulkDrucken} title="PDFs herunterladen">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          PDFs laden
-        </button>
-        <button class="btn-ghost btn-sm" onclick={bulkEmailSenden} title="An Käufer-Email senden">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          Per E-Mail senden
-        </button>
-        <button class="btn-ghost btn-sm" onclick={bulkExportCSV} title="Als CSV exportieren">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          CSV exportieren
-        </button>
-        <button class="btn-ghost btn-sm" onclick={() => { ausgewaehlt = new Set(); alleAusgewaehlt = false; }}>Auswahl aufheben</button>
-      </div>
+      <div class="bulk-bar">
+    <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn-ghost btn-sm" onclick={bulkDrucken} title="PDFs herunterladen">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        PDFs laden
+      </button>
+      <button class="btn-ghost btn-sm" onclick={bulkEmailSenden} title="An Käufer-Email senden">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Per E-Mail senden
+      </button>
+      <button class="btn-ghost btn-sm" onclick={bulkExportCSV} title="Als CSV exportieren">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        CSV exportieren
+      </button>
     </div>
+  </div>
   {/if}
 
   <!-- Haupt-Bereich -->
