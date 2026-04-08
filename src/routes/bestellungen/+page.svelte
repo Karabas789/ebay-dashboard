@@ -37,13 +37,21 @@
   let showDetailModal = $state(false);
   let detailOrder = $state(null);
 
+  // E-Rechnung Dropdown im Detail-Modal
+  let eRechnungDropdownOpen = $state(false);
+  let eRechnungWorking = $state(false);
+
+  // Rechnung erstellen (aus Bestellung)
+  let rechnungWorking = $state(false);
+
+  // Bulk-E-Mail
+  let bulkEmailWorking = $state(false);
 
   // ─── Derived ───────────────────────────────────────────────────────────────
   let filteredOrders = $derived.by(() => {
     let orders = allOrders;
     const q = searchQuery.toLowerCase();
 
-    // Tab-Filter
     if (ordersFilter === 'archiviert') {
       orders = orders.filter(o => o.archiviert || o.status === 'archiviert');
     } else {
@@ -51,7 +59,6 @@
       if (ordersFilter !== 'alle') orders = orders.filter(o => o.status === ordersFilter);
     }
 
-    // Suche
     if (q) {
       orders = orders.filter(o =>
         (o.order_id || '').toLowerCase().includes(q) ||
@@ -85,7 +92,6 @@
   });
 
   // ─── API ───────────────────────────────────────────────────────────────────
-  // Produkte laden (nur für Bilder — lightweight)
   async function loadProdukte() {
     try {
       const data = await apiCall('/produkte-laden', {
@@ -96,7 +102,6 @@
         allProdukte = data.data || [];
       }
     } catch (e) {
-      // Bilder-Laden ist optional — kein Toast
       console.warn('Produkte für Bilder nicht ladbar:', e);
     }
   }
@@ -200,23 +205,8 @@
       if (!sd.success || !sd.data?.auto_rechnung) return;
       const existiert = allRechnungen.some(r => String(r.order_id) === String(orderId) && r.rechnung_typ === 'rechnung');
       if (existiert) return;
-      const res = await apiCall('/rechnung-erstellen', {
-        user_id: $currentUser.id,
-        typ: 'rechnung',
-        order_id: orderId,
-        kaeufer_name: order.buyer_name || order.buyer_username || '',
-        kaeufer_username: order.buyer_username || '',
-        kaeufer_strasse: order.buyer_strasse || '',
-        kaeufer_plz: order.buyer_plz || '',
-        kaeufer_ort: order.buyer_ort || '',
-        kaeufer_land: order.buyer_land || '',
-        kaeufer_email: order.buyer_email || '',
-        artikel_name: order.artikel_name || '',
-        menge: order.menge || 1,
-        einzelpreis: parseFloat(order.gesamt || 0) / (order.menge || 1),
-        ebay_artikel_id: order.ebay_artikel_id || ''
-      });
-      if (res.success) {
+      const res = await erstelleRechnungFuerOrder(order);
+      if (res?.success) {
         showToast('Rechnung ' + res.rechnung_nr + ' erstellt', 'success');
         if (sd.data?.auto_email && order.buyer_email) {
           await apiCall('/rechnung-senden', {
@@ -229,6 +219,123 @@
     } catch (e) {
       console.warn('Auto-Rechnung:', e);
     }
+  }
+
+  // Rechnung aus Bestellung erstellen (manuell aus Detail-Modal)
+  async function erstelleRechnungAusBestellung(order) {
+    if (!order) return;
+    rechnungWorking = true;
+    try {
+      const res = await erstelleRechnungFuerOrder(order);
+      if (res?.success) {
+        showToast('✅ Rechnung ' + res.rechnung_nr + ' erstellt', 'success');
+        await loadBestellungen();
+        // detailOrder aktualisieren
+        const updated = allOrders.find(o => String(o.order_id) === String(order.order_id));
+        if (updated) detailOrder = updated;
+      } else {
+        showToast('Fehler beim Erstellen der Rechnung', 'error');
+      }
+    } catch (e) {
+      showToast('Verbindungsfehler', 'error');
+    } finally {
+      rechnungWorking = false;
+    }
+  }
+
+  // Gemeinsame Funktion: Rechnung erstellen API-Call
+  async function erstelleRechnungFuerOrder(order) {
+    return await apiCall('/rechnung-erstellen', {
+      user_id: $currentUser.id,
+      typ: 'rechnung',
+      order_id: order.order_id,
+      kaeufer_name: order.buyer_name || order.buyer_username || '',
+      kaeufer_username: order.buyer_username || '',
+      kaeufer_strasse: order.buyer_strasse || '',
+      kaeufer_plz: order.buyer_plz || '',
+      kaeufer_ort: order.buyer_ort || '',
+      kaeufer_land: order.buyer_land || '',
+      kaeufer_email: order.buyer_email || '',
+      artikel_name: order.artikel_name || '',
+      menge: order.menge || 1,
+      einzelpreis: parseFloat(order.gesamt || 0) / (order.menge || 1),
+      ebay_artikel_id: order.ebay_artikel_id || ''
+    });
+  }
+
+  // E-Rechnung aus Bestellung erstellen
+  async function erstelleERechnungAusBestellung(order, format) {
+    if (!order?.invoice_id) {
+      showToast('Zuerst eine Rechnung erstellen', 'error');
+      return;
+    }
+    eRechnungWorking = true;
+    eRechnungDropdownOpen = false;
+    try {
+      const res = await apiCall('/e-rechnung-erstellen', {
+        user_id: $currentUser.id,
+        invoice_id: order.invoice_id,
+        format
+      });
+      if (res?.success) {
+        showToast('✅ E-Rechnung (' + format + ') erstellt', 'success');
+        if (res.download_url) {
+          window.open(res.download_url, '_blank');
+        } else if (res.pdf_base64) {
+          downloadBase64(res.pdf_base64, 'application/pdf', `e-rechnung-${order.invoice_id}.pdf`);
+        } else if (res.xml_content) {
+          downloadText(res.xml_content, 'application/xml', `xrechnung-${order.invoice_id}.xml`);
+        }
+      } else {
+        showToast('Fehler: ' + (res?.message || 'E-Rechnung konnte nicht erstellt werden'), 'error');
+      }
+    } catch (e) {
+      showToast('Verbindungsfehler', 'error');
+    } finally {
+      eRechnungWorking = false;
+    }
+  }
+
+  // Bulk-E-Mail: Rechnung an buyer_email senden
+  async function bulkEmailSenden() {
+    if (!hasSelected) return;
+    bulkEmailWorking = true;
+    let ok = 0;
+    let fehler = 0;
+    for (const id of selectedOrderIds) {
+      const order = allOrders.find(o => String(o.order_id || o.id) === String(id));
+      if (!order?.buyer_email || !order?.invoice_id) { fehler++; continue; }
+      try {
+        const res = await apiCall('/rechnung-senden', {
+          invoice_id: order.invoice_id,
+          user_id: $currentUser.id,
+          to_email: order.buyer_email
+        });
+        if (res?.success) ok++;
+        else fehler++;
+      } catch (e) { fehler++; }
+    }
+    bulkEmailWorking = false;
+    if (ok > 0) showToast(`✅ ${ok} Rechnung(en) gesendet${fehler > 0 ? ` (${fehler} übersprungen)` : ''}`, 'success');
+    else showToast(`⚠️ Keine Rechnungen gesendet (${fehler} ohne Rechnung/E-Mail)`, 'error');
+  }
+
+  // ─── Download Helpers ───────────────────────────────────────────────────────
+  function downloadBase64(base64, mimeType, filename) {
+    const a = document.createElement('a');
+    a.href = `data:${mimeType};base64,${base64}`;
+    a.download = filename;
+    a.click();
+  }
+
+  function downloadText(text, mimeType, filename) {
+    const blob = new Blob([text], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -296,6 +403,7 @@
 
   function openDetailModal(order) {
     detailOrder = order;
+    eRechnungDropdownOpen = false;
     showDetailModal = true;
   }
 
@@ -346,7 +454,7 @@
   </div>
 
   <!-- Search + Action Buttons -->
-  <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:200px;">
+  <div style="display:flex;gap:8px;align-items:center;flex:1;min-width:200px;flex-wrap:wrap;">
     <div class="search-wrap" style="flex:1;max-width:300px;">
       <input
         class="search-box"
@@ -371,6 +479,17 @@
 
     {#if singleSelected && !isArchivView}
       <button class="btn-action-primary" onclick={openMsgModal}>✉️ Nachricht</button>
+    {/if}
+
+    {#if hasSelected && !isArchivView}
+      <button
+        class="btn-action-primary"
+        onclick={bulkEmailSenden}
+        disabled={bulkEmailWorking}
+        title="Rechnung per E-Mail an Käufer senden (nur Bestellungen mit Rechnung)"
+      >
+        {bulkEmailWorking ? '⏳ Sende...' : `📧 Rechnung senden (${selectedCount})`}
+      </button>
     {/if}
   </div>
 </div>
@@ -458,6 +577,9 @@
                       {o.artikel_name || '—'}
                     {/if}
                   </div>
+                  {#if o.sold_sku}
+                    <div class="artikel-sku">SKU: {o.sold_sku}</div>
+                  {/if}
                   {#if o.ebay_artikel_id}
                     <div class="artikel-id">eBay: {o.ebay_artikel_id}</div>
                   {/if}
@@ -468,6 +590,9 @@
             <td style="text-align:right;font-weight:700;">{parseFloat(o.gesamt || 0).toFixed(2)} €</td>
             <td>
               <span class="badge badge-{o.status}">{statusLabel(o.status)}</span>
+              {#if o.hat_rechnung}
+                <span class="badge badge-rechnung" title="Rechnung vorhanden">🧾 RE</span>
+              {/if}
             </td>
             <td class="col-tracking">
               {#if o.tracking_nummer}
@@ -605,7 +730,7 @@
   {@const trackUrl = getTrackingUrl(o.tracking_nummer, o.versanddienstleister)}
   <div
     class="modal-overlay open"
-    onclick={(e) => { if (e.target === e.currentTarget) showDetailModal = false; }}
+    onclick={(e) => { if (e.target === e.currentTarget) { showDetailModal = false; eRechnungDropdownOpen = false; } }}
   >
     <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto;">
       <!-- Header -->
@@ -614,7 +739,12 @@
           <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Bestellung</div>
           <div style="font-size:20px;font-weight:800;color:var(--text);margin-top:4px;">{o.order_id}</div>
         </div>
-        <span class="badge badge-{o.status}" style="font-size:13px;padding:4px 14px;">{statusLabel(o.status)}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <span class="badge badge-{o.status}" style="font-size:13px;padding:4px 14px;">{statusLabel(o.status)}</span>
+          {#if o.hat_rechnung}
+            <span class="badge badge-rechnung" style="font-size:11px;padding:3px 10px;">🧾 Rechnung vorhanden</span>
+          {/if}
+        </div>
       </div>
 
       <!-- Grid -->
@@ -630,8 +760,16 @@
                 {o.artikel_name || '—'}
               {/if}
             </div>
+            {#if o.sold_sku}
+              <div style="margin-top:8px;">
+                <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;">Variante (SKU)</span>
+                <div style="margin-top:3px;">
+                  <code style="font-size:12px;background:var(--surface);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{o.sold_sku}</code>
+                </div>
+              </div>
+            {/if}
             {#if o.ebay_artikel_id}
-              <div style="font-size:11px;color:var(--text3);margin-top:4px;">eBay-ID: {o.ebay_artikel_id}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:6px;">eBay-ID: {o.ebay_artikel_id}</div>
             {/if}
           </div>
         </div>
@@ -643,6 +781,9 @@
             <div style="font-weight:600;">{o.buyer_name || '—'}</div>
             {#if o.buyer_username}
               <div style="font-size:11px;color:var(--text3);">@{o.buyer_username}</div>
+            {/if}
+            {#if o.buyer_email}
+              <div style="font-size:12px;color:var(--text2);margin-top:4px;">📧 {o.buyer_email}</div>
             {/if}
             {#if o.buyer_strasse}
               <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">
@@ -690,18 +831,69 @@
       </div>
 
       <!-- Actions -->
-      <div class="modal-actions">
-        <button class="btn-cancel" onclick={() => showDetailModal = false}>Schließen</button>
+      <div class="modal-actions" style="flex-wrap:wrap;">
+        <button class="btn-cancel" onclick={() => { showDetailModal = false; eRechnungDropdownOpen = false; }}>Schließen</button>
+
         {#if o.status !== 'archiviert' && o.status !== 'storniert'}
+          <!-- Nachricht senden -->
           <button
-            class="btn-primary"
-            style="width:auto;padding:10px 22px;"
+            class="btn-secondary"
             onclick={() => {
               showDetailModal = false;
               selectedOrderIds = new Set([String(o.order_id || o.id)]);
               openMsgModal();
             }}
-          >✉️ Nachricht senden</button>
+          >✉️ Nachricht</button>
+
+          <!-- Rechnung erstellen (nur wenn noch keine vorhanden) -->
+          {#if !o.hat_rechnung}
+            <button
+              class="btn-primary"
+              style="width:auto;padding:10px 20px;"
+              onclick={() => erstelleRechnungAusBestellung(o)}
+              disabled={rechnungWorking}
+            >{rechnungWorking ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}</button>
+          {/if}
+
+          <!-- E-Rechnung Dropdown (nur wenn Rechnung vorhanden) -->
+          {#if o.hat_rechnung && o.invoice_id}
+            <div style="position:relative;">
+              <button
+                class="btn-primary"
+                style="width:auto;padding:10px 18px;display:flex;align-items:center;gap:6px;"
+                onclick={() => eRechnungDropdownOpen = !eRechnungDropdownOpen}
+                disabled={eRechnungWorking}
+              >
+                {eRechnungWorking ? '⏳ Erstelle...' : '📄 E-Rechnung'}
+                <span style="font-size:10px;">{eRechnungDropdownOpen ? '▲' : '▼'}</span>
+              </button>
+              {#if eRechnungDropdownOpen}
+                <div class="erechnung-dropdown">
+                  <button onclick={() => erstelleERechnungAusBestellung(o, 'zugferd_en16931')}>
+                    <span class="dd-icon">🇩🇪</span>
+                    <div>
+                      <div class="dd-label">ZUGFeRD EN16931</div>
+                      <div class="dd-sub">PDF + eingebettetes XML</div>
+                    </div>
+                  </button>
+                  <button onclick={() => erstelleERechnungAusBestellung(o, 'zugferd_extended')}>
+                    <span class="dd-icon">🇪🇺</span>
+                    <div>
+                      <div class="dd-label">ZUGFeRD EXTENDED</div>
+                      <div class="dd-sub">Erweitertes Format (Beta)</div>
+                    </div>
+                  </button>
+                  <button onclick={() => erstelleERechnungAusBestellung(o, 'xrechnung')}>
+                    <span class="dd-icon">📋</span>
+                    <div>
+                      <div class="dd-label">XRechnung</div>
+                      <div class="dd-sub">XML-Download (B2B/Behörden)</div>
+                    </div>
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {/if}
         {/if}
       </div>
     </div>
@@ -722,16 +914,8 @@
     align-items: flex-start;
     margin-bottom: 24px;
   }
-  .page-hdr-title {
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--text);
-  }
-  .page-hdr-sub {
-    font-size: 13px;
-    color: var(--text2);
-    margin-top: 2px;
-  }
+  .page-hdr-title { font-size: 22px; font-weight: 800; color: var(--text); }
+  .page-hdr-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
   .btn-refresh {
     display: flex;
     align-items: center;
@@ -772,8 +956,7 @@
     align-items: center;
     gap: 5px;
   }
-  .orders-filter-btn:hover,
-  .orders-filter-btn.active {
+  .orders-filter-btn:hover, .orders-filter-btn.active {
     border-color: var(--primary);
     background: var(--primary-light);
     color: var(--primary);
@@ -786,11 +969,6 @@
     font-size: 10px;
     font-weight: 700;
   }
-  .orders-filter-btn.active .filter-badge {
-    background: var(--primary);
-  }
-
-  /* Action buttons */
   .btn-action-warn {
     background: #f59e0b;
     border: none;
@@ -813,6 +991,7 @@
     cursor: pointer;
     white-space: nowrap;
   }
+  .btn-action-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
   /* ── Search ─────────────────────────────────────────────── */
   .search-wrap { position: relative; }
@@ -837,11 +1016,7 @@
     box-shadow: var(--shadow);
     overflow: hidden;
   }
-  .orders-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
+  .orders-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .orders-table th {
     background: var(--surface2);
     padding: 10px 14px;
@@ -862,19 +1037,8 @@
   .orders-table tr:last-child td { border-bottom: none; }
   .orders-table tr:hover td { background: var(--surface2); }
   .orders-table tr.selected td { background: var(--primary-light); }
-
-  .table-loading,
-  .table-empty {
-    text-align: center;
-    padding: 48px;
-    color: var(--text3);
-  }
-  .table-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-  }
+  .table-loading, .table-empty { text-align: center; padding: 48px; color: var(--text3); }
+  .table-loading { display: flex; align-items: center; justify-content: center; gap: 10px; }
 
   /* Columns */
   .col-date { white-space: nowrap; color: var(--text2); }
@@ -890,11 +1054,15 @@
   .buyer-location { font-size: 11px; color: var(--text3); margin-top: 2px; }
   .col-artikel { max-width: 220px; }
   .artikel-name { font-size: 13px; }
-  .artikel-id { font-size: 11px; color: var(--text3); margin-top: 2px; }
-  .artikel-ebay-link {
-    color: var(--text);
-    text-decoration: none;
+  .artikel-sku {
+    font-size: 11px;
+    color: var(--primary);
+    font-weight: 600;
+    margin-top: 3px;
+    font-family: monospace;
   }
+  .artikel-id { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .artikel-ebay-link { color: var(--text); text-decoration: none; }
   .artikel-ebay-link:hover { color: var(--primary); text-decoration: underline; }
   .col-tracking { min-width: 140px; }
   .tracking-link {
@@ -922,9 +1090,9 @@
   }
   .btn-add-tracking:hover { opacity: 0.85; }
 
-
   /* ── Status Badges ──────────────────────────────────────── */
   .badge {
+    display: inline-block;
     font-size: 11px;
     font-weight: 700;
     padding: 2px 10px;
@@ -935,9 +1103,15 @@
   .badge-storniert { background: #fef2f2; color: #dc2626; }
   .badge-bezahlt   { background: #fffbeb; color: #d97706; }
   .badge-archiviert { background: var(--surface2); color: var(--text2); }
+  .badge-rechnung {
+    background: #eff6ff;
+    color: #2563eb;
+    margin-top: 4px;
+  }
   :global([data-theme="dark"]) .badge-versendet { background: rgba(34,197,94,0.15); color: #86efac; }
   :global([data-theme="dark"]) .badge-storniert { background: rgba(239,68,68,0.15); color: #fca5a5; }
   :global([data-theme="dark"]) .badge-bezahlt   { background: rgba(245,158,11,0.15); color: #fcd34d; }
+  :global([data-theme="dark"]) .badge-rechnung  { background: rgba(37,99,235,0.15); color: #93c5fd; }
 
   /* ── Modals ─────────────────────────────────────────────── */
   .modal-overlay {
@@ -959,12 +1133,7 @@
     width: 95%;
     box-shadow: 0 20px 60px rgba(0,0,0,0.2);
   }
-  .modal-title {
-    font-size: 18px;
-    font-weight: 800;
-    margin-bottom: 20px;
-    color: var(--text);
-  }
+  .modal-title { font-size: 18px; font-weight: 800; margin-bottom: 20px; color: var(--text); }
   .modal-field { margin-bottom: 16px; }
   .modal-field label {
     display: block;
@@ -997,6 +1166,7 @@
     gap: 10px;
     justify-content: flex-end;
     margin-top: 20px;
+    align-items: center;
   }
   .btn-cancel {
     background: transparent;
@@ -1024,6 +1194,19 @@
   }
   .btn-primary:hover { opacity: 0.9; }
   .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
 
   /* ── Detail Modal Cards ─────────────────────────────────── */
   .detail-card {
@@ -1042,10 +1225,41 @@
   }
   .detail-card-body { color: var(--text); }
 
+  /* ── E-Rechnung Dropdown ────────────────────────────────── */
+  .erechnung-dropdown {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    right: 0;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    min-width: 240px;
+    z-index: 100;
+    overflow: hidden;
+  }
+  .erechnung-dropdown button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s;
+    color: var(--text);
+  }
+  .erechnung-dropdown button:hover { background: var(--primary-light); }
+  .erechnung-dropdown button + button { border-top: 1px solid var(--border); }
+  .dd-icon { font-size: 18px; flex-shrink: 0; }
+  .dd-label { font-size: 13px; font-weight: 700; }
+  .dd-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
   /* ── Spinner ────────────────────────────────────────────── */
   .spinner {
-    width: 18px;
-    height: 18px;
+    width: 18px; height: 18px;
     border: 2px solid var(--border);
     border-top-color: var(--primary);
     border-radius: 50%;
@@ -1053,8 +1267,7 @@
     display: inline-block;
   }
   .spinner-sm {
-    width: 14px;
-    height: 14px;
+    width: 14px; height: 14px;
     border: 2px solid rgba(255,255,255,0.4);
     border-top-color: white;
     border-radius: 50%;
@@ -1066,8 +1279,7 @@
   /* ── Toast ──────────────────────────────────────────────── */
   .toast {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
+    bottom: 24px; right: 24px;
     z-index: 9999;
     padding: 12px 20px;
     border-radius: 12px;
@@ -1081,7 +1293,7 @@
   .toast-info    { background: var(--primary); color: white; }
   @keyframes slideIn {
     from { transform: translateY(20px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
+    to   { transform: translateY(0); opacity: 1; }
   }
 
   /* ── Responsive ─────────────────────────────────────────── */
