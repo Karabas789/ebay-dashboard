@@ -235,7 +235,7 @@
       bearbeitenModal = false;
       await ladeRechnungen();
     } catch(e) {
-      showToast('Fehler: ' + e.message);
+      showToast('E-Rechnung: Backend noch nicht eingerichtet');
     } finally {
       bearbeitenLaeuft = false;
     }
@@ -562,7 +562,7 @@
 
   <!-- Bulk-Aktionsleiste -->
   {#if ausgewaehlt.size > 0}
-      <div class="bulk-bar">
+       <div class="bulk-bar">
     <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn-ghost btn-sm" onclick={bulkDrucken} title="PDFs herunterladen">
@@ -602,8 +602,10 @@
           <thead>
             <tr>
               <th class="th-check" onclick={(e) => e.stopPropagation()}>
-                <input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} />
-              </th>
+              <label class="chk-label">
+              <input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} />
+              </label>
+             </th>
               <th>Nummer</th><th>Datum</th><th>Kaeufer</th><th>Artikel</th>
               <th class="th-right">Netto</th><th class="th-right">MwSt.</th><th class="th-right">Brutto</th>
               <th>Status</th><th class="th-actions">Aktionen</th>
@@ -613,8 +615,10 @@
             {#each sichtbar as r (r.id)}
               {@const badge = statusBadge(r)}
               <tr class="tbl-row {vorschauRechnung?.id === r.id ? 'aktiv' : ''}" onclick={() => oeffneVorschau(r)}>
-                <td class="td-check" onclick={(e) => { e.stopPropagation(); toggleAuswahl(r.id); }}>
-                  <input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} />
+                <td class="td-check" onclick={(e) => e.stopPropagation()}>
+                 <label class="chk-label">
+                 <input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} />
+                 </label>
                 </td>
                 <td class="td-nr">{r.rechnung_nr || '-'}</td>
                 <td class="td-datum">{fmtDatum(r.erstellt_am)}</td>
@@ -1108,4 +1112,8 @@
   .pos-details { flex:1; min-width:0; }
   .pos-menge { display:flex; flex-direction:column; align-items:center; gap:2px; }
   .pos-preis { font-size:0.85rem; font-weight:600; color:var(--text); white-space:nowrap; min-width:70px; text-align:right; }
+
+  .chk-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:20px; cursor:pointer; padding:4px; box-sizing:border-box; }
+  .chk-label input[type="checkbox"] { width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0; }
+ .td-check { width:36px; padding:0 !important; }
 </style>
