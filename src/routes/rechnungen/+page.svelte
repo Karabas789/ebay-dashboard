@@ -110,27 +110,50 @@
   }
 
   async function schnellsucheNachOrder() {
-    if (!schnellsucheOrderId.trim()) return;
-    schnellsucheLaeuft = true;
-    schnellsucheFehler = '';
-    schnellsucheErgebnis = null;
-    try {
-      const data = await apiCall('bestellung-laden', {
-        user_id: $currentUser.id,
-        order_id: schnellsucheOrderId.trim()
-      });
-      if (data?.bestellung) {
-        schnellsucheErgebnis = data.bestellung;
-        schnellsucheModalOffen = true;
-      } else {
-        schnellsucheFehler = 'Keine Bestellung gefunden';
-      }
-    } catch(e) {
-      schnellsucheFehler = 'Fehler bei der Suche';
-    } finally {
-      schnellsucheLaeuft = false;
-    }
+  if (!schnellsucheOrderId.trim()) return;
+  const term = schnellsucheOrderId.trim().toLowerCase();
+
+  // Zuerst lokal in bereits geladenen Rechnungen suchen
+  const lokaleErgebnisse = rechnungen.filter(r =>
+    r.rechnung_nr?.toLowerCase().includes(term) ||
+    r.kaeufer_name?.toLowerCase().includes(term) ||
+    r.kaeufer_email?.toLowerCase().includes(term) ||
+    r.kaeufer_strasse?.toLowerCase().includes(term) ||
+    r.kaeufer_plz?.toLowerCase().includes(term) ||
+    r.kaeufer_ort?.toLowerCase().includes(term) ||
+    r.artikel_name?.toLowerCase().includes(term) ||
+    r.ebay_artikel_id?.toLowerCase().includes(term) ||
+    r.order_id?.toLowerCase().includes(term)
+  );
+
+  if (lokaleErgebnisse.length > 0) {
+    // Direkt Tabelle filtern statt Modal
+    suchbegriff = schnellsucheOrderId.trim();
+    schnellsucheOrderId = '';
+    return;
   }
+
+  // Wenn nichts lokal gefunden: Backend (bestellung-laden) anfragen
+  schnellsucheLaeuft = true;
+  schnellsucheFehler = '';
+  schnellsucheErgebnis = null;
+  try {
+    const data = await apiCall('bestellung-laden', {
+      user_id: $currentUser.id,
+      order_id: schnellsucheOrderId.trim()
+    });
+    if (data?.bestellung) {
+      schnellsucheErgebnis = data.bestellung;
+      schnellsucheModalOffen = true;
+    } else {
+      schnellsucheFehler = 'Nichts gefunden';
+    }
+  } catch(e) {
+    schnellsucheFehler = 'Nichts gefunden';
+  } finally {
+    schnellsucheLaeuft = false;
+  }
+}
 
   function schliesseSchnellsucheModal() {
     schnellsucheModalOffen = false;
@@ -226,11 +249,16 @@
     if (suchbegriff.trim()) {
       const s = suchbegriff.toLowerCase();
       liste = liste.filter(r =>
-        r.rechnung_nr?.toLowerCase().includes(s) ||
-        r.kaeufer_name?.toLowerCase().includes(s) ||
-        r.artikel_name?.toLowerCase().includes(s) ||
-        r.order_id?.toLowerCase().includes(s)
-      );
+   r.rechnung_nr?.toLowerCase().includes(s) ||
+   r.kaeufer_name?.toLowerCase().includes(s) ||
+   r.kaeufer_email?.toLowerCase().includes(s) ||
+   r.kaeufer_strasse?.toLowerCase().includes(s) ||
+   r.kaeufer_plz?.toLowerCase().includes(s) ||
+   r.kaeufer_ort?.toLowerCase().includes(s) ||
+   r.artikel_name?.toLowerCase().includes(s) ||
+   r.ebay_artikel_id?.toLowerCase().includes(s) ||
+   r.order_id?.toLowerCase().includes(s)
+   );
     }
     return liste;
   });
@@ -376,7 +404,7 @@
         <input
           class="hdr-suche-input"
           type="text"
-          placeholder="Bestellnr. suchen..."
+          placeholder="Name, Rechnungs-Nr., Bestellnr. ..."
           bind:value={schnellsucheOrderId}
           onkeydown={(e) => e.key === 'Enter' && schnellsucheNachOrder()}
         />
@@ -436,7 +464,6 @@
       {/each}
     </div>
     <div class="toolbar-right">
-      <input class="suche-input" type="text" placeholder="Suche Nr., Kaeufer, Artikel..." bind:value={suchbegriff} />
       <select class="select-klein" bind:value={proSeite} onchange={() => aktuelleSeite = 1}>
         <option value={20}>20 / Seite</option>
         <option value={50}>50 / Seite</option>
