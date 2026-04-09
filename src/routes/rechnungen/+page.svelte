@@ -29,6 +29,7 @@
   let bestellungLaeuft = $state(false);
   let bestellungFehler = $state('');
   let duplikatRechnung = $state(null);
+  let aenderungsgrund = $state('');   // ← wieder da
 
   let sendenModal = $state(false);
   let sendenRechnung = $state(null);
@@ -46,7 +47,6 @@
   let schnellsucheLaeuft = $state(false);
   let schnellsucheFehler = $state('');
 
-  // Bug 1 Fix: fixed-position Dropdown für E-Rechnung
   let eRechnungMenuOffen = $state(false);
   let eRechnungRechnung = $state(null);
   let eRechnungMenuPos = $state({ top: 0, left: 0 });
@@ -87,6 +87,7 @@
     };
     bestellungFehler = '';
     duplikatRechnung = null;
+    aenderungsgrund = '';
   }
 
   function oeffneNeuModal(vorbelegung = null) {
@@ -104,7 +105,7 @@
     modalOffen = true;
   }
 
-  // Bug 2 Fix: Bearbeiten = direktes Update, KEIN automatischer Storno
+  // Daten kommen direkt aus der Rechnung — kein Laden nötig
   function oeffneBearbeitenModal(r) {
     resetForm();
     form = {
@@ -131,6 +132,7 @@
     modalRechnung = null;
     bestellungFehler = '';
     duplikatRechnung = null;
+    aenderungsgrund = '';
     eRechnungMenuOffen = false;
     eRechnungRechnung = null;
   }
@@ -194,7 +196,6 @@
     if (!form.kaeufer_name || !form.artikel_name || !form.einzelpreis) {
       showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
     }
-    // Duplikat-Check nur wenn Bestellnr. angegeben
     if (form.order_id?.trim()) {
       const dup = findeVorhandeneRechnung(form.order_id);
       if (dup) { duplikatRechnung = dup; return; }
@@ -214,10 +215,13 @@
     } catch(e) { showToast('Fehler: ' + e.message); } finally { modalLaeuft = false; }
   }
 
-  // Bug 2 Fix: direktes Update, kein Storno
+  // Direktes Update mit Änderungsgrund
   async function speichereBearbeitung() {
     if (!form.kaeufer_name || !form.artikel_name || !form.einzelpreis) {
       showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
+    }
+    if (!aenderungsgrund.trim()) {
+      showToast('Bitte Grund der Änderung angeben.'); return;
     }
     modalLaeuft = true;
     try {
@@ -229,6 +233,9 @@
         kaeufer_land: form.kaeufer_land, artikel_name: form.artikel_name,
         ebay_artikel_id: form.ebay_artikel_id,
         menge: Number(form.menge), einzelpreis: Number(form.einzelpreis),
+        aenderungsgrund: aenderungsgrund.trim(),
+        aenderungsdatum: new Date().toISOString(),
+        vorgaenger_nr: modalRechnung.rechnung_nr,
       });
       showToast('✅ Rechnung aktualisiert'); schliesseModal(); await ladeRechnungen();
     } catch(e) { showToast('Fehler: ' + e.message); } finally { modalLaeuft = false; }
@@ -290,7 +297,6 @@
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `rechnungen-export-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
   }
 
-  // Bug 1 Fix: fixed-position Dropdown, immer vollständig sichtbar
   function oeffneERechnungMenu(r, e) {
     e.stopPropagation();
     if (eRechnungRechnung?.id === r.id && eRechnungMenuOffen) {
@@ -549,7 +555,7 @@
   {/if}
 </div>
 
-<!-- Bug 1 Fix: E-Rechnung Dropdown als fixed-positioniertes Element -->
+<!-- E-Rechnung Dropdown fixed -->
 {#if eRechnungMenuOffen && eRechnungRechnung}
   <div class="erechnung-dropdown-fixed"
     style="top:{eRechnungMenuPos.top}px;left:{eRechnungMenuPos.left}px"
@@ -564,6 +570,7 @@
   <div class="modal-overlay" onclick={schliesseModal}>
     <div class="modal-box modal-universal" onclick={(e) => e.stopPropagation()}>
 
+      <!-- DETAIL -->
       {#if modalModus === 'detail' && modalRechnung}
         {@const r = modalRechnung}
         {@const badge = statusBadge(r)}
@@ -631,18 +638,13 @@
           {/if}
         </div>
 
-      {:else if modalModus === 'neu' || modalModus === 'bearbeiten'}
+      <!-- NEU -->
+      {:else if modalModus === 'neu'}
         <div class="modal-hdr">
-          <div>
-            <span class="modal-titel">
-              {#if modalModus === 'bearbeiten'}✏️ Rechnung bearbeiten — {modalRechnung?.rechnung_nr}{:else}Neue Rechnung erstellen{/if}
-            </span>
-          </div>
+          <span class="modal-titel">Neue Rechnung erstellen</span>
           <button class="icon-btn" onclick={schliesseModal}>✕</button>
         </div>
         <div class="modal-body">
-
-          <!-- Bug 3 Fix: Bestellnr. optional, Laden-Button nur wenn Wert vorhanden -->
           <div class="form-group" style="margin-bottom:14px">
             <label>Bestellnr. / Referenz <span style="font-weight:400;color:var(--text3)">(optional — eBay, Onlineshop, Barverkauf ...)</span></label>
             <div style="display:flex;gap:8px">
@@ -666,8 +668,7 @@
               <button class="btn-link" onclick={() => oeffneDetailModal(duplikatRechnung)}>Anzeigen →</button>
             </div>
           {/if}
-
-          {#if modalModus === 'neu' && form.order_id && !duplikatRechnung && !bestellungLaeuft}
+          {#if form.order_id && !duplikatRechnung && !bestellungLaeuft}
             {@const vorh = findeVorhandeneRechnung(form.order_id)}
             {#if vorh}
               <div class="hinweis hinweis-gruen" style="margin-bottom:14px">
@@ -699,19 +700,73 @@
               <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={form.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
             </div>
           </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-ghost" onclick={schliesseModal}>Abbrechen</button>
+          <button class="btn-primary" onclick={erstelleRechnung} disabled={modalLaeuft || !!duplikatRechnung}>
+            {modalLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
+          </button>
+        </div>
+
+      <!-- BEARBEITEN — Daten kommen direkt aus Rechnung, kein Laden-Button -->
+      {:else if modalModus === 'bearbeiten'}
+        <div class="modal-hdr">
+          <span class="modal-titel">✏️ Rechnung bearbeiten — {modalRechnung?.rechnung_nr}</span>
+          <button class="icon-btn" onclick={schliesseModal}>✕</button>
+        </div>
+        <div class="modal-body">
+
+          <div class="hinweis hinweis-gelb">
+            Die Änderungen werden direkt an der Rechnung gespeichert. Bitte gib unten einen Grund für die Änderung an.
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Bestellnr. / Referenz <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
+              <input bind:value={form.order_id} placeholder="z. B. eBay-Bestellnr., Auftragsnr. ..." />
+            </div>
+            <div class="form-group"><label>Käufer *</label><input bind:value={form.kaeufer_name} placeholder="Max Mustermann" /></div>
+            <div class="form-group"><label>E-Mail</label><input bind:value={form.kaeufer_email} type="email" placeholder="max@example.com" /></div>
+            <div class="form-group"><label>Straße</label><input bind:value={form.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>PLZ</label><input bind:value={form.kaeufer_plz} placeholder="12345" /></div>
+              <div class="form-group"><label>Ort</label><input bind:value={form.kaeufer_ort} placeholder="Berlin" /></div>
+            </div>
+            <div class="form-group"><label>Land</label><input bind:value={form.kaeufer_land} placeholder="DE" /></div>
+            <div class="form-group"><label>Artikel *</label><input bind:value={form.artikel_name} placeholder="Produktname" /></div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={form.ebay_artikel_id} placeholder="123456789012" /></div>
+              <div class="form-group">
+                <label>Variante (SKU)</label>
+                <input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
+              </div>
+            </div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>Menge *</label><input bind:value={form.menge} type="number" min="1" /></div>
+              <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={form.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
+            </div>
+          </div>
+
+          <!-- Änderungsgrund Pflichtfeld -->
+          <div class="form-group" style="margin-top:18px">
+            <label>Grund der Änderung * <span style="font-weight:400;color:var(--text3)">(wird intern gespeichert)</span></label>
+            <textarea
+              bind:value={aenderungsgrund}
+              placeholder="z. B. Käufer hat neue Lieferadresse mitgeteilt, Preis korrigiert ..."
+              rows="3"
+              style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"
+            ></textarea>
+            {#if !aenderungsgrund.trim()}
+              <p class="form-fehler">Pflichtfeld</p>
+            {/if}
+          </div>
 
         </div>
         <div class="modal-footer">
           <button class="btn-ghost" onclick={schliesseModal}>Abbrechen</button>
-          {#if modalModus === 'neu'}
-            <button class="btn-primary" onclick={erstelleRechnung} disabled={modalLaeuft || !!duplikatRechnung}>
-              {modalLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
-            </button>
-          {:else}
-            <button class="btn-primary" onclick={speichereBearbeitung} disabled={modalLaeuft}>
-              {modalLaeuft ? '⏳ Speichere...' : '💾 Änderung speichern'}
-            </button>
-          {/if}
+          <button class="btn-primary" onclick={speichereBearbeitung} disabled={modalLaeuft || !aenderungsgrund.trim()}>
+            {modalLaeuft ? '⏳ Speichere...' : '💾 Änderung speichern'}
+          </button>
         </div>
       {/if}
 
@@ -790,7 +845,6 @@
   .icon-btn-edit:hover { color:#7c3aed; background:#f5f3ff; }
   .icon-btn-danger:hover { color:#ef4444; background:#fef2f2; }
   .icon-btn-erechnung:hover { color:#0891b2; background:#ecfeff; }
-  /* Bug 1 Fix: fixed-position Dropdown, nie abgeschnitten */
   .erechnung-dropdown-fixed { position:fixed; background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.18); z-index:9999; min-width:270px; overflow:hidden; }
   .erechnung-dropdown-fixed button { display:block; width:100%; text-align:left; padding:10px 16px; background:transparent; border:none; color:var(--text); font-size:0.82rem; cursor:pointer; white-space:nowrap; }
   .erechnung-dropdown-fixed button:hover { background:var(--surface2); color:var(--primary); }
@@ -863,6 +917,7 @@
   .hinweis { border-radius:8px; padding:10px 14px; font-size:0.82rem; margin-bottom:14px; line-height:1.5; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .hinweis-rot { background:#fef2f2; border:1px solid #fecaca; color:#dc2626; }
   .hinweis-gruen { background:#f0fdf4; border:1px solid #bbf7d0; color:#16a34a; }
+  .hinweis-gelb { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
   .hinweis-blau { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
   .detail-meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .detail-datum { font-size:0.8rem; color:var(--text2); }
