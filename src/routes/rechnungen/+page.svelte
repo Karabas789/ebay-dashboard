@@ -68,11 +68,11 @@
   let bestellungFehler = $state('');
   let vorhandeneRechnungFuerOrder = $state(null);
 
-  // ── Helpers ──────────────────────────────────────────────────────
+   // ── Helpers ──────────────────────────────────────────────────────
   function clearBestellungLaden() {
-  bestellungFehler = '';
-  vorhandeneRechnungFuerOrder = null;
-}
+    bestellungFehler = '';
+    vorhandeneRechnungFuerOrder = null;
+  }
 
   function normalisiereBestellung(b) {
     return {
@@ -91,16 +91,16 @@
     };
   }
 
-    // Prüft ob für eine order_id bereits eine aktive Rechnung existiert
-     function findeVorhandeneRechnung(orderId) {
-      if (!orderId) return null;
-      return rechnungen.find(r =>
-       r.order_id &&
-       r.order_id.toLowerCase() === orderId.trim().toLowerCase() &&
-       r.rechnung_typ === 'rechnung' &&
-       r.status !== 'storniert'
-      ) || null;
-   }
+  // Prüft ob für eine order_id bereits eine aktive Rechnung existiert
+  function findeVorhandeneRechnung(orderId) {
+    if (!orderId) return null;
+    return rechnungen.find(r =>
+      r.order_id &&
+      r.order_id.toLowerCase() === orderId.trim().toLowerCase() &&
+      r.rechnung_typ === 'rechnung' &&
+      r.status !== 'storniert'
+    ) || null;
+  }
 
   // ── Smart Modal öffnen ───────────────────────────────────────────
   function oeffneDetailModal(r) {
@@ -111,19 +111,19 @@
   }
 
   function oeffneErstellenModal(vorbelegung = null) {
-  neueRechnung = {
-    kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
-    kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-    artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
-  };
-  if (vorbelegung) neueRechnung = { ...neueRechnung, ...vorbelegung };
-  bestellungFehler = '';
-  vorhandeneRechnungFuerOrder = null;
-  smartModalRechnung = null;
-  smartModalBestellung = null;
-  smartModalModus = 'erstellen';
-  smartModalOffen = true;
-}
+    neueRechnung = {
+      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
+      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
+      artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
+    };
+    if (vorbelegung) neueRechnung = { ...neueRechnung, ...vorbelegung };
+    bestellungFehler = '';
+    vorhandeneRechnungFuerOrder = null;
+    smartModalRechnung = null;
+    smartModalBestellung = null;
+    smartModalModus = 'erstellen';
+    smartModalOffen = true;
+  }
 
   function oeffneBestellungsModal(bestellung) {
     smartModalBestellung = bestellung;
@@ -133,14 +133,14 @@
   }
 
   function schliesseSmartModal() {
-  smartModalOffen = false;
-  smartModalRechnung = null;
-  smartModalBestellung = null;
-  schnellsucheFehler = '';
-  eRechnungMenuOffen = false;
-  eRechnungRechnung = null;
-  vorhandeneRechnungFuerOrder = null;
-}
+    smartModalOffen = false;
+    smartModalRechnung = null;
+    smartModalBestellung = null;
+    schnellsucheFehler = '';
+    eRechnungMenuOffen = false;
+    eRechnungRechnung = null;
+    vorhandeneRechnungFuerOrder = null;
+  }
 
   // Aus Bestellungs-Modal heraus: zum Erstell-Formular wechseln
   function wechsleZuErstellen() {
@@ -153,9 +153,10 @@
       ...norm
     };
     bestellungFehler = '';
-  vorhandeneRechnungFuerOrder = null;
-  smartModalBestellung = null;
-  smartModalModus = 'erstellen';
+    vorhandeneRechnungFuerOrder = null;
+    smartModalBestellung = null;
+    smartModalModus = 'erstellen';
+  }
 
   // ── Schnellsuche ─────────────────────────────────────────────────
   async function schnellsucheNachOrder() {
@@ -975,10 +976,16 @@
               <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={neueRechnung.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
             </div>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-ghost" onclick={schliesseSmartModal}>Abbrechen</button>
-          <button class="btn-primary" onclick={erstelleManuell} disabled={erstellenLaeuft}>{erstellenLaeuft ? 'Erstelle...' : 'Rechnung erstellen'}</button>
+        {#if vorhandeneRechnungFuerOrder}
+          <div class="duplikat-warnung">
+            ⚠️ Für diese Bestellung existiert bereits <strong>{vorhandeneRechnungFuerOrder.rechnung_nr}</strong>.
+            <button class="btn-link" onclick={() => oeffneDetailModal(vorhandeneRechnungFuerOrder)}>Rechnung anzeigen →</button>
+          </div>
+        {/if}
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick={schliesseSmartModal}>Abbrechen</button>
+        <button class="btn-primary" onclick={erstelleManuell} disabled={erstellenLaeuft || !!vorhandeneRechnungFuerOrder}>{erstellenLaeuft ? 'Erstelle...' : 'Rechnung erstellen'}</button>
         </div>
       {/if}
 
