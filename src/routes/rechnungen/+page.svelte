@@ -15,29 +15,35 @@
   let ausgewaehlt = $state(new Set());
   let alleAusgewaehlt = $state(false);
 
-  let vorschauRechnung = $state(null);
-  let vorschauOffen = $state(false);
+  // ══ UNIFIED SMART MODAL ══════════════════════════════════════════
+  // Modus: 'detail' | 'bestellung' | 'erstellen'
+  let smartModalOffen = $state(false);
+  let smartModalModus = $state('detail');
+  let smartModalRechnung = $state(null);   // vorhandene Rechnung (Modus: detail)
+  let smartModalBestellung = $state(null); // gefundene Bestellung (Modus: bestellung)
 
+  // Storno Modal
   let stornoModal = $state(false);
   let stornoRechnung = $state(null);
   let stornoLaeuft = $state(false);
 
-  let erstellenModal = $state(false);
+  // E-Mail senden Modal
   let sendenModal = $state(false);
   let sendenRechnung = $state(null);
   let sendenEmail = $state('');
   let sendenLaeuft = $state(false);
 
+  // Auto-Rechnung Toggle
   let autoRechnungAktiv = $state(true);
   let toggleLaeuft = $state(false);
 
+  // Schnellsuche
   let schnellsucheOrderId = $state('');
   let schnellsucheLaeuft = $state(false);
-  let schnellsucheErgebnis = $state(null);
   let schnellsucheFehler = $state('');
-  let schnellsucheModalOffen = $state(false);
   let schnellsucheErstellenLaeuft = $state(false);
 
+  // Bearbeiten Modal
   let bearbeitenModal = $state(false);
   let bearbeitenRechnung = $state(null);
   let bearbeitenPositionen = $state([]);
@@ -47,9 +53,11 @@
     kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE'
   });
 
+  // E-Rechnung Dropdown
   let eRechnungMenuOffen = $state(false);
   let eRechnungRechnung = $state(null);
 
+  // Neues Rechnungsformular (Erstellen-Modus)
   let neueRechnung = $state({
     kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
     kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
@@ -59,9 +67,9 @@
   let bestellungLaeuft = $state(false);
   let bestellungFehler = $state('');
 
+  // ── Helpers ──────────────────────────────────────────────────────
   function clearBestellungLaden() { bestellungFehler = ''; }
 
-  // FIX 2: Normalisierung — mappt buyer_name/kaeufer_name, sold_sku etc.
   function normalisiereBestellung(b) {
     return {
       kaeufer_name:    b.kaeufer_name    || b.buyer_name    || '',
@@ -79,6 +87,141 @@
     };
   }
 
+  // ── Smart Modal öffnen ───────────────────────────────────────────
+  function oeffneDetailModal(r) {
+    smartModalRechnung = r;
+    smartModalBestellung = null;
+    smartModalModus = 'detail';
+    smartModalOffen = true;
+  }
+
+  function oeffneErstellenModal(vorbelegung = null) {
+    neueRechnung = {
+      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
+      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
+      artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
+    };
+    if (vorbelegung) neueRechnung = { ...neueRechnung, ...vorbelegung };
+    bestellungFehler = '';
+    smartModalRechnung = null;
+    smartModalBestellung = null;
+    smartModalModus = 'erstellen';
+    smartModalOffen = true;
+  }
+
+  function oeffneBestellungsModal(bestellung) {
+    smartModalBestellung = bestellung;
+    smartModalRechnung = null;
+    smartModalModus = 'bestellung';
+    smartModalOffen = true;
+  }
+
+  function schliesseSmartModal() {
+    smartModalOffen = false;
+    smartModalRechnung = null;
+    smartModalBestellung = null;
+    schnellsucheFehler = '';
+    eRechnungMenuOffen = false;
+    eRechnungRechnung = null;
+  }
+
+  // Aus Bestellungs-Modal heraus: zum Erstell-Formular wechseln
+  function wechsleZuErstellen() {
+    const b = smartModalBestellung;
+    const norm = b ? normalisiereBestellung(b) : {};
+    neueRechnung = {
+      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
+      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
+      artikel_sku: '', menge: 1, einzelpreis: '', order_id: '',
+      ...norm
+    };
+    bestellungFehler = '';
+    smartModalBestellung = null;
+    smartModalModus = 'erstellen';
+  }
+
+  // ── Schnellsuche ─────────────────────────────────────────────────
+  async function schnellsucheNachOrder() {
+    if (!schnellsucheOrderId.trim()) return;
+    const term = schnellsucheOrderId.trim().toLowerCase();
+
+    // Erst lokal in vorhandenen Rechnungen suchen
+    const lok = rechnungen.filter(r =>
+      r.rechnung_nr?.toLowerCase().includes(term) ||
+      r.kaeufer_name?.toLowerCase().includes(term) ||
+      r.kaeufer_email?.toLowerCase().includes(term) ||
+      r.artikel_name?.toLowerCase().includes(term) ||
+      r.order_id?.toLowerCase().includes(term)
+    );
+    if (lok.length === 1) {
+      oeffneDetailModal(lok[0]);
+      schnellsucheOrderId = '';
+      return;
+    }
+    if (lok.length > 1) {
+      suchbegriff = schnellsucheOrderId.trim();
+      schnellsucheOrderId = '';
+      return;
+    }
+
+    // Nichts lokal → API
+    schnellsucheLaeuft = true;
+    schnellsucheFehler = '';
+    try {
+      const data = await apiCall('bestellung-laden', {
+        user_id: $currentUser.id,
+        suchbegriff: schnellsucheOrderId.trim()
+      });
+      if (data?.bestellung) {
+        oeffneBestellungsModal(data.bestellung);
+        schnellsucheOrderId = '';
+      } else {
+        schnellsucheFehler = 'Nichts gefunden';
+      }
+    } catch(e) {
+      schnellsucheFehler = 'Nichts gefunden';
+    } finally {
+      schnellsucheLaeuft = false;
+    }
+  }
+
+  // Rechnung direkt aus Bestellungs-Modal erstellen
+  async function rechnungAusBestellungErstellen() {
+    const b = smartModalBestellung;
+    if (!b) return;
+    const norm = normalisiereBestellung(b);
+    if (!norm.kaeufer_name || !norm.artikel_name || !norm.einzelpreis) {
+      wechsleZuErstellen();
+      return;
+    }
+    schnellsucheErstellenLaeuft = true;
+    try {
+      await apiCall('rechnung-erstellen', {
+        user_id:         $currentUser.id,
+        typ:             'rechnung',
+        order_id:        norm.order_id,
+        kaeufer_name:    norm.kaeufer_name,
+        kaeufer_email:   norm.kaeufer_email,
+        kaeufer_strasse: norm.kaeufer_strasse,
+        kaeufer_plz:     norm.kaeufer_plz,
+        kaeufer_ort:     norm.kaeufer_ort,
+        kaeufer_land:    norm.kaeufer_land,
+        artikel_name:    norm.artikel_name,
+        ebay_artikel_id: norm.ebay_artikel_id,
+        menge:           Number(norm.menge),
+        einzelpreis:     Number(norm.einzelpreis)
+      });
+      showToast('✅ Rechnung erstellt');
+      schliesseSmartModal();
+      await ladeRechnungen();
+    } catch(e) {
+      showToast('Fehler: ' + e.message);
+    } finally {
+      schnellsucheErstellenLaeuft = false;
+    }
+  }
+
+  // ── Bestellung laden (im Erstellen-Formular) ─────────────────────
   async function ladeBestellungDaten() {
     if (!neueRechnung.order_id) return;
     bestellungLaeuft = true;
@@ -90,20 +233,7 @@
       });
       if (data?.bestellung) {
         const norm = normalisiereBestellung(data.bestellung);
-        neueRechnung = {
-          ...neueRechnung,
-          kaeufer_name:    norm.kaeufer_name    || neueRechnung.kaeufer_name,
-          kaeufer_email:   norm.kaeufer_email   || neueRechnung.kaeufer_email,
-          kaeufer_strasse: norm.kaeufer_strasse || neueRechnung.kaeufer_strasse,
-          kaeufer_plz:     norm.kaeufer_plz     || neueRechnung.kaeufer_plz,
-          kaeufer_ort:     norm.kaeufer_ort     || neueRechnung.kaeufer_ort,
-          kaeufer_land:    norm.kaeufer_land    || neueRechnung.kaeufer_land,
-          artikel_name:    norm.artikel_name    || neueRechnung.artikel_name,
-          ebay_artikel_id: norm.ebay_artikel_id || neueRechnung.ebay_artikel_id,
-          artikel_sku:     norm.artikel_sku     || neueRechnung.artikel_sku,
-          einzelpreis:     norm.einzelpreis     || neueRechnung.einzelpreis,
-          menge:           norm.menge           || neueRechnung.menge,
-        };
+        neueRechnung = { ...neueRechnung, ...norm };
         showToast('Bestelldaten geladen');
       } else {
         bestellungFehler = 'Keine Bestellung gefunden';
@@ -115,6 +245,7 @@
     }
   }
 
+  // ── Auto-Rechnung ─────────────────────────────────────────────────
   async function ladeAutoRechnungStatus() {
     try {
       const data = await apiCall('auto-rechnung-einstellungen', { user_id: $currentUser.id }, 'GET');
@@ -136,96 +267,7 @@
     }
   }
 
-  async function schnellsucheNachOrder() {
-    if (!schnellsucheOrderId.trim()) return;
-    const term = schnellsucheOrderId.trim().toLowerCase();
-
-    const lokaleErgebnisse = rechnungen.filter(r =>
-      r.rechnung_nr?.toLowerCase().includes(term) ||
-      r.kaeufer_name?.toLowerCase().includes(term) ||
-      r.kaeufer_email?.toLowerCase().includes(term) ||
-      r.kaeufer_strasse?.toLowerCase().includes(term) ||
-      r.kaeufer_plz?.toLowerCase().includes(term) ||
-      r.kaeufer_ort?.toLowerCase().includes(term) ||
-      r.artikel_name?.toLowerCase().includes(term) ||
-      r.ebay_artikel_id?.toLowerCase().includes(term) ||
-      r.order_id?.toLowerCase().includes(term)
-    );
-
-    if (lokaleErgebnisse.length > 0) {
-      suchbegriff = schnellsucheOrderId.trim();
-      schnellsucheOrderId = '';
-      return;
-    }
-
-    schnellsucheLaeuft = true;
-    schnellsucheFehler = '';
-    schnellsucheErgebnis = null;
-    try {
-      const data = await apiCall('bestellung-laden', {
-        user_id: $currentUser.id,
-        suchbegriff: schnellsucheOrderId.trim()
-      });
-      if (data?.bestellung) {
-        schnellsucheErgebnis = data.bestellung;
-        schnellsucheModalOffen = true;
-      } else {
-        schnellsucheFehler = 'Nichts gefunden';
-      }
-    } catch(e) {
-      schnellsucheFehler = 'Nichts gefunden';
-    } finally {
-      schnellsucheLaeuft = false;
-    }
-  }
-
-  function schliesseSchnellsucheModal() {
-    schnellsucheModalOffen = false;
-    schnellsucheErgebnis = null;
-    schnellsucheOrderId = '';
-    schnellsucheFehler = '';
-  }
-
-  // FIX 1: Direkt Rechnung erstellen — kein zweites Modal
-  async function rechnungAusSchnellsuche() {
-    const b = schnellsucheErgebnis;
-    if (!b) return;
-    const norm = normalisiereBestellung(b);
-    if (!norm.kaeufer_name || !norm.artikel_name || !norm.einzelpreis) {
-      showToast('Bestelldaten unvollständig — Formular öffnet sich zum Ergänzen');
-      neueRechnung = { ...norm };
-      schliesseSchnellsucheModal();
-      erstellenModal = true;
-      return;
-    }
-    schnellsucheErstellenLaeuft = true;
-    try {
-      await apiCall('rechnung-erstellen', {
-        user_id:         $currentUser.id,
-        typ:             'rechnung',
-        order_id:        norm.order_id,
-        kaeufer_name:    norm.kaeufer_name,
-        kaeufer_email:   norm.kaeufer_email,
-        kaeufer_strasse: norm.kaeufer_strasse,
-        kaeufer_plz:     norm.kaeufer_plz,
-        kaeufer_ort:     norm.kaeufer_ort,
-        kaeufer_land:    norm.kaeufer_land,
-        artikel_name:    norm.artikel_name,
-        ebay_artikel_id: norm.ebay_artikel_id,
-        menge:           Number(norm.menge),
-        einzelpreis:     Number(norm.einzelpreis)
-      });
-      showToast('✅ Rechnung erstellt');
-      schliesseSchnellsucheModal();
-      await ladeRechnungen();
-    } catch(e) {
-      showToast('Fehler: ' + e.message);
-    } finally {
-      schnellsucheErstellenLaeuft = false;
-    }
-  }
-
-  // FIX 3: Bearbeiten-Modal mit allen editierbaren Feldern
+  // ── Bearbeiten Modal ──────────────────────────────────────────────
   function oeffneBearbeitenModal(r) {
     bearbeitenRechnung = r;
     bearbeitenKaeufer = {
@@ -243,6 +285,7 @@
       einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
       entfernt: false
     }];
+    schliesseSmartModal();
     bearbeitenModal = true;
   }
 
@@ -291,6 +334,7 @@
     }
   }
 
+  // ── Bulk Aktionen ─────────────────────────────────────────────────
   async function bulkDrucken() {
     const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
     for (const r of liste) { await ladePDF(r); await new Promise(res => setTimeout(res, 400)); }
@@ -326,6 +370,7 @@
     a.click(); URL.revokeObjectURL(url);
   }
 
+  // ── E-Rechnung ────────────────────────────────────────────────────
   function oeffneERechnungMenu(r, e) {
     e.stopPropagation();
     if (eRechnungRechnung?.id === r.id && eRechnungMenuOffen) { eRechnungMenuOffen = false; eRechnungRechnung = null; }
@@ -352,6 +397,7 @@
     } catch(e) { showToast('Fehler: ' + e.message); }
   }
 
+  // ── Derived / Filter ──────────────────────────────────────────────
   let gefiltert = $derived.by(() => {
     let liste = rechnungen;
     if (!suchbegriff.trim()) {
@@ -410,8 +456,10 @@
     } catch (e) { showToast('Fehler: ' + e.message); }
   }
 
-  function oeffneVorschau(r) { vorschauRechnung = r; vorschauOffen = true; }
-  function oeffneSendenModal(r) { sendenRechnung = r; sendenEmail = r.kaeufer_email || ''; sendenModal = true; }
+  function oeffneSendenModal(r) {
+    sendenRechnung = r; sendenEmail = r.kaeufer_email || ''; sendenModal = true;
+    schliesseSmartModal();
+  }
 
   async function sendeRechnung() {
     if (!sendenEmail) { showToast('Bitte E-Mail eingeben.'); return; }
@@ -422,7 +470,10 @@
     } catch (e) { showToast('Fehler: ' + e.message); } finally { sendenLaeuft = false; }
   }
 
-  function oeffneStornoModal(r) { stornoRechnung = r; stornoModal = true; }
+  function oeffneStornoModal(r) {
+    stornoRechnung = r; stornoModal = true;
+    schliesseSmartModal();
+  }
 
   async function erstelleStorno() {
     stornoLaeuft = true;
@@ -434,7 +485,7 @@
 
   async function erstelleManuell() {
     if (!neueRechnung.kaeufer_name || !neueRechnung.artikel_name || !neueRechnung.einzelpreis) {
-      showToast('Bitte alle Pflichtfelder ausfuellen.'); return;
+      showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
     }
     erstellenLaeuft = true;
     try {
@@ -446,8 +497,8 @@
         artikel_name: neueRechnung.artikel_name, ebay_artikel_id: neueRechnung.ebay_artikel_id,
         menge: Number(neueRechnung.menge), einzelpreis: Number(neueRechnung.einzelpreis)
       });
-      showToast('Rechnung erstellt'); erstellenModal = false;
-      neueRechnung = { kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '', artikel_sku: '', menge: 1, einzelpreis: '', order_id: '' };
+      showToast('Rechnung erstellt');
+      schliesseSmartModal();
       await ladeRechnungen();
     } catch (e) { showToast('Fehler: ' + e.message); } finally { erstellenLaeuft = false; }
   }
@@ -511,7 +562,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/></svg>
         Aktualisieren
       </button>
-      <button class="btn-primary" onclick={() => erstellenModal = true}>+ Rechnung erstellen</button>
+      <button class="btn-primary" onclick={() => oeffneErstellenModal()}>+ Rechnung erstellen</button>
     </div>
   </div>
 
@@ -546,176 +597,87 @@
     <div class="bulk-bar">
       <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn-ghost btn-sm" onclick={bulkDrucken}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          PDFs laden
-        </button>
-        <button class="btn-ghost btn-sm" onclick={bulkEmailSenden}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-          Per E-Mail senden
-        </button>
-        <button class="btn-ghost btn-sm" onclick={bulkExportCSV}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          CSV exportieren
-        </button>
+        <button class="btn-ghost btn-sm" onclick={bulkDrucken}>PDFs laden</button>
+        <button class="btn-ghost btn-sm" onclick={bulkEmailSenden}>Per E-Mail senden</button>
+        <button class="btn-ghost btn-sm" onclick={bulkExportCSV}>CSV exportieren</button>
       </div>
     </div>
   {/if}
 
-  <!-- Haupt-Bereich -->
-  <div class="haupt-bereich">
-    <div class="tabellen-wrapper">
-      {#if loading}
-        <div class="status-info">Lade Rechnungen...</div>
-      {:else if fehler}
-        <div class="status-info status-fehler">{fehler}</div>
-      {:else if sichtbar.length === 0}
-        <div class="leer-state">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <p>Keine Rechnungen gefunden</p>
-          <button class="btn-primary btn-sm" onclick={() => erstellenModal = true}>Erste Rechnung erstellen</button>
-        </div>
-      {:else}
-        <table class="tabelle">
-          <thead>
-            <tr>
-              <th class="th-check" onclick={(e) => e.stopPropagation()}>
-                <label class="chk-label"><input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} /></label>
-              </th>
-              <th>Nummer</th><th>Datum</th><th>Kaeufer</th><th>Artikel</th>
-              <th class="th-right">Netto</th><th class="th-right">MwSt.</th><th class="th-right">Brutto</th>
-              <th>Status</th><th class="th-actions">Aktionen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each sichtbar as r (r.id)}
-              {@const badge = statusBadge(r)}
-              <tr class="tbl-row {vorschauRechnung?.id === r.id ? 'aktiv' : ''}" onclick={() => oeffneVorschau(r)}>
-                <td class="td-check" onclick={(e) => e.stopPropagation()}>
-                  <label class="chk-label"><input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} /></label>
-                </td>
-                <td class="td-nr">{r.rechnung_nr || '-'}</td>
-                <td class="td-datum">{fmtDatum(r.erstellt_am)}</td>
-                <td class="td-kaeufer">{r.kaeufer_name || '-'}</td>
-                <td class="td-artikel">{r.artikel_name || '-'}</td>
-                <td class="td-right">{fmt(r.netto_betrag)} EUR</td>
-                <td class="td-right">{fmt(r.steuer_betrag)} EUR</td>
-                <td class="td-right td-bold">{fmt(r.brutto_betrag)} EUR</td>
-                <td><span class="badge {badge.cls}">{badge.label}</span></td>
-                <td class="td-actions" onclick={(e) => e.stopPropagation()}>
-                  <button class="icon-btn" title="Vorschau" onclick={() => oeffneVorschau(r)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  </button>
-                  <button class="icon-btn" title="PDF" onclick={() => ladePDF(r)}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  </button>
-                  {#if r.status !== 'storniert' && r.rechnung_typ !== 'storno'}
-                    <button class="icon-btn" title="E-Mail senden" onclick={() => oeffneSendenModal(r)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    </button>
-                    <button class="icon-btn icon-btn-edit" title="Bearbeiten" onclick={() => oeffneBearbeitenModal(r)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                    <div class="erechnungs-wrap" onclick={(e) => e.stopPropagation()}>
-                      <button class="icon-btn icon-btn-erechnung" title="E-Rechnung" onclick={(e) => oeffneERechnungMenu(r, e)}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                      </button>
-                      {#if eRechnungMenuOffen && eRechnungRechnung?.id === r.id}
-                        <div class="erechnung-menu">
-                          <button onclick={() => erstelleERechnung(r, 'zugferd_en16931')}>ZUGFeRD 2.4 EN16931 PDF</button>
-                          <button onclick={() => erstelleERechnung(r, 'zugferd_extended')}>ZUGFeRD 2.4 EXTENDED PDF (BETA)</button>
-                          <button onclick={() => erstelleERechnung(r, 'xrechnung')}>XRechnung 3.0.2 XML</button>
-                        </div>
-                      {/if}
-                    </div>
-                    <button class="icon-btn icon-btn-danger" title="Stornieren" onclick={() => oeffneStornoModal(r)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-                    </button>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      {/if}
-    </div>
-
-    <!-- Vorschau-Panel -->
-    {#if vorschauOffen && vorschauRechnung}
-      {@const badge = statusBadge(vorschauRechnung)}
-      <div class="vorschau-panel">
-        <div class="vorschau-hdr">
-          <span class="vorschau-titel">{vorschauRechnung.rechnung_nr || 'Rechnung'}</span>
-          <button class="icon-btn" onclick={() => { vorschauOffen = false; vorschauRechnung = null; }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <div class="vorschau-body">
-          <div class="vorschau-row">
-            <span class="badge {badge.cls}">{badge.label}</span>
-            <span class="vorschau-datum">{fmtDatum(vorschauRechnung.erstellt_am)}</span>
-          </div>
-          {#if vorschauRechnung.rechnung_typ === 'storno'}
-            <div class="storno-hinweis">Stornorechnung zu einer vorherigen Rechnung</div>
-          {/if}
-          <div class="vorschau-section">
-            <div class="vs-label">Rechnungsempfaenger</div>
-            <div class="vs-value">{vorschauRechnung.kaeufer_name || '-'}</div>
-            {#if vorschauRechnung.kaeufer_strasse}
-              <div class="vs-sub">{vorschauRechnung.kaeufer_strasse}</div>
-              <div class="vs-sub">{vorschauRechnung.kaeufer_plz} {vorschauRechnung.kaeufer_ort}, {vorschauRechnung.kaeufer_land}</div>
-            {/if}
-            {#if vorschauRechnung.kaeufer_email}
-              <div class="vs-sub" style="color:var(--primary)">{vorschauRechnung.kaeufer_email}</div>
-            {/if}
-          </div>
-          <div class="vorschau-section">
-            <div class="vs-label">Artikel</div>
-            <div class="pos-zeile">
-              <div>
-                <div class="pos-name">{vorschauRechnung.artikel_name || '-'}</div>
-                {#if vorschauRechnung.ebay_artikel_id}<div style="font-size:0.72rem;color:var(--text3)">eBay: {vorschauRechnung.ebay_artikel_id}</div>{/if}
-              </div>
-              <span class="pos-detail">{vorschauRechnung.artikel_menge || 1} x {fmt(vorschauRechnung.einzelpreis)} EUR</span>
-            </div>
-          </div>
-          {#if vorschauRechnung.order_id}
-            <div class="vorschau-section">
-              <div class="vs-label">eBay-Bestellnummer</div>
-              <div class="vs-value" style="font-family:monospace;font-size:0.8rem">{vorschauRechnung.order_id}</div>
-            </div>
-          {/if}
-          <div class="betraege-box">
-            <div class="betrag-zeile"><span>Netto</span><span>{fmt(vorschauRechnung.netto_betrag)} EUR</span></div>
-            <div class="betrag-zeile"><span>MwSt. ({vorschauRechnung.steuersatz || 19} %)</span><span>{fmt(vorschauRechnung.steuer_betrag)} EUR</span></div>
-            <div class="betrag-zeile betrag-brutto"><span>Brutto</span><span>{fmt(vorschauRechnung.brutto_betrag)} EUR</span></div>
-          </div>
-          {#if vorschauRechnung.email_gesendet_an}
-            <div class="vorschau-section">
-              <div class="vs-label">Gesendet an</div>
-              <div class="vs-sub">{vorschauRechnung.email_gesendet_an}</div>
-            </div>
-          {/if}
-          <div class="vorschau-aktionen">
-            <button class="btn-secondary btn-sm" onclick={() => ladePDF(vorschauRechnung)}>PDF</button>
-            {#if vorschauRechnung.status !== 'storniert' && vorschauRechnung.rechnung_typ !== 'storno'}
-              <button class="btn-secondary btn-sm" onclick={() => oeffneSendenModal(vorschauRechnung)}>E-Mail</button>
-              <div class="erechnungs-wrap" style="position:relative" onclick={(e) => e.stopPropagation()}>
-                <button class="btn-secondary btn-sm" onclick={(e) => oeffneERechnungMenu(vorschauRechnung, e)}>E-Rechnung ▾</button>
-                {#if eRechnungMenuOffen && eRechnungRechnung?.id === vorschauRechnung.id}
-                  <div class="erechnung-menu" style="bottom:auto;top:calc(100% + 4px)">
-                    <button onclick={() => erstelleERechnung(vorschauRechnung, 'zugferd_en16931')}>ZUGFeRD 2.4 EN16931 PDF</button>
-                    <button onclick={() => erstelleERechnung(vorschauRechnung, 'zugferd_extended')}>ZUGFeRD 2.4 EXTENDED PDF (BETA)</button>
-                    <button onclick={() => erstelleERechnung(vorschauRechnung, 'xrechnung')}>XRechnung 3.0.2 XML</button>
-                  </div>
-                {/if}
-              </div>
-              <button class="btn-secondary btn-sm" onclick={() => oeffneBearbeitenModal(vorschauRechnung)}>Bearbeiten</button>
-              <button class="btn-danger btn-sm" onclick={() => oeffneStornoModal(vorschauRechnung)}>Stornieren</button>
-            {/if}
-          </div>
-        </div>
+  <!-- Tabelle (volle Breite — kein Panel mehr rechts) -->
+  <div class="tabellen-wrapper">
+    {#if loading}
+      <div class="status-info">Lade Rechnungen...</div>
+    {:else if fehler}
+      <div class="status-info status-fehler">{fehler}</div>
+    {:else if sichtbar.length === 0}
+      <div class="leer-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <p>Keine Rechnungen gefunden</p>
+        <button class="btn-primary btn-sm" onclick={() => oeffneErstellenModal()}>Erste Rechnung erstellen</button>
       </div>
+    {:else}
+      <table class="tabelle">
+        <thead>
+          <tr>
+            <th class="th-check" onclick={(e) => e.stopPropagation()}>
+              <label class="chk-label"><input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} /></label>
+            </th>
+            <th>Nummer</th><th>Datum</th><th>Käufer</th><th>Artikel</th>
+            <th class="th-right">Netto</th><th class="th-right">MwSt.</th><th class="th-right">Brutto</th>
+            <th>Status</th><th class="th-actions">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each sichtbar as r (r.id)}
+            {@const badge = statusBadge(r)}
+            <tr class="tbl-row" onclick={() => oeffneDetailModal(r)}>
+              <td class="td-check" onclick={(e) => e.stopPropagation()}>
+                <label class="chk-label"><input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} /></label>
+              </td>
+              <td class="td-nr">{r.rechnung_nr || '-'}</td>
+              <td class="td-datum">{fmtDatum(r.erstellt_am)}</td>
+              <td class="td-kaeufer">{r.kaeufer_name || '-'}</td>
+              <td class="td-artikel">{r.artikel_name || '-'}</td>
+              <td class="td-right">{fmt(r.netto_betrag)} EUR</td>
+              <td class="td-right">{fmt(r.steuer_betrag)} EUR</td>
+              <td class="td-right td-bold">{fmt(r.brutto_betrag)} EUR</td>
+              <td><span class="badge {badge.cls}">{badge.label}</span></td>
+              <td class="td-actions" onclick={(e) => e.stopPropagation()}>
+                <button class="icon-btn" title="Details" onclick={() => oeffneDetailModal(r)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+                <button class="icon-btn" title="PDF" onclick={() => ladePDF(r)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                {#if r.status !== 'storniert' && r.rechnung_typ !== 'storno'}
+                  <button class="icon-btn" title="E-Mail senden" onclick={() => oeffneSendenModal(r)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                  </button>
+                  <button class="icon-btn icon-btn-edit" title="Bearbeiten" onclick={() => oeffneBearbeitenModal(r)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                  <div class="erechnungs-wrap" onclick={(e) => e.stopPropagation()}>
+                    <button class="icon-btn icon-btn-erechnung" title="E-Rechnung" onclick={(e) => oeffneERechnungMenu(r, e)}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </button>
+                    {#if eRechnungMenuOffen && eRechnungRechnung?.id === r.id}
+                      <div class="erechnung-menu">
+                        <button onclick={() => erstelleERechnung(r, 'zugferd_en16931')}>ZUGFeRD 2.4 EN16931 PDF</button>
+                        <button onclick={() => erstelleERechnung(r, 'zugferd_extended')}>ZUGFeRD 2.4 EXTENDED PDF (BETA)</button>
+                        <button onclick={() => erstelleERechnung(r, 'xrechnung')}>XRechnung 3.0.2 XML</button>
+                      </div>
+                    {/if}
+                  </div>
+                  <button class="icon-btn icon-btn-danger" title="Stornieren" onclick={() => oeffneStornoModal(r)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>
+                  </button>
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 
@@ -725,7 +687,7 @@
       <div class="footer-summen">
         <span>Netto gesamt: <strong>{fmt(summeNetto)} EUR</strong></span>
         {#if summeStorno > 0}<span class="storno-summe">Stornos: <strong>{fmt(summeStorno)} EUR</strong></span>{/if}
-        <span class="footer-count">{gefiltert.length} Eintraege</span>
+        <span class="footer-count">{gefiltert.length} Einträge</span>
       </div>
       <div class="pagination">
         <button class="page-btn" disabled={aktuelleSeite <= 1} onclick={() => aktuelleSeite--}>&#8249;</button>
@@ -740,127 +702,257 @@
   {/if}
 </div>
 
-<!-- ═══ MODAL: SCHNELLSUCHE — direkt Rechnung erstellen (FIX 1) ═══ -->
-{#if schnellsucheModalOffen && schnellsucheErgebnis}
-  {@const b = schnellsucheErgebnis}
-  <div class="modal-overlay" onclick={schliesseSchnellsucheModal}>
-    <div class="modal-box modal-bestellung" onclick={(e) => e.stopPropagation()}>
-      <div class="modal-hdr">
-        <div>
-          <span class="modal-titel">Bestellung gefunden</span>
-          <div style="font-size:0.78rem;color:var(--text3);margin-top:2px;font-family:monospace">{b.order_id || schnellsucheOrderId}</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     UNIFIED SMART MODAL
+     Modus 1: 'detail'     → vorhandene Rechnung anzeigen
+     Modus 2: 'bestellung' → gefundene Bestellung, noch keine Rechnung
+     Modus 3: 'erstellen'  → leeres Formular (+ Bestellnr-Laden)
+════════════════════════════════════════════════════════════════════ -->
+{#if smartModalOffen}
+  <div class="modal-overlay" onclick={schliesseSmartModal}>
+    <div class="modal-box {smartModalModus === 'erstellen' ? 'modal-erstellen' : 'modal-bestellung'}" onclick={(e) => e.stopPropagation()}>
+
+      <!-- ── MODUS: DETAIL (vorhandene Rechnung) ─────────────────── -->
+      {#if smartModalModus === 'detail' && smartModalRechnung}
+        {@const r = smartModalRechnung}
+        {@const badge = statusBadge(r)}
+        <div class="modal-hdr">
+          <div>
+            <span class="modal-titel">{r.rechnung_nr || 'Rechnung'}</span>
+            {#if r.order_id}<div style="font-size:0.75rem;color:var(--text3);margin-top:2px;font-family:monospace">{r.order_id}</div>{/if}
+          </div>
+          <button class="icon-btn" onclick={schliesseSmartModal}>✕</button>
         </div>
-        <button class="icon-btn" onclick={schliesseSchnellsucheModal}>✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="margin-bottom:16px">
-          {#if b.hat_rechnung}
-            <span class="badge badge-gesendet">Rechnung bereits vorhanden</span>
-          {:else}
-            <span class="badge badge-erstellt">Noch keine Rechnung</span>
+        <div class="modal-body">
+          <div class="detail-meta">
+            <span class="badge {badge.cls}">{badge.label}</span>
+            <span class="detail-datum">{fmtDatum(r.erstellt_am)}</span>
+          </div>
+          {#if r.rechnung_typ === 'storno'}
+            <div class="storno-hinweis">Stornorechnung zu einer vorherigen Rechnung</div>
+          {/if}
+
+          <div class="bm-section">
+            <div class="bm-section-titel">Rechnungsempfänger</div>
+            <div class="bm-grid">
+              <div class="bm-field bm-full">
+                <div class="bm-label">Name</div>
+                <div class="bm-value">{r.kaeufer_name || '-'}</div>
+              </div>
+              {#if r.kaeufer_email}
+                <div class="bm-field bm-full">
+                  <div class="bm-label">E-Mail</div>
+                  <div class="bm-value" style="color:var(--primary)">{r.kaeufer_email}</div>
+                </div>
+              {/if}
+              {#if r.kaeufer_strasse}
+                <div class="bm-field bm-full">
+                  <div class="bm-label">Adresse</div>
+                  <div class="bm-value">{r.kaeufer_strasse}, {r.kaeufer_plz} {r.kaeufer_ort}, {r.kaeufer_land}</div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="bm-section">
+            <div class="bm-section-titel">Artikel</div>
+            <div class="bm-grid">
+              <div class="bm-field bm-full">
+                <div class="bm-label">Bezeichnung</div>
+                <div class="bm-value">{r.artikel_name || '-'}</div>
+              </div>
+              {#if r.ebay_artikel_id}
+                <div class="bm-field">
+                  <div class="bm-label">eBay Artikel-ID</div>
+                  <div class="bm-value" style="font-family:monospace">{r.ebay_artikel_id}</div>
+                </div>
+              {/if}
+              <div class="bm-field">
+                <div class="bm-label">Menge</div>
+                <div class="bm-value">{r.artikel_menge || 1}</div>
+              </div>
+            </div>
+          </div>
+
+          {#if r.order_id}
+            <div class="bm-section">
+              <div class="bm-section-titel">eBay-Bestellnummer</div>
+              <div style="font-family:monospace;font-size:0.82rem;color:var(--text)">{r.order_id}</div>
+            </div>
+          {/if}
+
+          <div class="betraege-box">
+            <div class="betrag-zeile"><span>Netto</span><span>{fmt(r.netto_betrag)} EUR</span></div>
+            <div class="betrag-zeile"><span>MwSt. ({r.steuersatz || 19} %)</span><span>{fmt(r.steuer_betrag)} EUR</span></div>
+            <div class="betrag-zeile betrag-brutto"><span>Brutto</span><span>{fmt(r.brutto_betrag)} EUR</span></div>
+          </div>
+
+          {#if r.email_gesendet_an}
+            <div class="bm-section" style="margin-top:12px">
+              <div class="bm-section-titel">Gesendet an</div>
+              <div style="font-size:0.82rem;color:var(--text2)">{r.email_gesendet_an}</div>
+            </div>
           {/if}
         </div>
-        <div class="bm-section">
-          <div class="bm-section-titel">Kaeufer</div>
-          <div class="bm-grid">
-            <div class="bm-field"><div class="bm-label">Name</div><div class="bm-value">{b.kaeufer_name || b.buyer_name || '-'}</div></div>
-            <div class="bm-field"><div class="bm-label">E-Mail</div><div class="bm-value">{b.kaeufer_email || b.buyer_email || '-'}</div></div>
-            <div class="bm-field bm-full">
-              <div class="bm-label">Adresse</div>
-              <div class="bm-value">{b.kaeufer_strasse || b.buyer_strasse || '-'}, {b.kaeufer_plz || b.buyer_plz || ''} {b.kaeufer_ort || b.buyer_ort || ''}, {b.kaeufer_land || b.buyer_land || 'DE'}</div>
+        <div class="modal-footer">
+          <button class="btn-ghost btn-sm" onclick={schliesseSmartModal}>Schließen</button>
+          <button class="btn-secondary btn-sm" onclick={() => ladePDF(r)}>PDF</button>
+          {#if r.status !== 'storniert' && r.rechnung_typ !== 'storno'}
+            <button class="btn-secondary btn-sm" onclick={() => oeffneSendenModal(r)}>E-Mail</button>
+            <div class="erechnungs-wrap" style="position:relative" onclick={(e) => e.stopPropagation()}>
+              <button class="btn-secondary btn-sm" onclick={(e) => oeffneERechnungMenu(r, e)}>E-Rechnung ▾</button>
+              {#if eRechnungMenuOffen && eRechnungRechnung?.id === r.id}
+                <div class="erechnung-menu" style="bottom:auto;top:calc(100% + 4px)">
+                  <button onclick={() => erstelleERechnung(r, 'zugferd_en16931')}>ZUGFeRD 2.4 EN16931 PDF</button>
+                  <button onclick={() => erstelleERechnung(r, 'zugferd_extended')}>ZUGFeRD 2.4 EXTENDED PDF (BETA)</button>
+                  <button onclick={() => erstelleERechnung(r, 'xrechnung')}>XRechnung 3.0.2 XML</button>
+                </div>
+              {/if}
             </div>
-          </div>
+            <button class="btn-secondary btn-sm" onclick={() => oeffneBearbeitenModal(r)}>Bearbeiten</button>
+            <button class="btn-danger btn-sm" onclick={() => oeffneStornoModal(r)}>Stornieren</button>
+          {/if}
         </div>
-        <div class="bm-section">
-          <div class="bm-section-titel">Artikel</div>
-          <div class="bm-grid">
-            <div class="bm-field bm-full"><div class="bm-label">Bezeichnung</div><div class="bm-value">{b.artikel_name || '-'}</div></div>
-            {#if b.sold_sku}
-              <div class="bm-field bm-full">
-                <div class="bm-label">Variante (SKU)</div>
-                <div class="bm-value"><code style="font-size:0.82rem;background:var(--surface2);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{b.sold_sku}</code></div>
-              </div>
+
+      <!-- ── MODUS: BESTELLUNG GEFUNDEN (noch keine Rechnung) ────── -->
+      {:else if smartModalModus === 'bestellung' && smartModalBestellung}
+        {@const b = smartModalBestellung}
+        <div class="modal-hdr">
+          <div>
+            <span class="modal-titel">Bestellung gefunden</span>
+            <div style="font-size:0.78rem;color:var(--text3);margin-top:2px;font-family:monospace">{b.order_id || ''}</div>
+          </div>
+          <button class="icon-btn" onclick={schliesseSmartModal}>✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="margin-bottom:16px">
+            {#if b.hat_rechnung}
+              <span class="badge badge-gesendet">Rechnung bereits vorhanden</span>
+            {:else}
+              <span class="badge badge-erstellt">Noch keine Rechnung</span>
             {/if}
-            {#if b.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{b.ebay_artikel_id}</div></div>{/if}
-            <div class="bm-field"><div class="bm-label">Menge</div><div class="bm-value">{b.artikel_menge || 1}</div></div>
           </div>
-        </div>
-        <div class="bm-section">
-          <div class="bm-section-titel">Zahlung</div>
-          <div class="betraege-box" style="margin-top:8px">
-            <div class="betrag-zeile"><span>Betrag (Brutto)</span><span style="font-weight:700;color:var(--primary);font-size:1.1rem">{fmt(b.brutto_betrag)} EUR</span></div>
-            {#if b.zahlungsdatum}<div class="betrag-zeile"><span>Datum</span><span>{fmtDatum(b.zahlungsdatum)}</span></div>{/if}
-          </div>
-        </div>
-        {#if b.versand_tracking || b.versand_anbieter}
+
           <div class="bm-section">
-            <div class="bm-section-titel">Versand</div>
+            <div class="bm-section-titel">Käufer</div>
             <div class="bm-grid">
-              {#if b.versand_anbieter}<div class="bm-field"><div class="bm-label">Anbieter</div><div class="bm-value">{b.versand_anbieter}</div></div>{/if}
-              {#if b.versand_tracking}<div class="bm-field"><div class="bm-label">Tracking</div><div class="bm-value" style="font-family:monospace;color:var(--primary)">{b.versand_tracking}</div></div>{/if}
+              <div class="bm-field">
+                <div class="bm-label">Name</div>
+                <div class="bm-value">{b.kaeufer_name || b.buyer_name || '-'}</div>
+              </div>
+              <div class="bm-field">
+                <div class="bm-label">E-Mail</div>
+                <div class="bm-value">{b.kaeufer_email || b.buyer_email || '-'}</div>
+              </div>
+              <div class="bm-field bm-full">
+                <div class="bm-label">Adresse</div>
+                <div class="bm-value">{b.kaeufer_strasse || b.buyer_strasse || '-'}, {b.kaeufer_plz || b.buyer_plz || ''} {b.kaeufer_ort || b.buyer_ort || ''}, {b.kaeufer_land || b.buyer_land || 'DE'}</div>
+              </div>
             </div>
           </div>
-        {/if}
-      </div>
-      <div class="modal-footer">
-        <button class="btn-ghost" onclick={schliesseSchnellsucheModal}>Schliessen</button>
-        <button class="btn-primary" onclick={rechnungAusSchnellsuche} disabled={schnellsucheErstellenLaeuft}>
-          {schnellsucheErstellenLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
-        </button>
-      </div>
+
+          <div class="bm-section">
+            <div class="bm-section-titel">Artikel</div>
+            <div class="bm-grid">
+              <div class="bm-field bm-full">
+                <div class="bm-label">Bezeichnung</div>
+                <div class="bm-value">{b.artikel_name || '-'}</div>
+              </div>
+              {#if b.sold_sku}
+                <div class="bm-field bm-full">
+                  <div class="bm-label">Variante (SKU)</div>
+                  <div class="bm-value"><code style="font-size:0.82rem;background:var(--surface2);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{b.sold_sku}</code></div>
+                </div>
+              {/if}
+              {#if b.ebay_artikel_id}
+                <div class="bm-field">
+                  <div class="bm-label">eBay Artikel-ID</div>
+                  <div class="bm-value" style="font-family:monospace">{b.ebay_artikel_id}</div>
+                </div>
+              {/if}
+              <div class="bm-field">
+                <div class="bm-label">Menge</div>
+                <div class="bm-value">{b.artikel_menge || 1}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bm-section">
+            <div class="bm-section-titel">Zahlung</div>
+            <div class="betraege-box" style="margin-top:8px">
+              <div class="betrag-zeile">
+                <span>Betrag (Brutto)</span>
+                <span style="font-weight:700;color:var(--primary);font-size:1.1rem">{fmt(b.brutto_betrag)} EUR</span>
+              </div>
+              {#if b.zahlungsdatum}
+                <div class="betrag-zeile"><span>Datum</span><span>{fmtDatum(b.zahlungsdatum)}</span></div>
+              {/if}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-ghost" onclick={schliesseSmartModal}>Schließen</button>
+          {#if !b.hat_rechnung}
+            <button class="btn-secondary" onclick={wechsleZuErstellen}>✏️ Formular öffnen</button>
+            <button class="btn-primary" onclick={rechnungAusBestellungErstellen} disabled={schnellsucheErstellenLaeuft}>
+              {schnellsucheErstellenLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
+            </button>
+          {:else}
+            <button class="btn-ghost" onclick={schliesseSmartModal}>Fertig</button>
+          {/if}
+        </div>
+
+      <!-- ── MODUS: ERSTELLEN (Formular) ────────────────────────── -->
+      {:else if smartModalModus === 'erstellen'}
+        <div class="modal-hdr">
+          <span class="modal-titel">Neue Rechnung erstellen</span>
+          <button class="icon-btn" onclick={schliesseSmartModal}>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group"><label>Käufer *</label><input bind:value={neueRechnung.kaeufer_name} placeholder="Max Mustermann" /></div>
+            <div class="form-group"><label>E-Mail</label><input bind:value={neueRechnung.kaeufer_email} type="email" placeholder="max@example.com" /></div>
+            <div class="form-group"><label>Straße</label><input bind:value={neueRechnung.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>PLZ</label><input bind:value={neueRechnung.kaeufer_plz} placeholder="12345" /></div>
+              <div class="form-group"><label>Ort</label><input bind:value={neueRechnung.kaeufer_ort} placeholder="Berlin" /></div>
+            </div>
+            <div class="form-group">
+              <label>eBay Bestellnr.</label>
+              <div style="display:flex;gap:8px">
+                <input bind:value={neueRechnung.order_id} placeholder="12-34567-89012" style="flex:1" oninput={clearBestellungLaden} />
+                <button class="btn-primary btn-sm" onclick={ladeBestellungDaten} disabled={bestellungLaeuft || !neueRechnung.order_id} style="white-space:nowrap">
+                  {bestellungLaeuft ? '...' : 'Laden'}
+                </button>
+              </div>
+              {#if bestellungFehler}<p style="color:#ef4444;font-size:0.75rem;margin-top:4px">{bestellungFehler}</p>{/if}
+            </div>
+            <div class="form-group form-2col"><div class="form-group"><label>Land</label><input bind:value={neueRechnung.kaeufer_land} placeholder="DE" /></div></div>
+            <div class="form-group"><label>Artikel *</label><input bind:value={neueRechnung.artikel_name} placeholder="Produktname" /></div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={neueRechnung.ebay_artikel_id} placeholder="123456789012" /></div>
+              <div class="form-group">
+                <label>Variante (SKU)</label>
+                <input value={neueRechnung.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
+              </div>
+            </div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>Menge *</label><input bind:value={neueRechnung.menge} type="number" min="1" /></div>
+              <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={neueRechnung.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-ghost" onclick={schliesseSmartModal}>Abbrechen</button>
+          <button class="btn-primary" onclick={erstelleManuell} disabled={erstellenLaeuft}>{erstellenLaeuft ? 'Erstelle...' : 'Rechnung erstellen'}</button>
+        </div>
+      {/if}
+
     </div>
   </div>
 {/if}
 
-<!-- ═══ MODAL: RECHNUNG ERSTELLEN (manuell / Fallback) ═══ -->
-{#if erstellenModal}
-  <div class="modal-overlay" onclick={() => erstellenModal = false}>
-    <div class="modal-box" onclick={(e) => e.stopPropagation()}>
-      <div class="modal-hdr">
-        <span class="modal-titel">Neue Rechnung erstellen</span>
-        <button class="icon-btn" onclick={() => erstellenModal = false}>✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="form-group"><label>Kaeufer *</label><input bind:value={neueRechnung.kaeufer_name} placeholder="Max Mustermann" /></div>
-          <div class="form-group"><label>E-Mail</label><input bind:value={neueRechnung.kaeufer_email} type="email" placeholder="max@example.com" /></div>
-          <div class="form-group"><label>Strasse</label><input bind:value={neueRechnung.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
-          <div class="form-group form-2col">
-            <div class="form-group"><label>PLZ</label><input bind:value={neueRechnung.kaeufer_plz} placeholder="12345" /></div>
-            <div class="form-group"><label>Ort</label><input bind:value={neueRechnung.kaeufer_ort} placeholder="Berlin" /></div>
-          </div>
-          <div class="form-group">
-            <label>eBay Bestellnr.</label>
-            <div style="display:flex;gap:8px">
-              <input bind:value={neueRechnung.order_id} placeholder="12-34567-89012" style="flex:1" oninput={clearBestellungLaden} />
-              <button class="btn-primary btn-sm" onclick={ladeBestellungDaten} disabled={bestellungLaeuft || !neueRechnung.order_id} style="white-space:nowrap">
-                {bestellungLaeuft ? '...' : 'Laden'}
-              </button>
-            </div>
-            {#if bestellungFehler}<p style="color:#ef4444;font-size:0.75rem;margin-top:4px">{bestellungFehler}</p>{/if}
-          </div>
-          <div class="form-group form-2col"><div class="form-group"><label>Land</label><input bind:value={neueRechnung.kaeufer_land} placeholder="DE" /></div></div>
-          <div class="form-group"><label>Artikel *</label><input bind:value={neueRechnung.artikel_name} placeholder="Produktname" /></div>
-          <div class="form-group form-2col">
-            <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={neueRechnung.ebay_artikel_id} placeholder="123456789012" /></div>
-            <div class="form-group">
-              <label>Variante (SKU)</label>
-              <input value={neueRechnung.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
-            </div>
-          </div>
-          <div class="form-group form-2col">
-            <div class="form-group"><label>Menge *</label><input bind:value={neueRechnung.menge} type="number" min="1" /></div>
-            <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={neueRechnung.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-ghost" onclick={() => erstellenModal = false}>Abbrechen</button>
-        <button class="btn-primary" onclick={erstelleManuell} disabled={erstellenLaeuft}>{erstellenLaeuft ? 'Erstelle...' : 'Rechnung erstellen'}</button>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <!-- ═══ MODAL: E-MAIL SENDEN ═══ -->
 {#if sendenModal}
@@ -891,7 +983,7 @@
         <button class="icon-btn" onclick={() => stornoModal = false}>✕</button>
       </div>
       <div class="modal-body">
-        <p class="modal-info">Moechtest du die Rechnung <strong>{stornoRechnung?.rechnung_nr}</strong> wirklich stornieren? Es wird eine Stornorechnung erstellt.</p>
+        <p class="modal-info">Möchtest du die Rechnung <strong>{stornoRechnung?.rechnung_nr}</strong> wirklich stornieren? Es wird eine Stornorechnung erstellt.</p>
       </div>
       <div class="modal-footer">
         <button class="btn-ghost" onclick={() => stornoModal = false}>Abbrechen</button>
@@ -901,7 +993,7 @@
   </div>
 {/if}
 
-<!-- ═══ MODAL: RECHNUNG BEARBEITEN — alle Felder editierbar (FIX 3) ═══ -->
+<!-- ═══ MODAL: RECHNUNG BEARBEITEN ═══ -->
 {#if bearbeitenModal && bearbeitenRechnung}
   <div class="modal-overlay" onclick={() => bearbeitenModal = false}>
     <div class="modal-box modal-bearbeiten" onclick={(e) => e.stopPropagation()}>
@@ -910,13 +1002,12 @@
         <button class="icon-btn" onclick={() => bearbeitenModal = false}>✕</button>
       </div>
       <div class="modal-body">
-        <div class="bearbeiten-hinweis">Die bestehende Rechnung wird storniert und eine neue erstellt. Alle Felder können geändert werden.</div>
-
+        <div class="bearbeiten-hinweis">Die bestehende Rechnung wird storniert und eine neue erstellt.</div>
         <div class="vs-label" style="margin-bottom:10px;">Rechnungsempfänger</div>
         <div class="form-grid" style="margin-bottom:20px;">
           <div class="form-group"><label>Name *</label><input bind:value={bearbeitenKaeufer.kaeufer_name} placeholder="Max Mustermann" /></div>
           <div class="form-group"><label>E-Mail</label><input bind:value={bearbeitenKaeufer.kaeufer_email} type="email" placeholder="max@example.com" /></div>
-          <div class="form-group"><label>Strasse</label><input bind:value={bearbeitenKaeufer.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
+          <div class="form-group"><label>Straße</label><input bind:value={bearbeitenKaeufer.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
           <div class="form-group form-2col">
             <div class="form-group"><label>PLZ</label><input bind:value={bearbeitenKaeufer.kaeufer_plz} placeholder="12345" /></div>
             <div class="form-group"><label>Ort</label><input bind:value={bearbeitenKaeufer.kaeufer_ort} placeholder="Berlin" /></div>
@@ -925,7 +1016,6 @@
             <div class="form-group"><label>Land</label><input bind:value={bearbeitenKaeufer.kaeufer_land} placeholder="DE" /></div>
           </div>
         </div>
-
         <div class="vs-label" style="margin-bottom:8px;">Positionen</div>
         {#each bearbeitenPositionen as pos, idx}
           <div class="bearbeiten-position {pos.entfernt ? 'pos-entfernt' : ''}">
@@ -1021,8 +1111,8 @@
   .toolbar-right { display:flex; gap:10px; align-items:center; }
   .select-klein { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:8px; font-size:0.83rem; cursor:pointer; outline:none; }
   .bulk-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--primary-light); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:0.83rem; color:var(--primary); flex-wrap:wrap; }
-  .haupt-bereich { display:flex; gap:16px; align-items:flex-start; }
-  .tabellen-wrapper { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; min-width:0; }
+  /* Tabelle volle Breite */
+  .tabellen-wrapper { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
   .tabelle { width:100%; border-collapse:collapse; font-size:0.83rem; }
   .tabelle thead tr { background:var(--surface2); }
   .tabelle th { padding:10px 12px; text-align:left; font-weight:600; font-size:0.75rem; color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; }
@@ -1032,13 +1122,12 @@
   .tbl-row { border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.12s; }
   .tbl-row:last-child { border-bottom:none; }
   .tbl-row:hover { background:var(--surface2); }
-  .tbl-row.aktiv { background:var(--primary-light); }
   .tabelle td { padding:10px 12px; color:var(--text); vertical-align:middle; }
-  .td-check { width:36px; }
+  .td-check { width:36px; padding:0 !important; }
   .td-nr { font-weight:600; white-space:nowrap; color:var(--primary); }
   .td-datum { white-space:nowrap; color:var(--text2); font-size:0.8rem; }
-  .td-kaeufer { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .td-artikel { max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text2); }
+  .td-kaeufer { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .td-artikel { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text2); }
   .td-right { text-align:right; white-space:nowrap; }
   .td-bold { font-weight:600; }
   .td-actions { white-space:nowrap; }
@@ -1050,24 +1139,6 @@
   .status-fehler { color:#ef4444; }
   .leer-state { padding:60px 40px; display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--text3); text-align:center; }
   .leer-state p { color:var(--text2); font-size:0.9rem; }
-  .vorschau-panel { width:300px; flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
-  .vorschau-hdr { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); background:var(--surface2); }
-  .vorschau-titel { font-size:0.88rem; font-weight:600; color:var(--text); }
-  .vorschau-body { padding:16px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; }
-  .vorschau-row { display:flex; align-items:center; justify-content:space-between; }
-  .vorschau-datum { font-size:0.78rem; color:var(--text2); }
-  .vorschau-section { display:flex; flex-direction:column; gap:3px; }
-  .vs-label { font-size:0.72rem; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:5px; }
-  .vs-value { font-size:0.85rem; color:var(--text); font-weight:500; }
-  .vs-sub { font-size:0.78rem; color:var(--text2); margin-top:2px; }
-  .pos-zeile { display:flex; justify-content:space-between; align-items:baseline; padding:4px 0; border-bottom:1px solid var(--border); }
-  .pos-name { font-size:0.82rem; color:var(--text); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .pos-detail { font-size:0.78rem; color:var(--text2); white-space:nowrap; margin-left:8px; }
-  .betraege-box { background:var(--surface2); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:6px; }
-  .betrag-zeile { display:flex; justify-content:space-between; font-size:0.82rem; color:var(--text2); }
-  .betrag-brutto { color:var(--text); font-weight:700; font-size:0.9rem; border-top:1px solid var(--border); padding-top:6px; margin-top:2px; }
-  .vorschau-aktionen { display:flex; gap:8px; flex-wrap:wrap; }
-  .storno-hinweis { background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:7px 10px; font-size:0.77rem; color:#dc2626; }
   .footer-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-top:4px; }
   .footer-summen { display:flex; gap:20px; align-items:center; font-size:0.82rem; color:var(--text2); flex-wrap:wrap; }
   .footer-summen strong { color:var(--text); }
@@ -1078,24 +1149,27 @@
   .page-btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
   .page-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
   .page-btn:disabled { opacity:0.4; cursor:not-allowed; }
+  /* Modal */
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
   .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
   .modal-klein { max-width:400px; }
   .modal-bestellung { max-width:620px; }
+  .modal-erstellen { max-width:560px; }
   .modal-bearbeiten { max-width:600px; }
-  .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); }
+  .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
   .modal-titel { font-size:1rem; font-weight:600; color:var(--text); }
-  .modal-body { padding:20px; overflow-y:auto; }
-  .modal-footer { display:flex; gap:10px; justify-content:flex-end; padding:14px 20px 18px; border-top:1px solid var(--border); }
+  .modal-body { padding:20px; overflow-y:auto; flex:1; }
+  .modal-footer { display:flex; gap:8px; justify-content:flex-end; padding:14px 20px 18px; border-top:1px solid var(--border); flex-wrap:wrap; flex-shrink:0; }
   .modal-info { font-size:0.85rem; color:var(--text2); margin-bottom:14px; line-height:1.5; }
   .modal-info strong { color:var(--text); }
-  .form-grid { display:flex; flex-direction:column; gap:14px; }
-  .form-group { display:flex; flex-direction:column; gap:5px; }
-  .form-2col { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .form-group label { font-size:0.78rem; color:var(--text2); font-weight:500; }
-  .form-group input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:0.85rem; outline:none; }
-  .form-group input:focus { border-color:var(--primary); }
-  .form-group input::placeholder { color:var(--text3); }
+  /* Detail Modal */
+  .detail-meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .detail-datum { font-size:0.8rem; color:var(--text2); }
+  .storno-hinweis { background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:7px 10px; font-size:0.77rem; color:#dc2626; margin-bottom:14px; }
+  .betraege-box { background:var(--surface2); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:6px; }
+  .betrag-zeile { display:flex; justify-content:space-between; font-size:0.82rem; color:var(--text2); }
+  .betrag-brutto { color:var(--text); font-weight:700; font-size:0.9rem; border-top:1px solid var(--border); padding-top:6px; margin-top:2px; }
+  /* Bestellung / BM Sections */
   .bm-section { margin-bottom:18px; }
   .bm-section-titel { font-size:0.75rem; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
   .bm-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -1103,14 +1177,25 @@
   .bm-full { grid-column: 1 / -1; }
   .bm-label { font-size:0.72rem; color:var(--text3); font-weight:500; }
   .bm-value { font-size:0.85rem; color:var(--text); font-weight:500; line-height:1.4; }
+  .vs-label { font-size:0.72rem; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; }
+  /* Form */
+  .form-grid { display:flex; flex-direction:column; gap:14px; }
+  .form-group { display:flex; flex-direction:column; gap:5px; }
+  .form-2col { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .form-group label { font-size:0.78rem; color:var(--text2); font-weight:500; }
+  .form-group input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:0.85rem; outline:none; }
+  .form-group input:focus { border-color:var(--primary); }
+  .form-group input::placeholder { color:var(--text3); }
+  /* Bearbeiten */
   .bearbeiten-hinweis { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; font-size:0.8rem; color:#92400e; margin-bottom:18px; }
   .bearbeiten-position { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; transition:opacity 0.2s; }
   .pos-entfernt { opacity:0.45; background:var(--surface2); }
   .pos-check { flex-shrink:0; }
   .pos-details { flex:1; min-width:0; }
+  .pos-name { font-size:0.84rem; font-weight:500; }
   .pos-menge { display:flex; flex-direction:column; align-items:center; gap:2px; }
-  .pos-preis { font-size:0.85rem; font-weight:600; color:var(--text); white-space:nowrap; min-width:70px; text-align:right; }
+  .pos-preis { font-size:0.85rem; font-weight:600; color:var(--text); white-space:nowrap; min-width:80px; text-align:right; }
+  /* Checkbox */
   .chk-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:20px; cursor:pointer; padding:4px; box-sizing:border-box; }
   .chk-label input[type="checkbox"] { width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0; }
-  .td-check { width:36px; padding:0 !important; }
 </style>
