@@ -66,9 +66,13 @@
   let erstellenLaeuft = $state(false);
   let bestellungLaeuft = $state(false);
   let bestellungFehler = $state('');
+  let vorhandeneRechnungFuerOrder = $state(null);
 
   // ── Helpers ──────────────────────────────────────────────────────
-  function clearBestellungLaden() { bestellungFehler = ''; }
+  function clearBestellungLaden() {
+  bestellungFehler = '';
+  vorhandeneRechnungFuerOrder = null;
+}
 
   function normalisiereBestellung(b) {
     return {
@@ -87,6 +91,17 @@
     };
   }
 
+    // Prüft ob für eine order_id bereits eine aktive Rechnung existiert
+     function findeVorhandeneRechnung(orderId) {
+      if (!orderId) return null;
+      return rechnungen.find(r =>
+       r.order_id &&
+       r.order_id.toLowerCase() === orderId.trim().toLowerCase() &&
+       r.rechnung_typ === 'rechnung' &&
+       r.status !== 'storniert'
+      ) || null;
+   }
+
   // ── Smart Modal öffnen ───────────────────────────────────────────
   function oeffneDetailModal(r) {
     smartModalRechnung = r;
@@ -96,18 +111,19 @@
   }
 
   function oeffneErstellenModal(vorbelegung = null) {
-    neueRechnung = {
-      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
-      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-      artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
-    };
-    if (vorbelegung) neueRechnung = { ...neueRechnung, ...vorbelegung };
-    bestellungFehler = '';
-    smartModalRechnung = null;
-    smartModalBestellung = null;
-    smartModalModus = 'erstellen';
-    smartModalOffen = true;
-  }
+  neueRechnung = {
+    kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
+    kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
+    artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
+  };
+  if (vorbelegung) neueRechnung = { ...neueRechnung, ...vorbelegung };
+  bestellungFehler = '';
+  vorhandeneRechnungFuerOrder = null;
+  smartModalRechnung = null;
+  smartModalBestellung = null;
+  smartModalModus = 'erstellen';
+  smartModalOffen = true;
+}
 
   function oeffneBestellungsModal(bestellung) {
     smartModalBestellung = bestellung;
@@ -117,13 +133,14 @@
   }
 
   function schliesseSmartModal() {
-    smartModalOffen = false;
-    smartModalRechnung = null;
-    smartModalBestellung = null;
-    schnellsucheFehler = '';
-    eRechnungMenuOffen = false;
-    eRechnungRechnung = null;
-  }
+  smartModalOffen = false;
+  smartModalRechnung = null;
+  smartModalBestellung = null;
+  schnellsucheFehler = '';
+  eRechnungMenuOffen = false;
+  eRechnungRechnung = null;
+  vorhandeneRechnungFuerOrder = null;
+}
 
   // Aus Bestellungs-Modal heraus: zum Erstell-Formular wechseln
   function wechsleZuErstellen() {
@@ -136,9 +153,9 @@
       ...norm
     };
     bestellungFehler = '';
-    smartModalBestellung = null;
-    smartModalModus = 'erstellen';
-  }
+  vorhandeneRechnungFuerOrder = null;
+  smartModalBestellung = null;
+  smartModalModus = 'erstellen';
 
   // ── Schnellsuche ─────────────────────────────────────────────────
   async function schnellsucheNachOrder() {
@@ -223,27 +240,37 @@
 
   // ── Bestellung laden (im Erstellen-Formular) ─────────────────────
   async function ladeBestellungDaten() {
-    if (!neueRechnung.order_id) return;
-    bestellungLaeuft = true;
+  if (!neueRechnung.order_id) return;
+
+  // Prüfe zuerst lokal ob bereits eine Rechnung für diese Bestellung existiert
+  const duplikat = findeVorhandeneRechnung(neueRechnung.order_id);
+  if (duplikat) {
+    vorhandeneRechnungFuerOrder = duplikat;
     bestellungFehler = '';
-    try {
-      const data = await apiCall('bestellung-laden', {
-        user_id: $currentUser?.id,
-        order_id: neueRechnung.order_id
-      });
-      if (data?.bestellung) {
-        const norm = normalisiereBestellung(data.bestellung);
-        neueRechnung = { ...neueRechnung, ...norm };
-        showToast('Bestelldaten geladen');
-      } else {
-        bestellungFehler = 'Keine Bestellung gefunden';
-      }
-    } catch(e) {
-      bestellungFehler = 'Fehler beim Laden';
-    } finally {
-      bestellungLaeuft = false;
-    }
+    return;
   }
+  vorhandeneRechnungFuerOrder = null;
+
+  bestellungLaeuft = true;
+  bestellungFehler = '';
+  try {
+    const data = await apiCall('bestellung-laden', {
+      user_id: $currentUser?.id,
+      order_id: neueRechnung.order_id
+    });
+    if (data?.bestellung) {
+      const norm = normalisiereBestellung(data.bestellung);
+      neueRechnung = { ...neueRechnung, ...norm };
+      showToast('Bestelldaten geladen');
+    } else {
+      bestellungFehler = 'Keine Bestellung gefunden';
+    }
+  } catch(e) {
+    bestellungFehler = 'Fehler beim Laden';
+  } finally {
+    bestellungLaeuft = false;
+  }
+}
 
   // ── Auto-Rechnung ─────────────────────────────────────────────────
   async function ladeAutoRechnungStatus() {
@@ -484,24 +511,30 @@
   }
 
   async function erstelleManuell() {
-    if (!neueRechnung.kaeufer_name || !neueRechnung.artikel_name || !neueRechnung.einzelpreis) {
-      showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
-    }
-    erstellenLaeuft = true;
-    try {
-      await apiCall('rechnung-erstellen', {
-        user_id: $currentUser.id, typ: 'rechnung', order_id: neueRechnung.order_id || '',
-        kaeufer_name: neueRechnung.kaeufer_name, kaeufer_email: neueRechnung.kaeufer_email,
-        kaeufer_strasse: neueRechnung.kaeufer_strasse, kaeufer_plz: neueRechnung.kaeufer_plz,
-        kaeufer_ort: neueRechnung.kaeufer_ort, kaeufer_land: neueRechnung.kaeufer_land,
-        artikel_name: neueRechnung.artikel_name, ebay_artikel_id: neueRechnung.ebay_artikel_id,
-        menge: Number(neueRechnung.menge), einzelpreis: Number(neueRechnung.einzelpreis)
-      });
-      showToast('Rechnung erstellt');
-      schliesseSmartModal();
-      await ladeRechnungen();
-    } catch (e) { showToast('Fehler: ' + e.message); } finally { erstellenLaeuft = false; }
+  if (!neueRechnung.kaeufer_name || !neueRechnung.artikel_name || !neueRechnung.einzelpreis) {
+    showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
   }
+  // Duplikat-Schutz: nochmal prüfen bevor API-Call
+  const duplikat = findeVorhandeneRechnung(neueRechnung.order_id);
+  if (duplikat) {
+    vorhandeneRechnungFuerOrder = duplikat;
+    return;
+  }
+  erstellenLaeuft = true;
+  try {
+    await apiCall('rechnung-erstellen', {
+      user_id: $currentUser.id, typ: 'rechnung', order_id: neueRechnung.order_id || '',
+      kaeufer_name: neueRechnung.kaeufer_name, kaeufer_email: neueRechnung.kaeufer_email,
+      kaeufer_strasse: neueRechnung.kaeufer_strasse, kaeufer_plz: neueRechnung.kaeufer_plz,
+      kaeufer_ort: neueRechnung.kaeufer_ort, kaeufer_land: neueRechnung.kaeufer_land,
+      artikel_name: neueRechnung.artikel_name, ebay_artikel_id: neueRechnung.ebay_artikel_id,
+      menge: Number(neueRechnung.menge), einzelpreis: Number(neueRechnung.einzelpreis)
+    });
+    showToast('Rechnung erstellt');
+    schliesseSmartModal();
+    await ladeRechnungen();
+  } catch (e) { showToast('Fehler: ' + e.message); } finally { erstellenLaeuft = false; }
+}
 
   function toggleAuswahl(id) {
     const neu = new Set(ausgewaehlt); neu.has(id) ? neu.delete(id) : neu.add(id); ausgewaehlt = neu;
@@ -1198,4 +1231,6 @@
   /* Checkbox */
   .chk-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:20px; cursor:pointer; padding:4px; box-sizing:border-box; }
   .chk-label input[type="checkbox"] { width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0; }
+  .duplikat-warnung { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px 14px; font-size:0.82rem; color:#dc2626; margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .btn-link { background:none; border:none; color:var(--primary); font-size:0.82rem; cursor:pointer; text-decoration:underline; padding:0; font-weight:600; }
 </style>
