@@ -36,13 +36,17 @@
   let schnellsucheErgebnis = $state(null);
   let schnellsucheFehler = $state('');
   let schnellsucheModalOffen = $state(false);
+  let schnellsucheErstellenLaeuft = $state(false);
 
   let bearbeitenModal = $state(false);
   let bearbeitenRechnung = $state(null);
   let bearbeitenPositionen = $state([]);
   let bearbeitenLaeuft = $state(false);
+  let bearbeitenKaeufer = $state({
+    kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '',
+    kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE'
+  });
 
-  // E-Rechnung Dropdown
   let eRechnungMenuOffen = $state(false);
   let eRechnungRechnung = $state(null);
 
@@ -57,6 +61,24 @@
 
   function clearBestellungLaden() { bestellungFehler = ''; }
 
+  // FIX 2: Normalisierung — mappt buyer_name/kaeufer_name, sold_sku etc.
+  function normalisiereBestellung(b) {
+    return {
+      kaeufer_name:    b.kaeufer_name    || b.buyer_name    || '',
+      kaeufer_email:   b.kaeufer_email   || b.buyer_email   || '',
+      kaeufer_strasse: b.kaeufer_strasse || b.buyer_strasse || '',
+      kaeufer_plz:     b.kaeufer_plz     || b.buyer_plz     || '',
+      kaeufer_ort:     b.kaeufer_ort     || b.buyer_ort     || '',
+      kaeufer_land:    b.kaeufer_land    || b.buyer_land    || 'DE',
+      artikel_name:    b.artikel_name    || '',
+      ebay_artikel_id: b.ebay_artikel_id || '',
+      artikel_sku:     b.sold_sku        || b.artikel_sku   || '',
+      einzelpreis:     b.brutto_betrag   || b.einzelpreis   || '',
+      menge:           b.artikel_menge   || b.menge         || 1,
+      order_id:        b.order_id        || '',
+    };
+  }
+
   async function ladeBestellungDaten() {
     if (!neueRechnung.order_id) return;
     bestellungLaeuft = true;
@@ -67,20 +89,20 @@
         order_id: neueRechnung.order_id
       });
       if (data?.bestellung) {
-        const b = data.bestellung;
+        const norm = normalisiereBestellung(data.bestellung);
         neueRechnung = {
           ...neueRechnung,
-          kaeufer_name: b.kaeufer_name || neueRechnung.kaeufer_name,
-          kaeufer_email: b.kaeufer_email || neueRechnung.kaeufer_email,
-          kaeufer_strasse: b.kaeufer_strasse || neueRechnung.kaeufer_strasse,
-          kaeufer_plz: b.kaeufer_plz || neueRechnung.kaeufer_plz,
-          kaeufer_ort: b.kaeufer_ort || neueRechnung.kaeufer_ort,
-          kaeufer_land: b.kaeufer_land || neueRechnung.kaeufer_land,
-          artikel_name: b.artikel_name || neueRechnung.artikel_name,
-          ebay_artikel_id: b.ebay_artikel_id || neueRechnung.ebay_artikel_id,
-          artikel_sku: b.sold_sku || neueRechnung.artikel_sku,
-          einzelpreis: b.brutto_betrag || neueRechnung.einzelpreis,
-          menge: b.artikel_menge || neueRechnung.menge,
+          kaeufer_name:    norm.kaeufer_name    || neueRechnung.kaeufer_name,
+          kaeufer_email:   norm.kaeufer_email   || neueRechnung.kaeufer_email,
+          kaeufer_strasse: norm.kaeufer_strasse || neueRechnung.kaeufer_strasse,
+          kaeufer_plz:     norm.kaeufer_plz     || neueRechnung.kaeufer_plz,
+          kaeufer_ort:     norm.kaeufer_ort     || neueRechnung.kaeufer_ort,
+          kaeufer_land:    norm.kaeufer_land    || neueRechnung.kaeufer_land,
+          artikel_name:    norm.artikel_name    || neueRechnung.artikel_name,
+          ebay_artikel_id: norm.ebay_artikel_id || neueRechnung.ebay_artikel_id,
+          artikel_sku:     norm.artikel_sku     || neueRechnung.artikel_sku,
+          einzelpreis:     norm.einzelpreis     || neueRechnung.einzelpreis,
+          menge:           norm.menge           || neueRechnung.menge,
         };
         showToast('Bestelldaten geladen');
       } else {
@@ -118,7 +140,6 @@
     if (!schnellsucheOrderId.trim()) return;
     const term = schnellsucheOrderId.trim().toLowerCase();
 
-    // Zuerst lokal in bereits geladenen Rechnungen suchen
     const lokaleErgebnisse = rechnungen.filter(r =>
       r.rechnung_nr?.toLowerCase().includes(term) ||
       r.kaeufer_name?.toLowerCase().includes(term) ||
@@ -137,7 +158,6 @@
       return;
     }
 
-    // Wenn nichts lokal gefunden: Backend (bestellung-laden) anfragen
     schnellsucheLaeuft = true;
     schnellsucheFehler = '';
     schnellsucheErgebnis = null;
@@ -166,33 +186,61 @@
     schnellsucheFehler = '';
   }
 
-  function rechnungAusSchnellsuche() {
+  // FIX 1: Direkt Rechnung erstellen — kein zweites Modal
+  async function rechnungAusSchnellsuche() {
     const b = schnellsucheErgebnis;
-    neueRechnung = {
-      order_id: b.order_id || schnellsucheOrderId,
-      kaeufer_name: b.kaeufer_name || '',
-      kaeufer_email: b.kaeufer_email || '',
-      kaeufer_strasse: b.kaeufer_strasse || '',
-      kaeufer_plz: b.kaeufer_plz || '',
-      kaeufer_ort: b.kaeufer_ort || '',
-      kaeufer_land: b.kaeufer_land || 'DE',
-      artikel_name: b.artikel_name || '',
-      ebay_artikel_id: b.ebay_artikel_id || '',
-      artikel_sku: b.sold_sku || '',
-      einzelpreis: b.brutto_betrag || '',
-      menge: b.artikel_menge || 1,
-    };
-    schliesseSchnellsucheModal();
-    erstellenModal = true;
+    if (!b) return;
+    const norm = normalisiereBestellung(b);
+    if (!norm.kaeufer_name || !norm.artikel_name || !norm.einzelpreis) {
+      showToast('Bestelldaten unvollständig — Formular öffnet sich zum Ergänzen');
+      neueRechnung = { ...norm };
+      schliesseSchnellsucheModal();
+      erstellenModal = true;
+      return;
+    }
+    schnellsucheErstellenLaeuft = true;
+    try {
+      await apiCall('rechnung-erstellen', {
+        user_id:         $currentUser.id,
+        typ:             'rechnung',
+        order_id:        norm.order_id,
+        kaeufer_name:    norm.kaeufer_name,
+        kaeufer_email:   norm.kaeufer_email,
+        kaeufer_strasse: norm.kaeufer_strasse,
+        kaeufer_plz:     norm.kaeufer_plz,
+        kaeufer_ort:     norm.kaeufer_ort,
+        kaeufer_land:    norm.kaeufer_land,
+        artikel_name:    norm.artikel_name,
+        ebay_artikel_id: norm.ebay_artikel_id,
+        menge:           Number(norm.menge),
+        einzelpreis:     Number(norm.einzelpreis)
+      });
+      showToast('✅ Rechnung erstellt');
+      schliesseSchnellsucheModal();
+      await ladeRechnungen();
+    } catch(e) {
+      showToast('Fehler: ' + e.message);
+    } finally {
+      schnellsucheErstellenLaeuft = false;
+    }
   }
 
+  // FIX 3: Bearbeiten-Modal mit allen editierbaren Feldern
   function oeffneBearbeitenModal(r) {
     bearbeitenRechnung = r;
+    bearbeitenKaeufer = {
+      kaeufer_name:    r.kaeufer_name    || '',
+      kaeufer_email:   r.kaeufer_email   || '',
+      kaeufer_strasse: r.kaeufer_strasse || '',
+      kaeufer_plz:     r.kaeufer_plz     || '',
+      kaeufer_ort:     r.kaeufer_ort     || '',
+      kaeufer_land:    r.kaeufer_land    || 'DE',
+    };
     bearbeitenPositionen = [{
-      artikel_name: r.artikel_name || '',
+      artikel_name:    r.artikel_name    || '',
       ebay_artikel_id: r.ebay_artikel_id || '',
-      menge: r.artikel_menge || 1,
-      einzelpreis: parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
+      menge:           r.artikel_menge   || 1,
+      einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
       entfernt: false
     }];
     bearbeitenModal = true;
@@ -212,44 +260,40 @@
 
   async function speichereBearbeitung() {
     const aktivePositionen = bearbeitenPositionen.filter(p => !p.entfernt);
-    if (aktivePositionen.length === 0) {
-      showToast('Mindestens eine Position muss verbleiben.');
-      return;
-    }
+    if (aktivePositionen.length === 0) { showToast('Mindestens eine Position muss verbleiben.'); return; }
+    if (!bearbeitenKaeufer.kaeufer_name) { showToast('Käufername ist erforderlich.'); return; }
     bearbeitenLaeuft = true;
     try {
       await apiCall('rechnung-stornieren', { user_id: $currentUser.id, invoice_id: bearbeitenRechnung.id });
       const pos = aktivePositionen[0];
       await apiCall('rechnung-erstellen', {
-        user_id: $currentUser.id, typ: 'rechnung',
-        order_id: bearbeitenRechnung.order_id || '',
-        kaeufer_name: bearbeitenRechnung.kaeufer_name,
-        kaeufer_email: bearbeitenRechnung.kaeufer_email || '',
-        kaeufer_strasse: bearbeitenRechnung.kaeufer_strasse || '',
-        kaeufer_plz: bearbeitenRechnung.kaeufer_plz || '',
-        kaeufer_ort: bearbeitenRechnung.kaeufer_ort || '',
-        kaeufer_land: bearbeitenRechnung.kaeufer_land || 'DE',
-        artikel_name: pos.artikel_name,
+        user_id:         $currentUser.id,
+        typ:             'rechnung',
+        order_id:        bearbeitenRechnung.order_id || '',
+        kaeufer_name:    bearbeitenKaeufer.kaeufer_name,
+        kaeufer_email:   bearbeitenKaeufer.kaeufer_email,
+        kaeufer_strasse: bearbeitenKaeufer.kaeufer_strasse,
+        kaeufer_plz:     bearbeitenKaeufer.kaeufer_plz,
+        kaeufer_ort:     bearbeitenKaeufer.kaeufer_ort,
+        kaeufer_land:    bearbeitenKaeufer.kaeufer_land,
+        artikel_name:    pos.artikel_name,
         ebay_artikel_id: pos.ebay_artikel_id || '',
-        menge: pos.menge, einzelpreis: pos.einzelpreis
+        menge:           pos.menge,
+        einzelpreis:     pos.einzelpreis
       });
-      showToast('Rechnung aktualisiert');
+      showToast('✅ Rechnung aktualisiert');
       bearbeitenModal = false;
       await ladeRechnungen();
     } catch(e) {
-      showToast('E-Rechnung: Backend noch nicht eingerichtet');
+      showToast('Fehler: ' + e.message);
     } finally {
       bearbeitenLaeuft = false;
     }
   }
 
-  // ── Bulk-Aktionen ────────────────────────────────────────
   async function bulkDrucken() {
     const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
-    for (const r of liste) {
-      await ladePDF(r);
-      await new Promise(res => setTimeout(res, 400));
-    }
+    for (const r of liste) { await ladePDF(r); await new Promise(res => setTimeout(res, 400)); }
   }
 
   async function bulkEmailSenden() {
@@ -259,10 +303,7 @@
     let gesendet = 0;
     for (const r of liste) {
       if (!r.kaeufer_email) continue;
-      try {
-        await apiCall('rechnung-senden', { invoice_id: r.id, user_id: $currentUser.id, to_email: r.kaeufer_email });
-        gesendet++;
-      } catch(e) {}
+      try { await apiCall('rechnung-senden', { invoice_id: r.id, user_id: $currentUser.id, to_email: r.kaeufer_email }); gesendet++; } catch(e) {}
     }
     showToast(`${gesendet} Rechnung(en) gesendet`);
     await ladeRechnungen();
@@ -285,47 +326,30 @@
     a.click(); URL.revokeObjectURL(url);
   }
 
-  // ── E-Rechnung ────────────────────────────────────────────
   function oeffneERechnungMenu(r, e) {
     e.stopPropagation();
-    if (eRechnungRechnung?.id === r.id && eRechnungMenuOffen) {
-      eRechnungMenuOffen = false;
-      eRechnungRechnung = null;
-    } else {
-      eRechnungRechnung = r;
-      eRechnungMenuOffen = true;
-    }
+    if (eRechnungRechnung?.id === r.id && eRechnungMenuOffen) { eRechnungMenuOffen = false; eRechnungRechnung = null; }
+    else { eRechnungRechnung = r; eRechnungMenuOffen = true; }
   }
 
   async function erstelleERechnung(rechnung, format) {
-    eRechnungMenuOffen = false;
-    eRechnungRechnung = null;
+    eRechnungMenuOffen = false; eRechnungRechnung = null;
     showToast('E-Rechnung wird erstellt...');
     try {
-      const data = await apiCall('e-rechnung-erstellen', {
-        invoice_id: rechnung.id,
-        user_id: $currentUser.id,
-        format
-      });
+      const data = await apiCall('e-rechnung-erstellen', { invoice_id: rechnung.id, user_id: $currentUser.id, format });
       if (format === 'xrechnung') {
         const blob = new Blob([data.xml], { type: 'application/xml' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = (rechnung.rechnung_nr || 'XRechnung') + '.xml';
-        a.click(); URL.revokeObjectURL(url);
+        const a = document.createElement('a'); a.href = url; a.download = (rechnung.rechnung_nr || 'XRechnung') + '.xml'; a.click(); URL.revokeObjectURL(url);
       } else {
         const b64 = data.pdf_base64 || data.pdf;
         if (!b64) { showToast('Kein Ergebnis erhalten.'); return; }
         const blob = new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = (rechnung.rechnung_nr || 'ERechnung') + '.pdf';
-        a.click(); URL.revokeObjectURL(url);
+        const a = document.createElement('a'); a.href = url; a.download = (rechnung.rechnung_nr || 'ERechnung') + '.pdf'; a.click(); URL.revokeObjectURL(url);
       }
       showToast('E-Rechnung erstellt');
-    } catch(e) {
-      showToast('Fehler: ' + e.message);
-    }
+    } catch(e) { showToast('Fehler: ' + e.message); }
   }
 
   let gefiltert = $derived.by(() => {
@@ -339,41 +363,32 @@
     if (suchbegriff.trim()) {
       const s = suchbegriff.toLowerCase();
       liste = liste.filter(r =>
-        r.rechnung_nr?.toLowerCase().includes(s) ||
-        r.kaeufer_name?.toLowerCase().includes(s) ||
-        r.kaeufer_email?.toLowerCase().includes(s) ||
-        r.kaeufer_strasse?.toLowerCase().includes(s) ||
-        r.kaeufer_plz?.toLowerCase().includes(s) ||
-        r.kaeufer_ort?.toLowerCase().includes(s) ||
-        r.artikel_name?.toLowerCase().includes(s) ||
-        r.ebay_artikel_id?.toLowerCase().includes(s) ||
+        r.rechnung_nr?.toLowerCase().includes(s) || r.kaeufer_name?.toLowerCase().includes(s) ||
+        r.kaeufer_email?.toLowerCase().includes(s) || r.kaeufer_strasse?.toLowerCase().includes(s) ||
+        r.kaeufer_plz?.toLowerCase().includes(s) || r.kaeufer_ort?.toLowerCase().includes(s) ||
+        r.artikel_name?.toLowerCase().includes(s) || r.ebay_artikel_id?.toLowerCase().includes(s) ||
         r.order_id?.toLowerCase().includes(s)
       );
     }
     return liste;
   });
 
-  let gesamtSeiten  = $derived(Math.max(1, Math.ceil(gefiltert.length / proSeite)));
-  let sichtbar      = $derived(gefiltert.slice((aktuelleSeite - 1) * proSeite, aktuelleSeite * proSeite));
-  let summeNetto    = $derived(gefiltert.filter(r => r.status !== 'storniert' && r.rechnung_typ === 'rechnung').reduce((s, r) => s + (parseFloat(r.netto_betrag) || 0), 0));
-  let summeStorno   = $derived(gefiltert.filter(r => r.rechnung_typ === 'storno').reduce((s, r) => s + (parseFloat(r.brutto_betrag) || 0), 0));
-  let kpiGesamt     = $derived(rechnungen.filter(r => r.rechnung_typ === 'rechnung').length);
-  let kpiGesendet   = $derived(rechnungen.filter(r => r.status === 'gesendet').length);
-  let kpiAusstehend = $derived(rechnungen.filter(r => r.status === 'erstellt' && r.rechnung_typ === 'rechnung').length);
-  let kpiStorniert  = $derived(rechnungen.filter(r => r.rechnung_typ === 'storno').length);
-  let kpiBrutto     = $derived(rechnungen.filter(r => r.rechnung_typ === 'rechnung' && r.status !== 'storniert').reduce((s, r) => s + (parseFloat(r.brutto_betrag) || 0), 0));
+  let gesamtSeiten   = $derived(Math.max(1, Math.ceil(gefiltert.length / proSeite)));
+  let sichtbar       = $derived(gefiltert.slice((aktuelleSeite - 1) * proSeite, aktuelleSeite * proSeite));
+  let summeNetto     = $derived(gefiltert.filter(r => r.status !== 'storniert' && r.rechnung_typ === 'rechnung').reduce((s, r) => s + (parseFloat(r.netto_betrag) || 0), 0));
+  let summeStorno    = $derived(gefiltert.filter(r => r.rechnung_typ === 'storno').reduce((s, r) => s + (parseFloat(r.brutto_betrag) || 0), 0));
+  let kpiGesamt      = $derived(rechnungen.filter(r => r.rechnung_typ === 'rechnung').length);
+  let kpiGesendet    = $derived(rechnungen.filter(r => r.status === 'gesendet').length);
+  let kpiAusstehend  = $derived(rechnungen.filter(r => r.status === 'erstellt' && r.rechnung_typ === 'rechnung').length);
+  let kpiStorniert   = $derived(rechnungen.filter(r => r.rechnung_typ === 'storno').length);
+  let kpiBrutto      = $derived(rechnungen.filter(r => r.rechnung_typ === 'rechnung' && r.status !== 'storniert').reduce((s, r) => s + (parseFloat(r.brutto_betrag) || 0), 0));
   let kpiDieserMonat = $derived.by(() => {
     const jetzt = new Date();
-    return rechnungen.filter(r => {
-      const d = new Date(r.erstellt_am);
-      return d.getFullYear() === jetzt.getFullYear() && d.getMonth() === jetzt.getMonth();
-    }).length;
+    return rechnungen.filter(r => { const d = new Date(r.erstellt_am); return d.getFullYear() === jetzt.getFullYear() && d.getMonth() === jetzt.getMonth(); }).length;
   });
   let aktiveSumme = $derived(bearbeitenPositionen.filter(p => !p.entfernt).reduce((s, p) => s + p.einzelpreis * p.menge, 0));
 
-  onMount(() => {
-    if ($currentUser) { ladeRechnungen(); ladeAutoRechnungStatus(); }
-  });
+  onMount(() => { if ($currentUser) { ladeRechnungen(); ladeAutoRechnungStatus(); } });
 
   async function ladeRechnungen() {
     loading = true; fehler = '';
@@ -391,9 +406,7 @@
       if (!b64) { showToast('Kein PDF vorhanden.'); return; }
       const blob = new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = (rechnung.rechnung_nr || 'Rechnung') + '.pdf';
-      a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = (rechnung.rechnung_nr || 'Rechnung') + '.pdf'; a.click(); URL.revokeObjectURL(url);
     } catch (e) { showToast('Fehler: ' + e.message); }
   }
 
@@ -405,8 +418,7 @@
     sendenLaeuft = true;
     try {
       await apiCall('rechnung-senden', { invoice_id: sendenRechnung.id, user_id: $currentUser.id, to_email: sendenEmail });
-      showToast('Rechnung gesendet');
-      sendenModal = false; await ladeRechnungen();
+      showToast('Rechnung gesendet'); sendenModal = false; await ladeRechnungen();
     } catch (e) { showToast('Fehler: ' + e.message); } finally { sendenLaeuft = false; }
   }
 
@@ -416,8 +428,7 @@
     stornoLaeuft = true;
     try {
       await apiCall('rechnung-stornieren', { user_id: $currentUser.id, invoice_id: stornoRechnung.id });
-      showToast('Stornorechnung erstellt');
-      stornoModal = false; await ladeRechnungen();
+      showToast('Stornorechnung erstellt'); stornoModal = false; await ladeRechnungen();
     } catch (e) { showToast('Fehler: ' + e.message); } finally { stornoLaeuft = false; }
   }
 
@@ -428,25 +439,21 @@
     erstellenLaeuft = true;
     try {
       await apiCall('rechnung-erstellen', {
-        user_id: $currentUser.id, typ: 'rechnung',
-        order_id: neueRechnung.order_id || '',
+        user_id: $currentUser.id, typ: 'rechnung', order_id: neueRechnung.order_id || '',
         kaeufer_name: neueRechnung.kaeufer_name, kaeufer_email: neueRechnung.kaeufer_email,
         kaeufer_strasse: neueRechnung.kaeufer_strasse, kaeufer_plz: neueRechnung.kaeufer_plz,
         kaeufer_ort: neueRechnung.kaeufer_ort, kaeufer_land: neueRechnung.kaeufer_land,
         artikel_name: neueRechnung.artikel_name, ebay_artikel_id: neueRechnung.ebay_artikel_id,
         menge: Number(neueRechnung.menge), einzelpreis: Number(neueRechnung.einzelpreis)
       });
-      showToast('Rechnung erstellt');
-      erstellenModal = false;
+      showToast('Rechnung erstellt'); erstellenModal = false;
       neueRechnung = { kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '', artikel_sku: '', menge: 1, einzelpreis: '', order_id: '' };
       await ladeRechnungen();
     } catch (e) { showToast('Fehler: ' + e.message); } finally { erstellenLaeuft = false; }
   }
 
   function toggleAuswahl(id) {
-    const neu = new Set(ausgewaehlt);
-    neu.has(id) ? neu.delete(id) : neu.add(id);
-    ausgewaehlt = neu;
+    const neu = new Set(ausgewaehlt); neu.has(id) ? neu.delete(id) : neu.add(id); ausgewaehlt = neu;
     alleAusgewaehlt = sichtbar.length > 0 && sichtbar.every(r => neu.has(r.id));
   }
   function toggleAlleAuswaehlen() {
@@ -485,52 +492,26 @@
       <div class="page-sub">Automatisch erstellte Rechnungen verwalten</div>
     </div>
     <div class="hdr-actions">
-
-      <!-- Schnellsuche im Header -->
       <div class="hdr-suche">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3);flex-shrink:0;">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <input
-          class="hdr-suche-input"
-          type="text"
-          placeholder="Name, Rechnungs-Nr., Bestellnr. ..."
-          bind:value={schnellsucheOrderId}
-          onkeydown={(e) => e.key === 'Enter' && schnellsucheNachOrder()}
-        />
-        {#if schnellsucheFehler}
-          <span class="hdr-suche-fehler">{schnellsucheFehler}</span>
-        {/if}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3);flex-shrink:0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="hdr-suche-input" type="text" placeholder="Name, Rechnungs-Nr., Bestellnr. ..." bind:value={schnellsucheOrderId} onkeydown={(e) => e.key === 'Enter' && schnellsucheNachOrder()} />
+        {#if schnellsucheFehler}<span class="hdr-suche-fehler">{schnellsucheFehler}</span>{/if}
         <button class="btn-primary btn-sm" onclick={schnellsucheNachOrder} disabled={schnellsucheLaeuft || !schnellsucheOrderId.trim()}>
           {schnellsucheLaeuft ? '...' : 'Suchen'}
         </button>
       </div>
-
-      <!-- Auto-Rechnung Toggle -->
       <div class="toggle-wrap">
         <span class="toggle-label">Auto-Rechnung</span>
-        <button
-          class="toggle-btn {autoRechnungAktiv ? 'toggle-an' : 'toggle-aus'}"
-          onclick={toggleAutoRechnung}
-          disabled={toggleLaeuft}
-        >
+        <button class="toggle-btn {autoRechnungAktiv ? 'toggle-an' : 'toggle-aus'}" onclick={toggleAutoRechnung} disabled={toggleLaeuft}>
           <span class="toggle-thumb"></span>
         </button>
-        <span class="toggle-status {autoRechnungAktiv ? 'status-an' : 'status-aus'}">
-          {autoRechnungAktiv ? 'Aktiv' : 'Inaktiv'}
-        </span>
+        <span class="toggle-status {autoRechnungAktiv ? 'status-an' : 'status-aus'}">{autoRechnungAktiv ? 'Aktiv' : 'Inaktiv'}</span>
       </div>
-
       <button class="btn-ghost" onclick={ladeRechnungen} disabled={loading}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-          <path d="M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-        </svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/></svg>
         Aktualisieren
       </button>
-      <button class="btn-primary" onclick={() => erstellenModal = true}>
-        + Rechnung erstellen
-      </button>
+      <button class="btn-primary" onclick={() => erstellenModal = true}>+ Rechnung erstellen</button>
     </div>
   </div>
 
@@ -555,32 +536,30 @@
     </div>
     <div class="toolbar-right">
       <select class="select-klein" bind:value={proSeite} onchange={() => aktuelleSeite = 1}>
-        <option value={20}>20 / Seite</option>
-        <option value={50}>50 / Seite</option>
-        <option value={100}>100 / Seite</option>
+        <option value={20}>20 / Seite</option><option value={50}>50 / Seite</option><option value={100}>100 / Seite</option>
       </select>
     </div>
   </div>
 
   <!-- Bulk-Aktionsleiste -->
   {#if ausgewaehlt.size > 0}
-       <div class="bulk-bar">
-    <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn-ghost btn-sm" onclick={bulkDrucken} title="PDFs herunterladen">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        PDFs laden
-      </button>
-      <button class="btn-ghost btn-sm" onclick={bulkEmailSenden} title="An Käufer-Email senden">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-        Per E-Mail senden
-      </button>
-      <button class="btn-ghost btn-sm" onclick={bulkExportCSV} title="Als CSV exportieren">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        CSV exportieren
-      </button>
+    <div class="bulk-bar">
+      <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn-ghost btn-sm" onclick={bulkDrucken}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          PDFs laden
+        </button>
+        <button class="btn-ghost btn-sm" onclick={bulkEmailSenden}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          Per E-Mail senden
+        </button>
+        <button class="btn-ghost btn-sm" onclick={bulkExportCSV}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          CSV exportieren
+        </button>
+      </div>
     </div>
-  </div>
   {/if}
 
   <!-- Haupt-Bereich -->
@@ -592,10 +571,7 @@
         <div class="status-info status-fehler">{fehler}</div>
       {:else if sichtbar.length === 0}
         <div class="leer-state">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           <p>Keine Rechnungen gefunden</p>
           <button class="btn-primary btn-sm" onclick={() => erstellenModal = true}>Erste Rechnung erstellen</button>
         </div>
@@ -604,10 +580,8 @@
           <thead>
             <tr>
               <th class="th-check" onclick={(e) => e.stopPropagation()}>
-              <label class="chk-label">
-              <input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} />
-              </label>
-             </th>
+                <label class="chk-label"><input type="checkbox" checked={alleAusgewaehlt} onchange={toggleAlleAuswaehlen} /></label>
+              </th>
               <th>Nummer</th><th>Datum</th><th>Kaeufer</th><th>Artikel</th>
               <th class="th-right">Netto</th><th class="th-right">MwSt.</th><th class="th-right">Brutto</th>
               <th>Status</th><th class="th-actions">Aktionen</th>
@@ -618,9 +592,7 @@
               {@const badge = statusBadge(r)}
               <tr class="tbl-row {vorschauRechnung?.id === r.id ? 'aktiv' : ''}" onclick={() => oeffneVorschau(r)}>
                 <td class="td-check" onclick={(e) => e.stopPropagation()}>
-                 <label class="chk-label">
-                 <input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} />
-                 </label>
+                  <label class="chk-label"><input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} /></label>
                 </td>
                 <td class="td-nr">{r.rechnung_nr || '-'}</td>
                 <td class="td-datum">{fmtDatum(r.erstellt_am)}</td>
@@ -644,7 +616,6 @@
                     <button class="icon-btn icon-btn-edit" title="Bearbeiten" onclick={() => oeffneBearbeitenModal(r)}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                    <!-- E-Rechnung Dropdown -->
                     <div class="erechnungs-wrap" onclick={(e) => e.stopPropagation()}>
                       <button class="icon-btn icon-btn-erechnung" title="E-Rechnung" onclick={(e) => oeffneERechnungMenu(r, e)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
@@ -703,9 +674,7 @@
             <div class="pos-zeile">
               <div>
                 <div class="pos-name">{vorschauRechnung.artikel_name || '-'}</div>
-                {#if vorschauRechnung.ebay_artikel_id}
-                  <div style="font-size:0.72rem;color:var(--text3)">eBay: {vorschauRechnung.ebay_artikel_id}</div>
-                {/if}
+                {#if vorschauRechnung.ebay_artikel_id}<div style="font-size:0.72rem;color:var(--text3)">eBay: {vorschauRechnung.ebay_artikel_id}</div>{/if}
               </div>
               <span class="pos-detail">{vorschauRechnung.artikel_menge || 1} x {fmt(vorschauRechnung.einzelpreis)} EUR</span>
             </div>
@@ -731,7 +700,6 @@
             <button class="btn-secondary btn-sm" onclick={() => ladePDF(vorschauRechnung)}>PDF</button>
             {#if vorschauRechnung.status !== 'storniert' && vorschauRechnung.rechnung_typ !== 'storno'}
               <button class="btn-secondary btn-sm" onclick={() => oeffneSendenModal(vorschauRechnung)}>E-Mail</button>
-              <!-- E-Rechnung im Vorschau-Panel -->
               <div class="erechnungs-wrap" style="position:relative" onclick={(e) => e.stopPropagation()}>
                 <button class="btn-secondary btn-sm" onclick={(e) => oeffneERechnungMenu(vorschauRechnung, e)}>E-Rechnung ▾</button>
                 {#if eRechnungMenuOffen && eRechnungRechnung?.id === vorschauRechnung.id}
@@ -772,7 +740,7 @@
   {/if}
 </div>
 
-<!-- MODAL: SCHNELLSUCHE BESTELLDETAILS -->
+<!-- ═══ MODAL: SCHNELLSUCHE — direkt Rechnung erstellen (FIX 1) ═══ -->
 {#if schnellsucheModalOffen && schnellsucheErgebnis}
   {@const b = schnellsucheErgebnis}
   <div class="modal-overlay" onclick={schliesseSchnellsucheModal}>
@@ -782,7 +750,7 @@
           <span class="modal-titel">Bestellung gefunden</span>
           <div style="font-size:0.78rem;color:var(--text3);margin-top:2px;font-family:monospace">{b.order_id || schnellsucheOrderId}</div>
         </div>
-        <button class="icon-btn" onclick={schliesseSchnellsucheModal}>X</button>
+        <button class="icon-btn" onclick={schliesseSchnellsucheModal}>✕</button>
       </div>
       <div class="modal-body">
         <div style="margin-bottom:16px">
@@ -795,21 +763,22 @@
         <div class="bm-section">
           <div class="bm-section-titel">Kaeufer</div>
           <div class="bm-grid">
-            <div class="bm-field"><div class="bm-label">Name</div><div class="bm-value">{b.kaeufer_name || '-'}</div></div>
-            <div class="bm-field"><div class="bm-label">E-Mail</div><div class="bm-value">{b.kaeufer_email || '-'}</div></div>
-            <div class="bm-field"><div class="bm-label">Adresse</div><div class="bm-value">{b.kaeufer_strasse || '-'}, {b.kaeufer_plz || ''} {b.kaeufer_ort || ''}, {b.kaeufer_land || 'DE'}</div></div>
+            <div class="bm-field"><div class="bm-label">Name</div><div class="bm-value">{b.kaeufer_name || b.buyer_name || '-'}</div></div>
+            <div class="bm-field"><div class="bm-label">E-Mail</div><div class="bm-value">{b.kaeufer_email || b.buyer_email || '-'}</div></div>
+            <div class="bm-field bm-full">
+              <div class="bm-label">Adresse</div>
+              <div class="bm-value">{b.kaeufer_strasse || b.buyer_strasse || '-'}, {b.kaeufer_plz || b.buyer_plz || ''} {b.kaeufer_ort || b.buyer_ort || ''}, {b.kaeufer_land || b.buyer_land || 'DE'}</div>
+            </div>
           </div>
         </div>
         <div class="bm-section">
           <div class="bm-section-titel">Artikel</div>
           <div class="bm-grid">
-            <div class="bm-field" style="grid-column:1/-1"><div class="bm-label">Bezeichnung</div><div class="bm-value">{b.artikel_name || '-'}</div></div>
+            <div class="bm-field bm-full"><div class="bm-label">Bezeichnung</div><div class="bm-value">{b.artikel_name || '-'}</div></div>
             {#if b.sold_sku}
-              <div class="bm-field" style="grid-column:1/-1">
+              <div class="bm-field bm-full">
                 <div class="bm-label">Variante (SKU)</div>
-                <div class="bm-value">
-                  <code style="font-size:0.82rem;background:var(--surface2);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{b.sold_sku}</code>
-                </div>
+                <div class="bm-value"><code style="font-size:0.82rem;background:var(--surface2);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{b.sold_sku}</code></div>
               </div>
             {/if}
             {#if b.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{b.ebay_artikel_id}</div></div>{/if}
@@ -835,19 +804,21 @@
       </div>
       <div class="modal-footer">
         <button class="btn-ghost" onclick={schliesseSchnellsucheModal}>Schliessen</button>
-        <button class="btn-primary" onclick={rechnungAusSchnellsuche}>Rechnung erstellen</button>
+        <button class="btn-primary" onclick={rechnungAusSchnellsuche} disabled={schnellsucheErstellenLaeuft}>
+          {schnellsucheErstellenLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
+        </button>
       </div>
     </div>
   </div>
 {/if}
 
-<!-- MODAL: RECHNUNG ERSTELLEN -->
+<!-- ═══ MODAL: RECHNUNG ERSTELLEN (manuell / Fallback) ═══ -->
 {#if erstellenModal}
   <div class="modal-overlay" onclick={() => erstellenModal = false}>
     <div class="modal-box" onclick={(e) => e.stopPropagation()}>
       <div class="modal-hdr">
         <span class="modal-titel">Neue Rechnung erstellen</span>
-        <button class="icon-btn" onclick={() => erstellenModal = false}>X</button>
+        <button class="icon-btn" onclick={() => erstellenModal = false}>✕</button>
       </div>
       <div class="modal-body">
         <div class="form-grid">
@@ -891,13 +862,13 @@
   </div>
 {/if}
 
-<!-- MODAL: E-MAIL SENDEN -->
+<!-- ═══ MODAL: E-MAIL SENDEN ═══ -->
 {#if sendenModal}
   <div class="modal-overlay" onclick={() => sendenModal = false}>
     <div class="modal-box modal-klein" onclick={(e) => e.stopPropagation()}>
       <div class="modal-hdr">
         <span class="modal-titel">Rechnung senden</span>
-        <button class="icon-btn" onclick={() => sendenModal = false}>X</button>
+        <button class="icon-btn" onclick={() => sendenModal = false}>✕</button>
       </div>
       <div class="modal-body">
         <p class="modal-info">Rechnung <strong>{sendenRechnung?.rechnung_nr}</strong> per E-Mail senden.</p>
@@ -911,13 +882,13 @@
   </div>
 {/if}
 
-<!-- MODAL: STORNO -->
+<!-- ═══ MODAL: STORNO ═══ -->
 {#if stornoModal}
   <div class="modal-overlay" onclick={() => stornoModal = false}>
     <div class="modal-box modal-klein" onclick={(e) => e.stopPropagation()}>
       <div class="modal-hdr">
         <span class="modal-titel">Rechnung stornieren</span>
-        <button class="icon-btn" onclick={() => stornoModal = false}>X</button>
+        <button class="icon-btn" onclick={() => stornoModal = false}>✕</button>
       </div>
       <div class="modal-body">
         <p class="modal-info">Moechtest du die Rechnung <strong>{stornoRechnung?.rechnung_nr}</strong> wirklich stornieren? Es wird eine Stornorechnung erstellt.</p>
@@ -930,27 +901,35 @@
   </div>
 {/if}
 
-<!-- MODAL: RECHNUNG BEARBEITEN -->
+<!-- ═══ MODAL: RECHNUNG BEARBEITEN — alle Felder editierbar (FIX 3) ═══ -->
 {#if bearbeitenModal && bearbeitenRechnung}
   <div class="modal-overlay" onclick={() => bearbeitenModal = false}>
-    <div class="modal-box" onclick={(e) => e.stopPropagation()}>
+    <div class="modal-box modal-bearbeiten" onclick={(e) => e.stopPropagation()}>
       <div class="modal-hdr">
-        <span class="modal-titel">Rechnung bearbeiten - {bearbeitenRechnung.rechnung_nr}</span>
-        <button class="icon-btn" onclick={() => bearbeitenModal = false}>X</button>
+        <span class="modal-titel">✏️ Rechnung bearbeiten — {bearbeitenRechnung.rechnung_nr}</span>
+        <button class="icon-btn" onclick={() => bearbeitenModal = false}>✕</button>
       </div>
       <div class="modal-body">
-        <div class="bearbeiten-hinweis">Die bestehende Rechnung wird storniert und eine neue erstellt.</div>
-        <div class="bearbeiten-kaeufer">
-          <span class="vs-label">Kaeufer</span>
-          <span class="vs-value">{bearbeitenRechnung.kaeufer_name}</span>
-          <span class="vs-sub">{bearbeitenRechnung.order_id || ''}</span>
+        <div class="bearbeiten-hinweis">Die bestehende Rechnung wird storniert und eine neue erstellt. Alle Felder können geändert werden.</div>
+
+        <div class="vs-label" style="margin-bottom:10px;">Rechnungsempfänger</div>
+        <div class="form-grid" style="margin-bottom:20px;">
+          <div class="form-group"><label>Name *</label><input bind:value={bearbeitenKaeufer.kaeufer_name} placeholder="Max Mustermann" /></div>
+          <div class="form-group"><label>E-Mail</label><input bind:value={bearbeitenKaeufer.kaeufer_email} type="email" placeholder="max@example.com" /></div>
+          <div class="form-group"><label>Strasse</label><input bind:value={bearbeitenKaeufer.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
+          <div class="form-group form-2col">
+            <div class="form-group"><label>PLZ</label><input bind:value={bearbeitenKaeufer.kaeufer_plz} placeholder="12345" /></div>
+            <div class="form-group"><label>Ort</label><input bind:value={bearbeitenKaeufer.kaeufer_ort} placeholder="Berlin" /></div>
+          </div>
+          <div class="form-group form-2col">
+            <div class="form-group"><label>Land</label><input bind:value={bearbeitenKaeufer.kaeufer_land} placeholder="DE" /></div>
+          </div>
         </div>
-        <div class="vs-label" style="margin-top:12px;margin-bottom:8px">Positionen</div>
+
+        <div class="vs-label" style="margin-bottom:8px;">Positionen</div>
         {#each bearbeitenPositionen as pos, idx}
           <div class="bearbeiten-position {pos.entfernt ? 'pos-entfernt' : ''}">
-            <div class="pos-check">
-              <input type="checkbox" checked={!pos.entfernt} onchange={() => togglePosition(idx)} />
-            </div>
+            <div class="pos-check"><input type="checkbox" checked={!pos.entfernt} onchange={() => togglePosition(idx)} /></div>
             <div class="pos-details">
               <div class="pos-name" style="font-size:0.84rem">{pos.artikel_name}</div>
               {#if pos.ebay_artikel_id}<div style="font-size:0.72rem;color:var(--text3)">eBay: {pos.ebay_artikel_id}</div>{/if}
@@ -973,7 +952,9 @@
       </div>
       <div class="modal-footer">
         <button class="btn-ghost" onclick={() => bearbeitenModal = false}>Abbrechen</button>
-        <button class="btn-primary" onclick={speichereBearbeitung} disabled={bearbeitenLaeuft}>{bearbeitenLaeuft ? 'Speichere...' : 'Storno + Neue Rechnung'}</button>
+        <button class="btn-primary" onclick={speichereBearbeitung} disabled={bearbeitenLaeuft}>
+          {bearbeitenLaeuft ? '⏳ Speichere...' : '💾 Storno + Neue Rechnung'}
+        </button>
       </div>
     </div>
   </div>
@@ -1101,6 +1082,7 @@
   .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
   .modal-klein { max-width:400px; }
   .modal-bestellung { max-width:620px; }
+  .modal-bearbeiten { max-width:600px; }
   .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); }
   .modal-titel { font-size:1rem; font-weight:600; color:var(--text); }
   .modal-body { padding:20px; overflow-y:auto; }
@@ -1118,18 +1100,17 @@
   .bm-section-titel { font-size:0.75rem; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
   .bm-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .bm-field { display:flex; flex-direction:column; gap:3px; }
+  .bm-full { grid-column: 1 / -1; }
   .bm-label { font-size:0.72rem; color:var(--text3); font-weight:500; }
   .bm-value { font-size:0.85rem; color:var(--text); font-weight:500; line-height:1.4; }
-  .bearbeiten-hinweis { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; font-size:0.8rem; color:#92400e; margin-bottom:14px; }
-  .bearbeiten-kaeufer { display:flex; align-items:baseline; gap:8px; margin-bottom:4px; }
+  .bearbeiten-hinweis { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; font-size:0.8rem; color:#92400e; margin-bottom:18px; }
   .bearbeiten-position { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; transition:opacity 0.2s; }
   .pos-entfernt { opacity:0.45; background:var(--surface2); }
   .pos-check { flex-shrink:0; }
   .pos-details { flex:1; min-width:0; }
   .pos-menge { display:flex; flex-direction:column; align-items:center; gap:2px; }
   .pos-preis { font-size:0.85rem; font-weight:600; color:var(--text); white-space:nowrap; min-width:70px; text-align:right; }
-
   .chk-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:20px; cursor:pointer; padding:4px; box-sizing:border-box; }
   .chk-label input[type="checkbox"] { width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0; }
- .td-check { width:36px; padding:0 !important; }
+  .td-check { width:36px; padding:0 !important; }
 </style>
