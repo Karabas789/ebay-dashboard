@@ -200,7 +200,15 @@
       r.order_id?.toLowerCase().includes(term)
     );
     if (lok.length === 1) {
-      oeffneDetailModal(lok[0]);
+      const r = lok[0];
+      oeffneNeuModal({
+        order_id: r.order_id || '', kaeufer_name: r.kaeufer_name || '',
+        kaeufer_email: r.kaeufer_email || '', kaeufer_strasse: r.kaeufer_strasse || '',
+        kaeufer_plz: r.kaeufer_plz || '', kaeufer_ort: r.kaeufer_ort || '',
+        kaeufer_land: r.kaeufer_land || 'DE', artikel_name: r.artikel_name || '',
+        ebay_artikel_id: r.ebay_artikel_id || '', artikel_sku: r.artikel_sku || '',
+        menge: r.artikel_menge || 1, einzelpreis: r.einzelpreis || r.brutto_betrag || ''
+      });
       schnellsucheOrderId = '';
       return;
     }
@@ -219,16 +227,8 @@
         suchbegriff: schnellsucheOrderId.trim()
       });
       if (data?.bestellung) {
-        const b = data.bestellung;
-        const norm = normalisiereBestellung(b);
-        // Rechnung bereits vorhanden? → Detail anzeigen
-        const vorh = findeVorhandeneRechnung(norm.order_id);
-        if (vorh) {
-          oeffneDetailModal(vorh);
-        } else {
-          // Kein Duplikat → Formular vorausgefüllt öffnen
-          oeffneNeuModal(norm);
-        }
+        const norm = normalisiereBestellung(data.bestellung);
+        oeffneNeuModal(norm);
         schnellsucheOrderId = '';
       } else {
         // Nichts in API → leeres Formular mit eingetragener Bestellnr.
