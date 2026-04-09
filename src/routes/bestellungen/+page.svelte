@@ -44,9 +44,6 @@
   // Rechnung erstellen (aus Bestellung)
   let rechnungWorking = $state(false);
 
-  // Bulk-E-Mail
-  let bulkEmailWorking = $state(false);
-
   // ─── Derived ───────────────────────────────────────────────────────────────
   let filteredOrders = $derived.by(() => {
     let orders = allOrders;
@@ -296,29 +293,6 @@
     }
   }
 
-  // Bulk-E-Mail: Rechnung an buyer_email senden
-  async function bulkEmailSenden() {
-    if (!hasSelected) return;
-    bulkEmailWorking = true;
-    let ok = 0;
-    let fehler = 0;
-    for (const id of selectedOrderIds) {
-      const order = allOrders.find(o => String(o.order_id || o.id) === String(id));
-      if (!order?.buyer_email || !order?.invoice_id) { fehler++; continue; }
-      try {
-        const res = await apiCall('/rechnung-senden', {
-          invoice_id: order.invoice_id,
-          user_id: $currentUser.id,
-          to_email: order.buyer_email
-        });
-        if (res?.success) ok++;
-        else fehler++;
-      } catch (e) { fehler++; }
-    }
-    bulkEmailWorking = false;
-    if (ok > 0) showToast(`✅ ${ok} Rechnung(en) gesendet${fehler > 0 ? ` (${fehler} übersprungen)` : ''}`, 'success');
-    else showToast(`⚠️ Keine Rechnungen gesendet (${fehler} ohne Rechnung/E-Mail)`, 'error');
-  }
 
   // ─── Download Helpers ───────────────────────────────────────────────────────
   function downloadBase64(base64, mimeType, filename) {
@@ -479,17 +453,6 @@
 
     {#if singleSelected && !isArchivView}
       <button class="btn-action-primary" onclick={openMsgModal}>✉️ Nachricht</button>
-    {/if}
-
-    {#if hasSelected && !isArchivView}
-      <button
-        class="btn-action-primary"
-        onclick={bulkEmailSenden}
-        disabled={bulkEmailWorking}
-        title="Rechnung per E-Mail an Käufer senden (nur Bestellungen mit Rechnung)"
-      >
-        {bulkEmailWorking ? '⏳ Sende...' : `📧 Rechnung senden (${selectedCount})`}
-      </button>
     {/if}
   </div>
 </div>
