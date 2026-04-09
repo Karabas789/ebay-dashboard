@@ -15,23 +15,35 @@
   let ausgewaehlt = $state(new Set());
   let alleAusgewaehlt = $state(false);
 
-  // ══ UNIFIED SMART MODAL ══════════════════════════════════════════
-  // Modus: 'detail' | 'bestellung' | 'erstellen'
-  let smartModalOffen = $state(false);
-  let smartModalModus = $state('detail');
-  let smartModalRechnung = $state(null);   // vorhandene Rechnung (Modus: detail)
-  let smartModalBestellung = $state(null); // gefundene Bestellung (Modus: bestellung)
+  // ══ EIN UNIVERSELLES MODAL ════════════════════════════════════════
+  // modus: 'neu' | 'detail' | 'bearbeiten'
+  let modalOffen = $state(false);
+  let modalModus = $state('neu');
+  let modalRechnung = $state(null);   // bei detail/bearbeiten: die Rechnung
+  let modalLaeuft = $state(false);
+
+  // Formularfelder (neu + bearbeiten)
+  let form = $state({
+    order_id: '', kaeufer_name: '', kaeufer_email: '',
+    kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE',
+    artikel_name: '', ebay_artikel_id: '', artikel_sku: '',
+    menge: 1, einzelpreis: ''
+  });
+  let bestellungLaeuft = $state(false);
+  let bestellungFehler = $state('');
+  let duplikatRechnung = $state(null);
+  let aenderungsgrund = $state('');
+
+  // E-Mail Modal
+  let sendenModal = $state(false);
+  let sendenRechnung = $state(null);
+  let sendenEmail = $state('');
+  let sendenLaeuft = $state(false);
 
   // Storno Modal
   let stornoModal = $state(false);
   let stornoRechnung = $state(null);
   let stornoLaeuft = $state(false);
-
-  // E-Mail senden Modal
-  let sendenModal = $state(false);
-  let sendenRechnung = $state(null);
-  let sendenEmail = $state('');
-  let sendenLaeuft = $state(false);
 
   // Auto-Rechnung Toggle
   let autoRechnungAktiv = $state(true);
@@ -41,41 +53,15 @@
   let schnellsucheOrderId = $state('');
   let schnellsucheLaeuft = $state(false);
   let schnellsucheFehler = $state('');
-  let schnellsucheErstellenLaeuft = $state(false);
-
-  // Bearbeiten Modal
-  let bearbeitenModal = $state(false);
-  let bearbeitenRechnung = $state(null);
-  let bearbeitenPositionen = $state([]);
-  let bearbeitenLaeuft = $state(false);
-  let bearbeitenKaeufer = $state({
-    kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '',
-    kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE'
-  });
 
   // E-Rechnung Dropdown
   let eRechnungMenuOffen = $state(false);
   let eRechnungRechnung = $state(null);
 
-  // Neues Rechnungsformular (Erstellen-Modus)
-  let neueRechnung = $state({
-    kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
-    kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-    artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
-  });
-  let erstellenLaeuft = $state(false);
-  let bestellungLaeuft = $state(false);
-  let bestellungFehler = $state('');
-  let vorhandeneRechnungFuerOrder = $state(null);
-
-   // ── Helpers ──────────────────────────────────────────────────────
-  function clearBestellungLaden() {
-    bestellungFehler = '';
-    vorhandeneRechnungFuerOrder = null;
-  }
-
+  // ── Helpers ──────────────────────────────────────────────────────
   function normalisiereBestellung(b) {
     return {
+      order_id:        b.order_id        || '',
       kaeufer_name:    b.kaeufer_name    || b.buyer_name    || '',
       kaeufer_email:   b.kaeufer_email   || b.buyer_email   || '',
       kaeufer_strasse: b.kaeufer_strasse || b.buyer_strasse || '',
@@ -87,13 +73,11 @@
       artikel_sku:     b.sold_sku        || b.artikel_sku   || '',
       einzelpreis:     b.brutto_betrag   || b.einzelpreis   || '',
       menge:           b.artikel_menge   || b.menge         || 1,
-      order_id:        b.order_id        || '',
     };
   }
 
-  // Prüft ob für eine order_id bereits eine aktive Rechnung existiert
   function findeVorhandeneRechnung(orderId) {
-    if (!orderId) return null;
+    if (!orderId?.trim()) return null;
     return rechnungen.find(r =>
       r.order_id &&
       r.order_id.toLowerCase() === orderId.trim().toLowerCase() &&
@@ -102,68 +86,112 @@
     ) || null;
   }
 
-  // ── Smart Modal öffnen ───────────────────────────────────────────
-  function oeffneDetailModal(r) {
-    smartModalRechnung = r;
-    smartModalBestellung = null;
-    smartModalModus = 'detail';
-    smartModalOffen = true;
-  }
-
-  function oeffneErstellenModal(vorbelegung = null) {
-    neueRechnung = {
-      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
-      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-      artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
+  function resetForm() {
+    form = {
+      order_id: '', kaeufer_name: '', kaeufer_email: '',
+      kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE',
+      artikel_name: '', ebay_artikel_id: '', artikel_sku: '',
+      menge: 1, einzelpreis: ''
     };
-    if (vorbelegung) neueRechnung = { ...neueRechnung, ...vorbelegung };
     bestellungFehler = '';
-    vorhandeneRechnungFuerOrder = null;
-    smartModalRechnung = null;
-    smartModalBestellung = null;
-    smartModalModus = 'erstellen';
-    smartModalOffen = true;
+    duplikatRechnung = null;
+    aenderungsgrund = '';
   }
 
-  function oeffneBestellungsModal(bestellung) {
-    smartModalBestellung = bestellung;
-    smartModalRechnung = null;
-    smartModalModus = 'bestellung';
-    smartModalOffen = true;
+  // ── Modal öffnen ──────────────────────────────────────────────────
+
+  // Neu: leeres Formular (oder vorausgefüllt)
+  function oeffneNeuModal(vorbelegung = null) {
+    resetForm();
+    if (vorbelegung) form = { ...form, ...vorbelegung };
+    modalRechnung = null;
+    modalModus = 'neu';
+    modalOffen = true;
   }
 
-  function schliesseSmartModal() {
-    smartModalOffen = false;
-    smartModalRechnung = null;
-    smartModalBestellung = null;
-    schnellsucheFehler = '';
+  // Detail: Rechnung anzeigen (read-only)
+  function oeffneDetailModal(r) {
+    resetForm();
+    modalRechnung = r;
+    modalModus = 'detail';
+    modalOffen = true;
+  }
+
+  // Bearbeiten: Rechnung editieren (mit Änderungsgrund)
+  function oeffneBearbeitenModal(r) {
+    resetForm();
+    form = {
+      order_id:        r.order_id        || '',
+      kaeufer_name:    r.kaeufer_name    || '',
+      kaeufer_email:   r.kaeufer_email   || '',
+      kaeufer_strasse: r.kaeufer_strasse || '',
+      kaeufer_plz:     r.kaeufer_plz     || '',
+      kaeufer_ort:     r.kaeufer_ort     || '',
+      kaeufer_land:    r.kaeufer_land    || 'DE',
+      artikel_name:    r.artikel_name    || '',
+      ebay_artikel_id: r.ebay_artikel_id || '',
+      artikel_sku:     r.artikel_sku     || '',
+      menge:           r.artikel_menge   || 1,
+      einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
+    };
+    modalRechnung = r;
+    modalModus = 'bearbeiten';
+    modalOffen = true;
+  }
+
+  function schliesseModal() {
+    modalOffen = false;
+    modalRechnung = null;
+    bestellungFehler = '';
+    duplikatRechnung = null;
+    aenderungsgrund = '';
     eRechnungMenuOffen = false;
     eRechnungRechnung = null;
-    vorhandeneRechnungFuerOrder = null;
   }
 
-  // Aus Bestellungs-Modal heraus: zum Erstell-Formular wechseln
-  function wechsleZuErstellen() {
-    const b = smartModalBestellung;
-    const norm = b ? normalisiereBestellung(b) : {};
-    neueRechnung = {
-      kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
-      kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-      artikel_sku: '', menge: 1, einzelpreis: '', order_id: '',
-      ...norm
-    };
+  // ── Bestellnummer laden (im Formular) ────────────────────────────
+  function onOrderIdInput() {
     bestellungFehler = '';
-    vorhandeneRechnungFuerOrder = null;
-    smartModalBestellung = null;
-    smartModalModus = 'erstellen';
+    duplikatRechnung = null;
   }
 
-  // ── Schnellsuche ─────────────────────────────────────────────────
+  async function ladeBestellungDaten() {
+    if (!form.order_id?.trim()) return;
+
+    // Duplikat-Prüfung
+    if (modalModus === 'neu') {
+      const dup = findeVorhandeneRechnung(form.order_id);
+      if (dup) { duplikatRechnung = dup; return; }
+    }
+    duplikatRechnung = null;
+
+    bestellungLaeuft = true;
+    bestellungFehler = '';
+    try {
+      const data = await apiCall('bestellung-laden', {
+        user_id: $currentUser?.id,
+        order_id: form.order_id.trim()
+      });
+      if (data?.bestellung) {
+        const norm = normalisiereBestellung(data.bestellung);
+        form = { ...form, ...norm };
+        showToast('Bestelldaten geladen');
+      } else {
+        bestellungFehler = 'Keine Bestellung gefunden';
+      }
+    } catch(e) {
+      bestellungFehler = 'Fehler beim Laden';
+    } finally {
+      bestellungLaeuft = false;
+    }
+  }
+
+  // ── Schnellsuche ──────────────────────────────────────────────────
   async function schnellsucheNachOrder() {
     if (!schnellsucheOrderId.trim()) return;
     const term = schnellsucheOrderId.trim().toLowerCase();
 
-    // Erst lokal in vorhandenen Rechnungen suchen
+    // Lokal suchen
     const lok = rechnungen.filter(r =>
       r.rechnung_nr?.toLowerCase().includes(term) ||
       r.kaeufer_name?.toLowerCase().includes(term) ||
@@ -182,7 +210,7 @@
       return;
     }
 
-    // Nichts lokal → API
+    // API
     schnellsucheLaeuft = true;
     schnellsucheFehler = '';
     try {
@@ -191,10 +219,21 @@
         suchbegriff: schnellsucheOrderId.trim()
       });
       if (data?.bestellung) {
-        oeffneBestellungsModal(data.bestellung);
+        const b = data.bestellung;
+        const norm = normalisiereBestellung(b);
+        // Rechnung bereits vorhanden? → Detail anzeigen
+        const vorh = findeVorhandeneRechnung(norm.order_id);
+        if (vorh) {
+          oeffneDetailModal(vorh);
+        } else {
+          // Kein Duplikat → Formular vorausgefüllt öffnen
+          oeffneNeuModal(norm);
+        }
         schnellsucheOrderId = '';
       } else {
-        schnellsucheFehler = 'Nichts gefunden';
+        // Nichts in API → leeres Formular mit eingetragener Bestellnr.
+        oeffneNeuModal({ order_id: schnellsucheOrderId.trim() });
+        schnellsucheOrderId = '';
       }
     } catch(e) {
       schnellsucheFehler = 'Nichts gefunden';
@@ -203,75 +242,85 @@
     }
   }
 
-  // Rechnung direkt aus Bestellungs-Modal erstellen
-  async function rechnungAusBestellungErstellen() {
-    const b = smartModalBestellung;
-    if (!b) return;
-    const norm = normalisiereBestellung(b);
-    if (!norm.kaeufer_name || !norm.artikel_name || !norm.einzelpreis) {
-      wechsleZuErstellen();
-      return;
+  // ── Rechnung erstellen (neu) ──────────────────────────────────────
+  async function erstelleRechnung() {
+    if (!form.kaeufer_name || !form.artikel_name || !form.einzelpreis) {
+      showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
     }
-    schnellsucheErstellenLaeuft = true;
+    const dup = findeVorhandeneRechnung(form.order_id);
+    if (dup) { duplikatRechnung = dup; return; }
+
+    modalLaeuft = true;
     try {
       await apiCall('rechnung-erstellen', {
         user_id:         $currentUser.id,
         typ:             'rechnung',
-        order_id:        norm.order_id,
-        kaeufer_name:    norm.kaeufer_name,
-        kaeufer_email:   norm.kaeufer_email,
-        kaeufer_strasse: norm.kaeufer_strasse,
-        kaeufer_plz:     norm.kaeufer_plz,
-        kaeufer_ort:     norm.kaeufer_ort,
-        kaeufer_land:    norm.kaeufer_land,
-        artikel_name:    norm.artikel_name,
-        ebay_artikel_id: norm.ebay_artikel_id,
-        menge:           Number(norm.menge),
-        einzelpreis:     Number(norm.einzelpreis)
+        order_id:        form.order_id || '',
+        kaeufer_name:    form.kaeufer_name,
+        kaeufer_email:   form.kaeufer_email,
+        kaeufer_strasse: form.kaeufer_strasse,
+        kaeufer_plz:     form.kaeufer_plz,
+        kaeufer_ort:     form.kaeufer_ort,
+        kaeufer_land:    form.kaeufer_land,
+        artikel_name:    form.artikel_name,
+        ebay_artikel_id: form.ebay_artikel_id,
+        menge:           Number(form.menge),
+        einzelpreis:     Number(form.einzelpreis)
       });
       showToast('✅ Rechnung erstellt');
-      schliesseSmartModal();
+      schliesseModal();
       await ladeRechnungen();
     } catch(e) {
       showToast('Fehler: ' + e.message);
     } finally {
-      schnellsucheErstellenLaeuft = false;
+      modalLaeuft = false;
     }
   }
 
-  // ── Bestellung laden (im Erstellen-Formular) ─────────────────────
-  async function ladeBestellungDaten() {
-  if (!neueRechnung.order_id) return;
-
-  // Prüfe zuerst lokal ob bereits eine Rechnung für diese Bestellung existiert
-  const duplikat = findeVorhandeneRechnung(neueRechnung.order_id);
-  if (duplikat) {
-    vorhandeneRechnungFuerOrder = duplikat;
-    bestellungFehler = '';
-    return;
-  }
-  vorhandeneRechnungFuerOrder = null;
-
-  bestellungLaeuft = true;
-  bestellungFehler = '';
-  try {
-    const data = await apiCall('bestellung-laden', {
-      user_id: $currentUser?.id,
-      order_id: neueRechnung.order_id
-    });
-    if (data?.bestellung) {
-      const norm = normalisiereBestellung(data.bestellung);
-      neueRechnung = { ...neueRechnung, ...norm };
-      showToast('Bestelldaten geladen');
-    } else {
-      bestellungFehler = 'Keine Bestellung gefunden';
+  // ── Rechnung bearbeiten (storno + neu mit Änderungsvermerk) ───────
+  async function speichereBearbeitung() {
+    if (!form.kaeufer_name || !form.artikel_name || !form.einzelpreis) {
+      showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
     }
-  } catch(e) {
-    bestellungFehler = 'Fehler beim Laden';
-  } finally {
-    bestellungLaeuft = false;
+    if (!aenderungsgrund.trim()) {
+      showToast('Bitte Grund der Änderung angeben.'); return;
+    }
+
+    modalLaeuft = true;
+    try {
+      // Alte Rechnung stornieren
+      await apiCall('rechnung-stornieren', {
+        user_id: $currentUser.id,
+        invoice_id: modalRechnung.id
+      });
+      // Neue Rechnung mit Änderungsvermerk erstellen
+      await apiCall('rechnung-erstellen', {
+        user_id:           $currentUser.id,
+        typ:               'rechnung',
+        order_id:          form.order_id || '',
+        kaeufer_name:      form.kaeufer_name,
+        kaeufer_email:     form.kaeufer_email,
+        kaeufer_strasse:   form.kaeufer_strasse,
+        kaeufer_plz:       form.kaeufer_plz,
+        kaeufer_ort:       form.kaeufer_ort,
+        kaeufer_land:      form.kaeufer_land,
+        artikel_name:      form.artikel_name,
+        ebay_artikel_id:   form.ebay_artikel_id,
+        menge:             Number(form.menge),
+        einzelpreis:       Number(form.einzelpreis),
+        aenderungsgrund:   aenderungsgrund.trim(),
+        aenderungsdatum:   new Date().toISOString(),
+        vorgaenger_nr:     modalRechnung.rechnung_nr
+      });
+      showToast('✅ Rechnung aktualisiert');
+      schliesseModal();
+      await ladeRechnungen();
+    } catch(e) {
+      showToast('Fehler: ' + e.message);
+    } finally {
+      modalLaeuft = false;
+    }
   }
-}
 
   // ── Auto-Rechnung ─────────────────────────────────────────────────
   async function ladeAutoRechnungStatus() {
@@ -295,71 +344,40 @@
     }
   }
 
-  // ── Bearbeiten Modal ──────────────────────────────────────────────
-  function oeffneBearbeitenModal(r) {
-    bearbeitenRechnung = r;
-    bearbeitenKaeufer = {
-      kaeufer_name:    r.kaeufer_name    || '',
-      kaeufer_email:   r.kaeufer_email   || '',
-      kaeufer_strasse: r.kaeufer_strasse || '',
-      kaeufer_plz:     r.kaeufer_plz     || '',
-      kaeufer_ort:     r.kaeufer_ort     || '',
-      kaeufer_land:    r.kaeufer_land    || 'DE',
-    };
-    bearbeitenPositionen = [{
-      artikel_name:    r.artikel_name    || '',
-      ebay_artikel_id: r.ebay_artikel_id || '',
-      menge:           r.artikel_menge   || 1,
-      einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
-      entfernt: false
-    }];
-    schliesseSmartModal();
-    bearbeitenModal = true;
+  // ── E-Mail senden ─────────────────────────────────────────────────
+  function oeffneSendenModal(r) {
+    sendenRechnung = r;
+    sendenEmail = r.kaeufer_email || '';
+    sendenModal = true;
+    schliesseModal();
   }
 
-  function togglePosition(idx) {
-    bearbeitenPositionen = bearbeitenPositionen.map((p, i) =>
-      i === idx ? { ...p, entfernt: !p.entfernt } : p
-    );
-  }
-
-  function updatePositionMenge(idx, wert) {
-    bearbeitenPositionen = bearbeitenPositionen.map((p, i) =>
-      i === idx ? { ...p, menge: Math.max(1, parseInt(wert) || 1) } : p
-    );
-  }
-
-  async function speichereBearbeitung() {
-    const aktivePositionen = bearbeitenPositionen.filter(p => !p.entfernt);
-    if (aktivePositionen.length === 0) { showToast('Mindestens eine Position muss verbleiben.'); return; }
-    if (!bearbeitenKaeufer.kaeufer_name) { showToast('Käufername ist erforderlich.'); return; }
-    bearbeitenLaeuft = true;
+  async function sendeRechnung() {
+    if (!sendenEmail) { showToast('Bitte E-Mail eingeben.'); return; }
+    sendenLaeuft = true;
     try {
-      await apiCall('rechnung-stornieren', { user_id: $currentUser.id, invoice_id: bearbeitenRechnung.id });
-      const pos = aktivePositionen[0];
-      await apiCall('rechnung-erstellen', {
-        user_id:         $currentUser.id,
-        typ:             'rechnung',
-        order_id:        bearbeitenRechnung.order_id || '',
-        kaeufer_name:    bearbeitenKaeufer.kaeufer_name,
-        kaeufer_email:   bearbeitenKaeufer.kaeufer_email,
-        kaeufer_strasse: bearbeitenKaeufer.kaeufer_strasse,
-        kaeufer_plz:     bearbeitenKaeufer.kaeufer_plz,
-        kaeufer_ort:     bearbeitenKaeufer.kaeufer_ort,
-        kaeufer_land:    bearbeitenKaeufer.kaeufer_land,
-        artikel_name:    pos.artikel_name,
-        ebay_artikel_id: pos.ebay_artikel_id || '',
-        menge:           pos.menge,
-        einzelpreis:     pos.einzelpreis
-      });
-      showToast('✅ Rechnung aktualisiert');
-      bearbeitenModal = false;
+      await apiCall('rechnung-senden', { invoice_id: sendenRechnung.id, user_id: $currentUser.id, to_email: sendenEmail });
+      showToast('Rechnung gesendet');
+      sendenModal = false;
       await ladeRechnungen();
-    } catch(e) {
-      showToast('Fehler: ' + e.message);
-    } finally {
-      bearbeitenLaeuft = false;
-    }
+    } catch(e) { showToast('Fehler: ' + e.message); } finally { sendenLaeuft = false; }
+  }
+
+  // ── Stornieren ────────────────────────────────────────────────────
+  function oeffneStornoModal(r) {
+    stornoRechnung = r;
+    stornoModal = true;
+    schliesseModal();
+  }
+
+  async function erstelleStorno() {
+    stornoLaeuft = true;
+    try {
+      await apiCall('rechnung-stornieren', { user_id: $currentUser.id, invoice_id: stornoRechnung.id });
+      showToast('Stornorechnung erstellt');
+      stornoModal = false;
+      await ladeRechnungen();
+    } catch(e) { showToast('Fehler: ' + e.message); } finally { stornoLaeuft = false; }
   }
 
   // ── Bulk Aktionen ─────────────────────────────────────────────────
@@ -370,8 +388,6 @@
 
   async function bulkEmailSenden() {
     const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
-    const ohneEmail = liste.filter(r => !r.kaeufer_email);
-    if (ohneEmail.length > 0) showToast(`${ohneEmail.length} ohne E-Mail werden übersprungen`);
     let gesendet = 0;
     for (const r of liste) {
       if (!r.kaeufer_email) continue;
@@ -460,7 +476,6 @@
     const jetzt = new Date();
     return rechnungen.filter(r => { const d = new Date(r.erstellt_am); return d.getFullYear() === jetzt.getFullYear() && d.getMonth() === jetzt.getMonth(); }).length;
   });
-  let aktiveSumme = $derived(bearbeitenPositionen.filter(p => !p.entfernt).reduce((s, p) => s + p.einzelpreis * p.menge, 0));
 
   onMount(() => { if ($currentUser) { ladeRechnungen(); ladeAutoRechnungStatus(); } });
 
@@ -469,7 +484,7 @@
     try {
       const data = await apiCall('rechnungen-laden', { user_id: $currentUser.id, ebayusername: $currentUser.ebayuserid });
       rechnungen = Array.isArray(data) ? data : (data.rechnungen || []);
-    } catch (e) { fehler = e.message; } finally { loading = false; }
+    } catch(e) { fehler = e.message; } finally { loading = false; }
   }
 
   async function ladePDF(rechnung) {
@@ -481,61 +496,8 @@
       const blob = new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = (rechnung.rechnung_nr || 'Rechnung') + '.pdf'; a.click(); URL.revokeObjectURL(url);
-    } catch (e) { showToast('Fehler: ' + e.message); }
+    } catch(e) { showToast('Fehler: ' + e.message); }
   }
-
-  function oeffneSendenModal(r) {
-    sendenRechnung = r; sendenEmail = r.kaeufer_email || ''; sendenModal = true;
-    schliesseSmartModal();
-  }
-
-  async function sendeRechnung() {
-    if (!sendenEmail) { showToast('Bitte E-Mail eingeben.'); return; }
-    sendenLaeuft = true;
-    try {
-      await apiCall('rechnung-senden', { invoice_id: sendenRechnung.id, user_id: $currentUser.id, to_email: sendenEmail });
-      showToast('Rechnung gesendet'); sendenModal = false; await ladeRechnungen();
-    } catch (e) { showToast('Fehler: ' + e.message); } finally { sendenLaeuft = false; }
-  }
-
-  function oeffneStornoModal(r) {
-    stornoRechnung = r; stornoModal = true;
-    schliesseSmartModal();
-  }
-
-  async function erstelleStorno() {
-    stornoLaeuft = true;
-    try {
-      await apiCall('rechnung-stornieren', { user_id: $currentUser.id, invoice_id: stornoRechnung.id });
-      showToast('Stornorechnung erstellt'); stornoModal = false; await ladeRechnungen();
-    } catch (e) { showToast('Fehler: ' + e.message); } finally { stornoLaeuft = false; }
-  }
-
-  async function erstelleManuell() {
-  if (!neueRechnung.kaeufer_name || !neueRechnung.artikel_name || !neueRechnung.einzelpreis) {
-    showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
-  }
-  // Duplikat-Schutz: nochmal prüfen bevor API-Call
-  const duplikat = findeVorhandeneRechnung(neueRechnung.order_id);
-  if (duplikat) {
-    vorhandeneRechnungFuerOrder = duplikat;
-    return;
-  }
-  erstellenLaeuft = true;
-  try {
-    await apiCall('rechnung-erstellen', {
-      user_id: $currentUser.id, typ: 'rechnung', order_id: neueRechnung.order_id || '',
-      kaeufer_name: neueRechnung.kaeufer_name, kaeufer_email: neueRechnung.kaeufer_email,
-      kaeufer_strasse: neueRechnung.kaeufer_strasse, kaeufer_plz: neueRechnung.kaeufer_plz,
-      kaeufer_ort: neueRechnung.kaeufer_ort, kaeufer_land: neueRechnung.kaeufer_land,
-      artikel_name: neueRechnung.artikel_name, ebay_artikel_id: neueRechnung.ebay_artikel_id,
-      menge: Number(neueRechnung.menge), einzelpreis: Number(neueRechnung.einzelpreis)
-    });
-    showToast('Rechnung erstellt');
-    schliesseSmartModal();
-    await ladeRechnungen();
-  } catch (e) { showToast('Fehler: ' + e.message); } finally { erstellenLaeuft = false; }
-}
 
   function toggleAuswahl(id) {
     const neu = new Set(ausgewaehlt); neu.has(id) ? neu.delete(id) : neu.add(id); ausgewaehlt = neu;
@@ -579,7 +541,9 @@
     <div class="hdr-actions">
       <div class="hdr-suche">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text3);flex-shrink:0;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input class="hdr-suche-input" type="text" placeholder="Name, Rechnungs-Nr., Bestellnr. ..." bind:value={schnellsucheOrderId} onkeydown={(e) => e.key === 'Enter' && schnellsucheNachOrder()} />
+        <input class="hdr-suche-input" type="text" placeholder="Name, Rechnungs-Nr., Bestellnr. ..."
+          bind:value={schnellsucheOrderId}
+          onkeydown={(e) => e.key === 'Enter' && schnellsucheNachOrder()} />
         {#if schnellsucheFehler}<span class="hdr-suche-fehler">{schnellsucheFehler}</span>{/if}
         <button class="btn-primary btn-sm" onclick={schnellsucheNachOrder} disabled={schnellsucheLaeuft || !schnellsucheOrderId.trim()}>
           {schnellsucheLaeuft ? '...' : 'Suchen'}
@@ -596,7 +560,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/></svg>
         Aktualisieren
       </button>
-      <button class="btn-primary" onclick={() => oeffneErstellenModal()}>+ Rechnung erstellen</button>
+      <button class="btn-primary" onclick={() => oeffneNeuModal()}>+ Rechnung erstellen</button>
     </div>
   </div>
 
@@ -638,7 +602,7 @@
     </div>
   {/if}
 
-  <!-- Tabelle (volle Breite — kein Panel mehr rechts) -->
+  <!-- Tabelle -->
   <div class="tabellen-wrapper">
     {#if loading}
       <div class="status-info">Lade Rechnungen...</div>
@@ -648,7 +612,7 @@
       <div class="leer-state">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <p>Keine Rechnungen gefunden</p>
-        <button class="btn-primary btn-sm" onclick={() => oeffneErstellenModal()}>Erste Rechnung erstellen</button>
+        <button class="btn-primary btn-sm" onclick={() => oeffneNeuModal()}>Erste Rechnung erstellen</button>
       </div>
     {:else}
       <table class="tabelle">
@@ -738,74 +702,58 @@
 
 
 <!-- ═══════════════════════════════════════════════════════════════════
-     UNIFIED SMART MODAL
-     Modus 1: 'detail'     → vorhandene Rechnung anzeigen
-     Modus 2: 'bestellung' → gefundene Bestellung, noch keine Rechnung
-     Modus 3: 'erstellen'  → leeres Formular (+ Bestellnr-Laden)
+     DAS EINE UNIVERSELLE MODAL
+     modus = 'neu'        → Rechnung erstellen (Formular)
+     modus = 'detail'     → Rechnung anzeigen (read-only)
+     modus = 'bearbeiten' → Rechnung bearbeiten (editierbar + Änderungsgrund)
 ════════════════════════════════════════════════════════════════════ -->
-{#if smartModalOffen}
-  <div class="modal-overlay" onclick={schliesseSmartModal}>
-    <div class="modal-box {smartModalModus === 'erstellen' ? 'modal-erstellen' : 'modal-bestellung'}" onclick={(e) => e.stopPropagation()}>
+{#if modalOffen}
+  <div class="modal-overlay" onclick={schliesseModal}>
+    <div class="modal-box modal-universal" onclick={(e) => e.stopPropagation()}>
 
-      <!-- ── MODUS: DETAIL (vorhandene Rechnung) ─────────────────── -->
-      {#if smartModalModus === 'detail' && smartModalRechnung}
-        {@const r = smartModalRechnung}
+      <!-- ══ DETAIL (Rechnung anzeigen, read-only) ══════════════════ -->
+      {#if modalModus === 'detail' && modalRechnung}
+        {@const r = modalRechnung}
         {@const badge = statusBadge(r)}
+
         <div class="modal-hdr">
           <div>
             <span class="modal-titel">{r.rechnung_nr || 'Rechnung'}</span>
-            {#if r.order_id}<div style="font-size:0.75rem;color:var(--text3);margin-top:2px;font-family:monospace">{r.order_id}</div>{/if}
+            {#if r.order_id}<div class="modal-sub">{r.order_id}</div>{/if}
           </div>
-          <button class="icon-btn" onclick={schliesseSmartModal}>✕</button>
+          <button class="icon-btn" onclick={schliesseModal}>✕</button>
         </div>
+
         <div class="modal-body">
           <div class="detail-meta">
             <span class="badge {badge.cls}">{badge.label}</span>
             <span class="detail-datum">{fmtDatum(r.erstellt_am)}</span>
           </div>
           {#if r.rechnung_typ === 'storno'}
-            <div class="storno-hinweis">Stornorechnung zu einer vorherigen Rechnung</div>
+            <div class="hinweis hinweis-rot">Stornorechnung zu einer vorherigen Rechnung</div>
+          {/if}
+          {#if r.aenderungsgrund}
+            <div class="hinweis hinweis-blau">
+              <strong>Geändert am {fmtDatum(r.aenderungsdatum)}:</strong> {r.aenderungsgrund}
+              {#if r.vorgaenger_nr}<span style="color:var(--text3);font-size:0.78rem;margin-left:6px">(vorher: {r.vorgaenger_nr})</span>{/if}
+            </div>
           {/if}
 
           <div class="bm-section">
             <div class="bm-section-titel">Rechnungsempfänger</div>
             <div class="bm-grid">
-              <div class="bm-field bm-full">
-                <div class="bm-label">Name</div>
-                <div class="bm-value">{r.kaeufer_name || '-'}</div>
-              </div>
-              {#if r.kaeufer_email}
-                <div class="bm-field bm-full">
-                  <div class="bm-label">E-Mail</div>
-                  <div class="bm-value" style="color:var(--primary)">{r.kaeufer_email}</div>
-                </div>
-              {/if}
-              {#if r.kaeufer_strasse}
-                <div class="bm-field bm-full">
-                  <div class="bm-label">Adresse</div>
-                  <div class="bm-value">{r.kaeufer_strasse}, {r.kaeufer_plz} {r.kaeufer_ort}, {r.kaeufer_land}</div>
-                </div>
-              {/if}
+              <div class="bm-field bm-full"><div class="bm-label">Name</div><div class="bm-value">{r.kaeufer_name || '-'}</div></div>
+              {#if r.kaeufer_email}<div class="bm-field bm-full"><div class="bm-label">E-Mail</div><div class="bm-value" style="color:var(--primary)">{r.kaeufer_email}</div></div>{/if}
+              {#if r.kaeufer_strasse}<div class="bm-field bm-full"><div class="bm-label">Adresse</div><div class="bm-value">{r.kaeufer_strasse}, {r.kaeufer_plz} {r.kaeufer_ort}, {r.kaeufer_land}</div></div>{/if}
             </div>
           </div>
 
           <div class="bm-section">
             <div class="bm-section-titel">Artikel</div>
             <div class="bm-grid">
-              <div class="bm-field bm-full">
-                <div class="bm-label">Bezeichnung</div>
-                <div class="bm-value">{r.artikel_name || '-'}</div>
-              </div>
-              {#if r.ebay_artikel_id}
-                <div class="bm-field">
-                  <div class="bm-label">eBay Artikel-ID</div>
-                  <div class="bm-value" style="font-family:monospace">{r.ebay_artikel_id}</div>
-                </div>
-              {/if}
-              <div class="bm-field">
-                <div class="bm-label">Menge</div>
-                <div class="bm-value">{r.artikel_menge || 1}</div>
-              </div>
+              <div class="bm-field bm-full"><div class="bm-label">Bezeichnung</div><div class="bm-value">{r.artikel_name || '-'}</div></div>
+              {#if r.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{r.ebay_artikel_id}</div></div>{/if}
+              <div class="bm-field"><div class="bm-label">Menge</div><div class="bm-value">{r.artikel_menge || 1}</div></div>
             </div>
           </div>
 
@@ -829,8 +777,9 @@
             </div>
           {/if}
         </div>
+
         <div class="modal-footer">
-          <button class="btn-ghost btn-sm" onclick={schliesseSmartModal}>Schließen</button>
+          <button class="btn-ghost btn-sm" onclick={schliesseModal}>Schließen</button>
           <button class="btn-secondary btn-sm" onclick={() => ladePDF(r)}>PDF</button>
           {#if r.status !== 'storniert' && r.rechnung_typ !== 'storno'}
             <button class="btn-secondary btn-sm" onclick={() => oeffneSendenModal(r)}>E-Mail</button>
@@ -844,151 +793,124 @@
                 </div>
               {/if}
             </div>
-            <button class="btn-secondary btn-sm" onclick={() => oeffneBearbeitenModal(r)}>Bearbeiten</button>
+            <button class="btn-secondary btn-sm" onclick={() => oeffneBearbeitenModal(r)}>✏️ Bearbeiten</button>
             <button class="btn-danger btn-sm" onclick={() => oeffneStornoModal(r)}>Stornieren</button>
           {/if}
         </div>
 
-      <!-- ── MODUS: BESTELLUNG GEFUNDEN (noch keine Rechnung) ────── -->
-      {:else if smartModalModus === 'bestellung' && smartModalBestellung}
-        {@const b = smartModalBestellung}
+      <!-- ══ NEU / BEARBEITEN (Formular) ════════════════════════════ -->
+      {:else if modalModus === 'neu' || modalModus === 'bearbeiten'}
+
         <div class="modal-hdr">
           <div>
-            <span class="modal-titel">Bestellung gefunden</span>
-            <div style="font-size:0.78rem;color:var(--text3);margin-top:2px;font-family:monospace">{b.order_id || ''}</div>
+            <span class="modal-titel">
+              {#if modalModus === 'bearbeiten'}✏️ Rechnung bearbeiten — {modalRechnung?.rechnung_nr}{:else}Neue Rechnung erstellen{/if}
+            </span>
           </div>
-          <button class="icon-btn" onclick={schliesseSmartModal}>✕</button>
+          <button class="icon-btn" onclick={schliesseModal}>✕</button>
         </div>
+
         <div class="modal-body">
-          <div style="margin-bottom:16px">
-            {#if b.hat_rechnung}
-              <span class="badge badge-gesendet">Rechnung bereits vorhanden</span>
-            {:else}
-              <span class="badge badge-erstellt">Noch keine Rechnung</span>
+
+          {#if modalModus === 'bearbeiten'}
+            <div class="hinweis hinweis-gelb">
+              Die bestehende Rechnung wird storniert und eine neue mit den geänderten Daten erstellt. Der Änderungsgrund wird intern gespeichert.
+            </div>
+          {/if}
+
+          <!-- Bestellnummer + Laden -->
+          <div class="form-group" style="margin-bottom:14px">
+            <label>eBay Bestellnr.</label>
+            <div style="display:flex;gap:8px">
+              <input bind:value={form.order_id} placeholder="12-34567-89012" style="flex:1"
+                oninput={onOrderIdInput}
+                onkeydown={(e) => e.key === 'Enter' && ladeBestellungDaten()} />
+              <button class="btn-primary btn-sm" onclick={ladeBestellungDaten}
+                disabled={bestellungLaeuft || !form.order_id} style="white-space:nowrap">
+                {bestellungLaeuft ? '...' : 'Laden'}
+              </button>
+            </div>
+            {#if bestellungFehler}<p class="form-fehler">{bestellungFehler}</p>{/if}
+          </div>
+
+          <!-- Duplikat-Warnung (nur bei neu) -->
+          {#if duplikatRechnung}
+            <div class="hinweis hinweis-rot" style="margin-bottom:14px">
+              ⚠️ Für diese Bestellung existiert bereits <strong>{duplikatRechnung.rechnung_nr}</strong>.
+              <button class="btn-link" onclick={() => oeffneDetailModal(duplikatRechnung)}>Anzeigen →</button>
+            </div>
+          {/if}
+
+          <!-- Rechnung vorhanden → grüner Badge (nur bei neu) -->
+          {#if modalModus === 'neu' && form.order_id && !duplikatRechnung && !bestellungLaeuft}
+            {@const vorh = findeVorhandeneRechnung(form.order_id)}
+            {#if vorh}
+              <div class="hinweis hinweis-gruen" style="margin-bottom:14px">
+                ✅ Rechnung <strong>{vorh.rechnung_nr}</strong> bereits vorhanden.
+                <button class="btn-link" onclick={() => oeffneDetailModal(vorh)}>Anzeigen →</button>
+              </div>
             {/if}
-          </div>
+          {/if}
 
-          <div class="bm-section">
-            <div class="bm-section-titel">Käufer</div>
-            <div class="bm-grid">
-              <div class="bm-field">
-                <div class="bm-label">Name</div>
-                <div class="bm-value">{b.kaeufer_name || b.buyer_name || '-'}</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Käufer *</label><input bind:value={form.kaeufer_name} placeholder="Max Mustermann" /></div>
+            <div class="form-group"><label>E-Mail</label><input bind:value={form.kaeufer_email} type="email" placeholder="max@example.com" /></div>
+            <div class="form-group"><label>Straße</label><input bind:value={form.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>PLZ</label><input bind:value={form.kaeufer_plz} placeholder="12345" /></div>
+              <div class="form-group"><label>Ort</label><input bind:value={form.kaeufer_ort} placeholder="Berlin" /></div>
+            </div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>Land</label><input bind:value={form.kaeufer_land} placeholder="DE" /></div>
+            </div>
+            <div class="form-group"><label>Artikel *</label><input bind:value={form.artikel_name} placeholder="Produktname" /></div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={form.ebay_artikel_id} placeholder="123456789012" /></div>
+              <div class="form-group">
+                <label>Variante (SKU)</label>
+                <input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
               </div>
-              <div class="bm-field">
-                <div class="bm-label">E-Mail</div>
-                <div class="bm-value">{b.kaeufer_email || b.buyer_email || '-'}</div>
-              </div>
-              <div class="bm-field bm-full">
-                <div class="bm-label">Adresse</div>
-                <div class="bm-value">{b.kaeufer_strasse || b.buyer_strasse || '-'}, {b.kaeufer_plz || b.buyer_plz || ''} {b.kaeufer_ort || b.buyer_ort || ''}, {b.kaeufer_land || b.buyer_land || 'DE'}</div>
-              </div>
+            </div>
+            <div class="form-group form-2col">
+              <div class="form-group"><label>Menge *</label><input bind:value={form.menge} type="number" min="1" /></div>
+              <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={form.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
             </div>
           </div>
 
-          <div class="bm-section">
-            <div class="bm-section-titel">Artikel</div>
-            <div class="bm-grid">
-              <div class="bm-field bm-full">
-                <div class="bm-label">Bezeichnung</div>
-                <div class="bm-value">{b.artikel_name || '-'}</div>
-              </div>
-              {#if b.sold_sku}
-                <div class="bm-field bm-full">
-                  <div class="bm-label">Variante (SKU)</div>
-                  <div class="bm-value"><code style="font-size:0.82rem;background:var(--surface2);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{b.sold_sku}</code></div>
-                </div>
+          <!-- Änderungsgrund (nur bei bearbeiten) -->
+          {#if modalModus === 'bearbeiten'}
+            <div class="form-group" style="margin-top:18px">
+              <label>Grund der Änderung * <span style="font-weight:400;color:var(--text3)">(wird intern gespeichert)</span></label>
+              <textarea
+                bind:value={aenderungsgrund}
+                placeholder="z. B. Käufer hat neue Lieferadresse mitgeteilt"
+                rows="3"
+                style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"
+              ></textarea>
+              {#if modalModus === 'bearbeiten' && !aenderungsgrund.trim()}
+                <p class="form-fehler">Pflichtfeld — bitte Grund angeben</p>
               {/if}
-              {#if b.ebay_artikel_id}
-                <div class="bm-field">
-                  <div class="bm-label">eBay Artikel-ID</div>
-                  <div class="bm-value" style="font-family:monospace">{b.ebay_artikel_id}</div>
-                </div>
-              {/if}
-              <div class="bm-field">
-                <div class="bm-label">Menge</div>
-                <div class="bm-value">{b.artikel_menge || 1}</div>
-              </div>
             </div>
-          </div>
+          {/if}
 
-          <div class="bm-section">
-            <div class="bm-section-titel">Zahlung</div>
-            <div class="betraege-box" style="margin-top:8px">
-              <div class="betrag-zeile">
-                <span>Betrag (Brutto)</span>
-                <span style="font-weight:700;color:var(--primary);font-size:1.1rem">{fmt(b.brutto_betrag)} EUR</span>
-              </div>
-              {#if b.zahlungsdatum}
-                <div class="betrag-zeile"><span>Datum</span><span>{fmtDatum(b.zahlungsdatum)}</span></div>
-              {/if}
-            </div>
-          </div>
         </div>
+
         <div class="modal-footer">
-          <button class="btn-ghost" onclick={schliesseSmartModal}>Schließen</button>
-          {#if !b.hat_rechnung}
-            <button class="btn-secondary" onclick={wechsleZuErstellen}>✏️ Formular öffnen</button>
-            <button class="btn-primary" onclick={rechnungAusBestellungErstellen} disabled={schnellsucheErstellenLaeuft}>
-              {schnellsucheErstellenLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
+          <button class="btn-ghost" onclick={schliesseModal}>Abbrechen</button>
+          {#if modalModus === 'neu'}
+            <button class="btn-primary" onclick={erstelleRechnung}
+              disabled={modalLaeuft || !!duplikatRechnung}>
+              {modalLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
             </button>
           {:else}
-            <button class="btn-ghost" onclick={schliesseSmartModal}>Fertig</button>
+            <button class="btn-primary" onclick={speichereBearbeitung}
+              disabled={modalLaeuft || !aenderungsgrund.trim()}>
+              {modalLaeuft ? '⏳ Speichere...' : '💾 Änderung speichern'}
+            </button>
           {/if}
         </div>
 
-      <!-- ── MODUS: ERSTELLEN (Formular) ────────────────────────── -->
-      {:else if smartModalModus === 'erstellen'}
-        <div class="modal-hdr">
-          <span class="modal-titel">Neue Rechnung erstellen</span>
-          <button class="icon-btn" onclick={schliesseSmartModal}>✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-grid">
-            <div class="form-group"><label>Käufer *</label><input bind:value={neueRechnung.kaeufer_name} placeholder="Max Mustermann" /></div>
-            <div class="form-group"><label>E-Mail</label><input bind:value={neueRechnung.kaeufer_email} type="email" placeholder="max@example.com" /></div>
-            <div class="form-group"><label>Straße</label><input bind:value={neueRechnung.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
-            <div class="form-group form-2col">
-              <div class="form-group"><label>PLZ</label><input bind:value={neueRechnung.kaeufer_plz} placeholder="12345" /></div>
-              <div class="form-group"><label>Ort</label><input bind:value={neueRechnung.kaeufer_ort} placeholder="Berlin" /></div>
-            </div>
-            <div class="form-group">
-              <label>eBay Bestellnr.</label>
-              <div style="display:flex;gap:8px">
-                <input bind:value={neueRechnung.order_id} placeholder="12-34567-89012" style="flex:1" oninput={clearBestellungLaden} />
-                <button class="btn-primary btn-sm" onclick={ladeBestellungDaten} disabled={bestellungLaeuft || !neueRechnung.order_id} style="white-space:nowrap">
-                  {bestellungLaeuft ? '...' : 'Laden'}
-                </button>
-              </div>
-              {#if bestellungFehler}<p style="color:#ef4444;font-size:0.75rem;margin-top:4px">{bestellungFehler}</p>{/if}
-            </div>
-            <div class="form-group form-2col"><div class="form-group"><label>Land</label><input bind:value={neueRechnung.kaeufer_land} placeholder="DE" /></div></div>
-            <div class="form-group"><label>Artikel *</label><input bind:value={neueRechnung.artikel_name} placeholder="Produktname" /></div>
-            <div class="form-group form-2col">
-              <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={neueRechnung.ebay_artikel_id} placeholder="123456789012" /></div>
-              <div class="form-group">
-                <label>Variante (SKU)</label>
-                <input value={neueRechnung.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
-              </div>
-            </div>
-            <div class="form-group form-2col">
-              <div class="form-group"><label>Menge *</label><input bind:value={neueRechnung.menge} type="number" min="1" /></div>
-              <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={neueRechnung.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
-            </div>
-          </div>
-        {#if vorhandeneRechnungFuerOrder}
-          <div class="duplikat-warnung">
-            ⚠️ Für diese Bestellung existiert bereits <strong>{vorhandeneRechnungFuerOrder.rechnung_nr}</strong>.
-            <button class="btn-link" onclick={() => oeffneDetailModal(vorhandeneRechnungFuerOrder)}>Rechnung anzeigen →</button>
-          </div>
-        {/if}
-      </div>
-      <div class="modal-footer">
-        <button class="btn-ghost" onclick={schliesseSmartModal}>Abbrechen</button>
-        <button class="btn-primary" onclick={erstelleManuell} disabled={erstellenLaeuft || !!vorhandeneRechnungFuerOrder}>{erstellenLaeuft ? 'Erstelle...' : 'Rechnung erstellen'}</button>
-        </div>
       {/if}
-
     </div>
   </div>
 {/if}
@@ -1033,63 +955,6 @@
   </div>
 {/if}
 
-<!-- ═══ MODAL: RECHNUNG BEARBEITEN ═══ -->
-{#if bearbeitenModal && bearbeitenRechnung}
-  <div class="modal-overlay" onclick={() => bearbeitenModal = false}>
-    <div class="modal-box modal-bearbeiten" onclick={(e) => e.stopPropagation()}>
-      <div class="modal-hdr">
-        <span class="modal-titel">✏️ Rechnung bearbeiten — {bearbeitenRechnung.rechnung_nr}</span>
-        <button class="icon-btn" onclick={() => bearbeitenModal = false}>✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="bearbeiten-hinweis">Die bestehende Rechnung wird storniert und eine neue erstellt.</div>
-        <div class="vs-label" style="margin-bottom:10px;">Rechnungsempfänger</div>
-        <div class="form-grid" style="margin-bottom:20px;">
-          <div class="form-group"><label>Name *</label><input bind:value={bearbeitenKaeufer.kaeufer_name} placeholder="Max Mustermann" /></div>
-          <div class="form-group"><label>E-Mail</label><input bind:value={bearbeitenKaeufer.kaeufer_email} type="email" placeholder="max@example.com" /></div>
-          <div class="form-group"><label>Straße</label><input bind:value={bearbeitenKaeufer.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
-          <div class="form-group form-2col">
-            <div class="form-group"><label>PLZ</label><input bind:value={bearbeitenKaeufer.kaeufer_plz} placeholder="12345" /></div>
-            <div class="form-group"><label>Ort</label><input bind:value={bearbeitenKaeufer.kaeufer_ort} placeholder="Berlin" /></div>
-          </div>
-          <div class="form-group form-2col">
-            <div class="form-group"><label>Land</label><input bind:value={bearbeitenKaeufer.kaeufer_land} placeholder="DE" /></div>
-          </div>
-        </div>
-        <div class="vs-label" style="margin-bottom:8px;">Positionen</div>
-        {#each bearbeitenPositionen as pos, idx}
-          <div class="bearbeiten-position {pos.entfernt ? 'pos-entfernt' : ''}">
-            <div class="pos-check"><input type="checkbox" checked={!pos.entfernt} onchange={() => togglePosition(idx)} /></div>
-            <div class="pos-details">
-              <div class="pos-name" style="font-size:0.84rem">{pos.artikel_name}</div>
-              {#if pos.ebay_artikel_id}<div style="font-size:0.72rem;color:var(--text3)">eBay: {pos.ebay_artikel_id}</div>{/if}
-            </div>
-            <div class="pos-menge">
-              <label style="font-size:0.72rem;color:var(--text3)">Menge</label>
-              <input type="number" min="1" value={pos.menge} oninput={(e) => updatePositionMenge(idx, e.target.value)} disabled={pos.entfernt} style="width:60px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.83rem;text-align:center" />
-            </div>
-            <div class="pos-preis">
-              {fmt(pos.einzelpreis * (pos.entfernt ? 0 : pos.menge))} EUR
-              {#if pos.entfernt}<span style="font-size:0.7rem;color:#ef4444;margin-left:4px">entfernt</span>{/if}
-            </div>
-          </div>
-        {/each}
-        <div class="betraege-box" style="margin-top:12px">
-          <div class="betrag-zeile"><span>Netto (neu)</span><span>{fmt(aktiveSumme / 1.19)} EUR</span></div>
-          <div class="betrag-zeile"><span>MwSt. 19%</span><span>{fmt(aktiveSumme - aktiveSumme / 1.19)} EUR</span></div>
-          <div class="betrag-zeile betrag-brutto"><span>Brutto (neu)</span><span>{fmt(aktiveSumme)} EUR</span></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-ghost" onclick={() => bearbeitenModal = false}>Abbrechen</button>
-        <button class="btn-primary" onclick={speichereBearbeitung} disabled={bearbeitenLaeuft}>
-          {bearbeitenLaeuft ? '⏳ Speichere...' : '💾 Storno + Neue Rechnung'}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
-
 <style>
   .page-container { display:flex; flex-direction:column; gap:16px; padding:24px; width:100%; box-sizing:border-box; }
   .page-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
@@ -1124,6 +989,7 @@
   .btn-danger:hover:not(:disabled) { background:#dc2626; }
   .btn-danger:disabled { opacity:0.6; cursor:not-allowed; }
   .btn-sm { padding:6px 12px; font-size:0.8rem; }
+  .btn-link { background:none; border:none; color:var(--primary); font-size:0.82rem; cursor:pointer; text-decoration:underline; padding:0; font-weight:600; }
   .icon-btn { background:transparent; border:none; color:var(--text2); padding:5px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; transition:color 0.15s, background 0.15s; }
   .icon-btn:hover { color:var(--primary); background:var(--surface2); }
   .icon-btn-edit:hover { color:#7c3aed; background:#f5f3ff; }
@@ -1151,7 +1017,6 @@
   .toolbar-right { display:flex; gap:10px; align-items:center; }
   .select-klein { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:8px; font-size:0.83rem; cursor:pointer; outline:none; }
   .bulk-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--primary-light); border:1px solid var(--border); border-radius:8px; padding:8px 14px; font-size:0.83rem; color:var(--primary); flex-wrap:wrap; }
-  /* Tabelle volle Breite */
   .tabellen-wrapper { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
   .tabelle { width:100%; border-collapse:collapse; font-size:0.83rem; }
   .tabelle thead tr { background:var(--surface2); }
@@ -1193,23 +1058,26 @@
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
   .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
   .modal-klein { max-width:400px; }
-  .modal-bestellung { max-width:620px; }
-  .modal-erstellen { max-width:560px; }
-  .modal-bearbeiten { max-width:600px; }
+  .modal-universal { max-width:600px; }
   .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
   .modal-titel { font-size:1rem; font-weight:600; color:var(--text); }
+  .modal-sub { font-size:0.75rem; color:var(--text3); margin-top:2px; font-family:monospace; }
   .modal-body { padding:20px; overflow-y:auto; flex:1; }
   .modal-footer { display:flex; gap:8px; justify-content:flex-end; padding:14px 20px 18px; border-top:1px solid var(--border); flex-wrap:wrap; flex-shrink:0; }
   .modal-info { font-size:0.85rem; color:var(--text2); margin-bottom:14px; line-height:1.5; }
   .modal-info strong { color:var(--text); }
-  /* Detail Modal */
+  /* Hinweise */
+  .hinweis { border-radius:8px; padding:10px 14px; font-size:0.82rem; margin-bottom:14px; line-height:1.5; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .hinweis-rot { background:#fef2f2; border:1px solid #fecaca; color:#dc2626; }
+  .hinweis-gruen { background:#f0fdf4; border:1px solid #bbf7d0; color:#16a34a; }
+  .hinweis-gelb { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
+  .hinweis-blau { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+  /* Detail */
   .detail-meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .detail-datum { font-size:0.8rem; color:var(--text2); }
-  .storno-hinweis { background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:7px 10px; font-size:0.77rem; color:#dc2626; margin-bottom:14px; }
   .betraege-box { background:var(--surface2); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:6px; }
   .betrag-zeile { display:flex; justify-content:space-between; font-size:0.82rem; color:var(--text2); }
   .betrag-brutto { color:var(--text); font-weight:700; font-size:0.9rem; border-top:1px solid var(--border); padding-top:6px; margin-top:2px; }
-  /* Bestellung / BM Sections */
   .bm-section { margin-bottom:18px; }
   .bm-section-titel { font-size:0.75rem; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
   .bm-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -1217,7 +1085,6 @@
   .bm-full { grid-column: 1 / -1; }
   .bm-label { font-size:0.72rem; color:var(--text3); font-weight:500; }
   .bm-value { font-size:0.85rem; color:var(--text); font-weight:500; line-height:1.4; }
-  .vs-label { font-size:0.72rem; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.05em; }
   /* Form */
   .form-grid { display:flex; flex-direction:column; gap:14px; }
   .form-group { display:flex; flex-direction:column; gap:5px; }
@@ -1226,18 +1093,8 @@
   .form-group input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:0.85rem; outline:none; }
   .form-group input:focus { border-color:var(--primary); }
   .form-group input::placeholder { color:var(--text3); }
-  /* Bearbeiten */
-  .bearbeiten-hinweis { background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; font-size:0.8rem; color:#92400e; margin-bottom:18px; }
-  .bearbeiten-position { display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; transition:opacity 0.2s; }
-  .pos-entfernt { opacity:0.45; background:var(--surface2); }
-  .pos-check { flex-shrink:0; }
-  .pos-details { flex:1; min-width:0; }
-  .pos-name { font-size:0.84rem; font-weight:500; }
-  .pos-menge { display:flex; flex-direction:column; align-items:center; gap:2px; }
-  .pos-preis { font-size:0.85rem; font-weight:600; color:var(--text); white-space:nowrap; min-width:80px; text-align:right; }
+  .form-fehler { color:#ef4444; font-size:0.75rem; margin-top:3px; }
   /* Checkbox */
   .chk-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:20px; cursor:pointer; padding:4px; box-sizing:border-box; }
   .chk-label input[type="checkbox"] { width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0; }
-  .duplikat-warnung { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px 14px; font-size:0.82rem; color:#dc2626; margin-top:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .btn-link { background:none; border:none; color:var(--primary); font-size:0.82rem; cursor:pointer; text-decoration:underline; padding:0; font-weight:600; }
 </style>
