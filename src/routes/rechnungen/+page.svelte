@@ -49,7 +49,7 @@
   let neueRechnung = $state({
     kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '',
     kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '',
-    menge: 1, einzelpreis: '', order_id: ''
+    artikel_sku: '', menge: 1, einzelpreis: '', order_id: ''
   });
   let erstellenLaeuft = $state(false);
   let bestellungLaeuft = $state(false);
@@ -78,6 +78,7 @@
           kaeufer_land: b.kaeufer_land || neueRechnung.kaeufer_land,
           artikel_name: b.artikel_name || neueRechnung.artikel_name,
           ebay_artikel_id: b.ebay_artikel_id || neueRechnung.ebay_artikel_id,
+          artikel_sku: b.sold_sku || neueRechnung.artikel_sku,
           einzelpreis: b.brutto_betrag || neueRechnung.einzelpreis,
           menge: b.artikel_menge || neueRechnung.menge,
         };
@@ -177,6 +178,7 @@
       kaeufer_land: b.kaeufer_land || 'DE',
       artikel_name: b.artikel_name || '',
       ebay_artikel_id: b.ebay_artikel_id || '',
+      artikel_sku: b.sold_sku || '',
       einzelpreis: b.brutto_betrag || '',
       menge: b.artikel_menge || 1,
     };
@@ -436,7 +438,7 @@
       });
       showToast('Rechnung erstellt');
       erstellenModal = false;
-      neueRechnung = { kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '', menge: 1, einzelpreis: '', order_id: '' };
+      neueRechnung = { kaeufer_name: '', kaeufer_email: '', kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE', artikel_name: '', ebay_artikel_id: '', artikel_sku: '', menge: 1, einzelpreis: '', order_id: '' };
       await ladeRechnungen();
     } catch (e) { showToast('Fehler: ' + e.message); } finally { erstellenLaeuft = false; }
   }
@@ -802,6 +804,14 @@
           <div class="bm-section-titel">Artikel</div>
           <div class="bm-grid">
             <div class="bm-field" style="grid-column:1/-1"><div class="bm-label">Bezeichnung</div><div class="bm-value">{b.artikel_name || '-'}</div></div>
+            {#if b.sold_sku}
+              <div class="bm-field" style="grid-column:1/-1">
+                <div class="bm-label">Variante (SKU)</div>
+                <div class="bm-value">
+                  <code style="font-size:0.82rem;background:var(--surface2);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{b.sold_sku}</code>
+                </div>
+              </div>
+            {/if}
             {#if b.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{b.ebay_artikel_id}</div></div>{/if}
             <div class="bm-field"><div class="bm-label">Menge</div><div class="bm-value">{b.artikel_menge || 1}</div></div>
           </div>
@@ -860,7 +870,13 @@
           </div>
           <div class="form-group form-2col"><div class="form-group"><label>Land</label><input bind:value={neueRechnung.kaeufer_land} placeholder="DE" /></div></div>
           <div class="form-group"><label>Artikel *</label><input bind:value={neueRechnung.artikel_name} placeholder="Produktname" /></div>
-          <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={neueRechnung.ebay_artikel_id} placeholder="123456789012" /></div>
+          <div class="form-group form-2col">
+            <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={neueRechnung.ebay_artikel_id} placeholder="123456789012" /></div>
+            <div class="form-group">
+              <label>Variante (SKU)</label>
+              <input value={neueRechnung.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
+            </div>
+          </div>
           <div class="form-group form-2col">
             <div class="form-group"><label>Menge *</label><input bind:value={neueRechnung.menge} type="number" min="1" /></div>
             <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={neueRechnung.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
