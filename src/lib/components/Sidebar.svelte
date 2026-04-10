@@ -38,12 +38,6 @@
     { path: '/rechnungen',   icon: '🧾', label: 'Rechnungen' },
   ];
 
-  const einstellungenNav = [
-    { path: '/einstellungen',                  icon: '⚙️', label: 'Allgemein' },
-    { path: '/einstellungen/email',            icon: '📧', label: 'E-Mail' },
-    { path: '/einstellungen/rechnungsvorlage', icon: '🧾', label: 'Rechnungsvorlage' },
-  ];
-
   function toggleSidebar() {
     const next = !collapsed;
     sidebarCollapsed.set(next);
@@ -85,10 +79,6 @@
   }
   onMount(() => { const saved = localStorage.getItem('sidebar_collapsed'); if (saved === 'true') sidebarCollapsed.set(true); });
 
-  $: currentPath = $page.url.pathname;
-  $: istInEinstellungen = currentPath.startsWith('/einstellungen');
-  $: isActiveMain = (path) => currentPath === path || currentPath.startsWith(path);
-  $: isActiveSub = (path) => path === '/einstellungen' ? currentPath === '/einstellungen' : currentPath.startsWith(path);
 </script>
 
 <aside class="sidebar" class:collapsed>
@@ -125,20 +115,6 @@
 
     <div class="nav-section">
       <div class="nav-label">Verwaltung</div>
-      <a href="/einstellungen" class="nav-item" class:active={currentPath === '/einstellungen'} data-tooltip="Einstellungen">
-        <span class="nav-icon-wrap">⚙️</span>
-        <span class="nav-label-text">Einstellungen</span>
-      </a>
-      {#if istInEinstellungen}
-        <div class="submenu">
-          {#each einstellungenNav as sub}
-            <a href={sub.path} class="nav-item nav-item-sub" class:active={isActiveSub(sub.path)} data-tooltip={sub.label}>
-              <span class="nav-icon-wrap sub-icon">{sub.icon}</span>
-              <span class="nav-label-text">{sub.label}</span>
-            </a>
-          {/each}
-        </div>
-      {/if}
     </div>
   </nav>
 
@@ -219,11 +195,6 @@
   .nav-label-text { flex:1; overflow:hidden; }
   .sidebar.collapsed .nav-label-text { display:none; }
   .sidebar.collapsed .nav-item { justify-content:center; padding:10px; }
-
-  .submenu { display:flex; flex-direction:column; gap:1px; margin-left:8px; border-left:2px solid var(--border); padding-left:4px; margin-top:2px; }
-  .sidebar.collapsed .submenu { margin-left:0; border-left:none; padding-left:0; }
-  .nav-item-sub { font-size:12px; padding:6px 10px; }
-  .sub-icon { font-size:13px; }
 
   .sidebar.collapsed .nav-item { position:relative; }
   .sidebar.collapsed .nav-item::after { content:attr(data-tooltip); position:absolute; left:calc(100% + 12px); top:50%; transform:translateY(-50%); background:var(--text); color:var(--surface); padding:5px 12px; border-radius:6px; font-size:12px; font-weight:500; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity 0.15s; z-index:200; }
