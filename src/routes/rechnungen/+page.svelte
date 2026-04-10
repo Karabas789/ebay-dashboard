@@ -105,60 +105,55 @@
     modalOffen = true;
   }
 
-  // Daten frisch aus DB laden beim Öffnen des Bearbeiten-Modals
-  async function oeffneBearbeitenModal(r) {
-    resetForm();
-    // Erstmal mit vorhandenen Daten öffnen
-    form = {
-      order_id:        r.order_id        || '',
-      kaeufer_name:    r.kaeufer_name    || '',
-      kaeufer_email:   r.kaeufer_email   || '',
-      kaeufer_strasse: r.kaeufer_strasse || '',
-      kaeufer_plz:     r.kaeufer_plz     || '',
-      kaeufer_ort:     r.kaeufer_ort     || '',
-      kaeufer_land:    r.kaeufer_land    || 'DE',
-      artikel_name:    r.artikel_name    || '',
-      ebay_artikel_id: r.ebay_artikel_id || '',
-      artikel_sku:     r.artikel_sku     || '',
-      menge:           r.artikel_menge   || 1,
-      einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
-    };
-    modalRechnung = r;
-    modalModus = 'bearbeiten';
-    modalOffen = true;
+  // Beim Bearbeiten: frische Daten per invoice_id aus DB laden
+async function oeffneBearbeitenModal(r) {
+  resetForm();
+  // Sofort mit vorhandenen Daten öffnen
+  form = {
+    order_id:        r.order_id        || '',
+    kaeufer_name:    r.kaeufer_name    || '',
+    kaeufer_email:   r.kaeufer_email   || '',
+    kaeufer_strasse: r.kaeufer_strasse || '',
+    kaeufer_plz:     r.kaeufer_plz     || '',
+    kaeufer_ort:     r.kaeufer_ort     || '',
+    kaeufer_land:    r.kaeufer_land    || 'DE',
+    artikel_name:    r.artikel_name    || '',
+    ebay_artikel_id: r.ebay_artikel_id || '',
+    artikel_sku:     r.artikel_sku     || '',
+    menge:           r.artikel_menge   || 1,
+    einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
+  };
+  modalRechnung = r;
+  modalModus = 'bearbeiten';
+  modalOffen = true;
 
-    // Dann frische Daten aus DB nachladen (überschreibt leere Felder)
-    try {
-      const fresh = await apiCall('rechnungen-laden', {
-        user_id: $currentUser.id,
-        ebayusername: $currentUser.ebayuserid
-      });
-      const liste = Array.isArray(fresh) ? fresh : (fresh.rechnungen || []);
-      const aktuell = liste.find(x => x.id === r.id);
-      if (aktuell) {
-        // Nur leere Felder überschreiben
-        form = {
-          order_id:        form.order_id        || aktuell.order_id        || '',
-          kaeufer_name:    form.kaeufer_name    || aktuell.kaeufer_name    || '',
-          kaeufer_email:   form.kaeufer_email   || aktuell.kaeufer_email   || '',
-          kaeufer_strasse: form.kaeufer_strasse || aktuell.kaeufer_strasse || '',
-          kaeufer_plz:     form.kaeufer_plz     || aktuell.kaeufer_plz     || '',
-          kaeufer_ort:     form.kaeufer_ort     || aktuell.kaeufer_ort     || '',
-          kaeufer_land:    form.kaeufer_land    || aktuell.kaeufer_land    || 'DE',
-          artikel_name:    form.artikel_name    || aktuell.artikel_name    || '',
-          ebay_artikel_id: form.ebay_artikel_id || aktuell.ebay_artikel_id || '',
-          artikel_sku:     form.artikel_sku     || aktuell.artikel_sku     || '',
-          menge:           form.menge           || aktuell.artikel_menge   || 1,
-          einzelpreis:     form.einzelpreis     || parseFloat(aktuell.einzelpreis) || parseFloat(aktuell.brutto_betrag) || 0,
-        };
-        modalRechnung = aktuell;
-        // Auch die lokale Liste aktualisieren
-        rechnungen = rechnungen.map(x => x.id === aktuell.id ? aktuell : x);
-      }
-    } catch(e) {
-      // Fehler ignorieren — vorhandene Daten bleiben
+  // Frische Daten per invoice_id laden (holt Adresse aus orders-Tabelle)
+  try {
+    const data = await apiCall('bestellung-laden', {
+      user_id: $currentUser.id,
+      invoice_id: r.id
+    });
+    if (data?.bestellung) {
+      const b = data.bestellung;
+      form = {
+        order_id:        b.order_id        || form.order_id,
+        kaeufer_name:    b.kaeufer_name    || form.kaeufer_name,
+        kaeufer_email:   b.kaeufer_email   || form.kaeufer_email,
+        kaeufer_strasse: b.kaeufer_strasse || form.kaeufer_strasse,
+        kaeufer_plz:     b.kaeufer_plz     || form.kaeufer_plz,
+        kaeufer_ort:     b.kaeufer_ort     || form.kaeufer_ort,
+        kaeufer_land:    b.kaeufer_land    || form.kaeufer_land || 'DE',
+        artikel_name:    b.artikel_name    || form.artikel_name,
+        ebay_artikel_id: b.ebay_artikel_id || form.ebay_artikel_id,
+        artikel_sku:     form.artikel_sku,
+        menge:           b.artikel_menge   || form.menge,
+        einzelpreis:     parseFloat(b.einzelpreis) || parseFloat(b.brutto_betrag) || form.einzelpreis,
+      };
     }
+  } catch(e) {
+    // Fehler ignorieren — vorhandene Daten bleiben
   }
+}
 
   function schliesseModal() {
     modalOffen = false;
