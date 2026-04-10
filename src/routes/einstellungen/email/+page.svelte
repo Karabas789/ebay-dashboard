@@ -218,7 +218,7 @@
     <div class="form-grid">
       <div class="form-group form-span2">
         <label>Betreff</label>
-        <input bind:value={cfg.betreff_vorlage} placeholder="Ihre Rechnung {{rechnung_nr}}" />
+        <input bind:value={cfg.betreff_vorlage} placeholder={'Ihre Rechnung {{rechnung_nr}}'} />
       </div>
       <div class="form-group form-span2">
         <label>E-Mail Text</label>
