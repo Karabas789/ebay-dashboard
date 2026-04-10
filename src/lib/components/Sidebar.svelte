@@ -185,6 +185,9 @@
   .logo-text { font-size:14px; font-weight:800; color:var(--text); white-space:nowrap; }
   .logo-sub  { font-size:10px; color:var(--text3); margin-top:1px; white-space:nowrap; }
   .sidebar.collapsed .logo-texts { display:none; }
+  .sidebar.collapsed .sidebar-logo { justify-content:center; padding:18px 8px 14px; }
+  .sidebar.collapsed .toggle-btn { position:absolute; top:22px; right:6px; }
+  .sidebar.collapsed .logo-icon { margin:0; }
   .toggle-btn { margin-left:auto; background:none; border:1px solid var(--border); border-radius:6px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text3); transition:all 0.15s; flex-shrink:0; }
   .toggle-btn:hover { background:var(--surface2); color:var(--text); }
 
