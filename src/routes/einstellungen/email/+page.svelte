@@ -40,14 +40,20 @@
   }
 
   onMount(async () => {
-    if (!$currentUser) return;
+    if (!$currentUser) {
+      geladen = true;
+      return;
+    }
     try {
       const data = await apiCall('email-config-laden', { user_id: $currentUser.id });
       if (data?.config) {
         cfg = { ...cfg, ...data.config, smtp_pass: '' };
       }
-    } catch(e) {}
-    geladen = true;
+    } catch(e) {
+      console.error('Email config laden Fehler:', e);
+    } finally {
+      geladen = true;
+    }
     testEmail = $currentUser.email || '';
   });
 
