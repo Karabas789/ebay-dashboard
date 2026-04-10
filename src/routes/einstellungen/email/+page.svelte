@@ -39,31 +39,32 @@
     showToast('Anbieter gewählt: ' + anbieter.name + ' — ' + anbieter.hinweis);
   }
 
-  onMount(async () => {
-    geladen = false;
-    try {
-      if ($currentUser) {
-        testEmail = $currentUser.email || '';
-        const data = await apiCall('email-config-laden', { user_id: $currentUser.id });
-        if (data?.config && data.config !== null) {
-          cfg = {
-            smtp_host:       data.config.smtp_host       || '',
-            smtp_port:       data.config.smtp_port       || 587,
-            smtp_user:       data.config.smtp_user       || '',
-            smtp_pass:       '',
-            smtp_secure:     data.config.smtp_secure     || false,
-            absender_name:   data.config.absender_name   || '',
-            absender_email:  data.config.absender_email  || '',
-            betreff_vorlage: data.config.betreff_vorlage || 'Ihre Rechnung {{rechnung_nr}}',
-            text_vorlage:    data.config.text_vorlage    || cfg.text_vorlage,
-            auto_versand:    data.config.auto_versand    || false,
-          };
-        }
-      }
-    } catch(e) {
-      console.error('Email-Config Ladefehler (ignoriert):', e);
-    }
+  onMount(() => {
+    // Sofort geladen = true setzen damit die Seite angezeigt wird
+    // Dann asynchron Config nachladen
+    testEmail = $currentUser?.email || '';
     geladen = true;
+
+    if ($currentUser) {
+      apiCall('email-config-laden', { user_id: $currentUser.id })
+        .then(data => {
+          if (data?.config) {
+            cfg = {
+              smtp_host:       data.config.smtp_host       || '',
+              smtp_port:       data.config.smtp_port       || 587,
+              smtp_user:       data.config.smtp_user       || '',
+              smtp_pass:       '',
+              smtp_secure:     data.config.smtp_secure     || false,
+              absender_name:   data.config.absender_name   || '',
+              absender_email:  data.config.absender_email  || '',
+              betreff_vorlage: data.config.betreff_vorlage || cfg.betreff_vorlage,
+              text_vorlage:    data.config.text_vorlage    || cfg.text_vorlage,
+              auto_versand:    data.config.auto_versand    || false,
+            };
+          }
+        })
+        .catch(e => console.warn('Email-Config nicht geladen:', e));
+    }
   });
 
   async function speichern() {
