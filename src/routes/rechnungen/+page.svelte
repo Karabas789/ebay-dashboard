@@ -164,6 +164,9 @@
     aenderungsgrund = '';
     eRechnungMenuOffen = false;
     eRechnungRechnung = null;
+    nachholTab = 'manuell';
+    nachholErgebnis = null;
+    nachholBestellungen = [];
     // sendenEmail und sendenRechnung werden NICHT hier zurückgesetzt
   }
 
@@ -272,18 +275,83 @@
 
   async function ladeAutoRechnungStatus() {
     try {
-      const data = await apiCall('auto-rechnung-einstellungen', { user_id: $currentUser.id }, 'GET');
-      autoRechnungAktiv = data?.auto_rechnung_aktiv ?? true;
+      const data = await apiCall('rechnung-settings', { action: 'load', user_id: $currentUser.id });
+      if (data?.success && data?.data) {
+        autoRechnungAktiv = data.data.auto_rechnung ?? false;
+      }
     } catch(e) {}
   }
 
   async function toggleAutoRechnung() {
     toggleLaeuft = true; const neuerWert = !autoRechnungAktiv;
     try {
-      await apiCall('auto-rechnung-einstellungen', { user_id: $currentUser.id, aktiv: neuerWert }, 'POST');
+      await apiCall('rechnung-settings', { action: 'save', user_id: $currentUser.id, auto_rechnung: neuerWert });
       autoRechnungAktiv = neuerWert;
-      showToast(neuerWert ? 'Auto-Rechnung aktiviert' : 'Auto-Rechnung deaktiviert');
+      showToast(neuerWert ? '✅ Auto-Rechnung aktiviert — Rechnungen werden nach Versand erstellt' : 'Auto-Rechnung deaktiviert');
     } catch(e) { showToast('Fehler beim Speichern'); } finally { toggleLaeuft = false; }
+  }
+
+  // --- Nachhol-Funktion: Versendete Bestellungen ohne Rechnung ---
+  let nachholTab = $state('manuell'); // 'manuell' | 'nachholen'
+  let nachholBestellungen = $state([]);
+  let nachholLaeuft = $state(false);
+  let nachholErstellen = $state(false);
+  let nachholFortschritt = $state(0);
+  let nachholErgebnis = $state(null);
+
+  async function ladeVersendeteOhneRechnung() {
+    nachholLaeuft = true;
+    nachholBestellungen = [];
+    nachholErgebnis = null;
+    try {
+      const data = await apiCall('orders-laden', { user_id: $currentUser.id, ebay_username: $currentUser.ebay_user_id });
+      if (data?.success && data?.orders) {
+        const versendete = data.orders.filter(o => o.status === 'versendet' && !o.archiviert);
+        // Filtern: nur die, für die noch keine Rechnung existiert
+        nachholBestellungen = versendete.filter(o => {
+          const hatSchon = rechnungen.some(r =>
+            r.order_id && o.order_id &&
+            r.order_id.toLowerCase() === o.order_id.toLowerCase() &&
+            r.rechnung_typ === 'rechnung' && r.status !== 'storniert'
+          );
+          return !hatSchon;
+        }).map(o => ({ ...o, ausgewaehlt: true }));
+      }
+    } catch(e) {
+      showToast('Fehler beim Laden der Bestellungen: ' + e.message);
+    } finally {
+      nachholLaeuft = false;
+    }
+  }
+
+  async function nachholRechnungenErstellen() {
+    const zuErstellen = nachholBestellungen.filter(o => o.ausgewaehlt);
+    if (zuErstellen.length === 0) { showToast('Keine Bestellungen ausgewählt.'); return; }
+    nachholErstellen = true;
+    nachholFortschritt = 0;
+    let erstellt = 0, fehlerCount = 0;
+    for (let i = 0; i < zuErstellen.length; i++) {
+      const o = zuErstellen[i];
+      try {
+        await apiCall('rechnung-erstellen', {
+          user_id: $currentUser.id, typ: 'rechnung', order_id: o.order_id,
+          kaeufer_name: o.buyer_name || o.buyer_username || '',
+          kaeufer_email: o.buyer_email || '',
+          kaeufer_strasse: o.buyer_strasse || '', kaeufer_plz: o.buyer_plz || '',
+          kaeufer_ort: o.buyer_ort || '', kaeufer_land: o.buyer_land || 'DE',
+          artikel_name: o.artikel_name || '', menge: o.menge || 1,
+          einzelpreis: parseFloat(o.gesamt || 0) / (o.menge || 1),
+          ebay_artikel_id: o.ebay_artikel_id || ''
+        });
+        erstellt++;
+      } catch(e) { fehlerCount++; }
+      nachholFortschritt = Math.round(((i + 1) / zuErstellen.length) * 100);
+      await new Promise(res => setTimeout(res, 300));
+    }
+    nachholErgebnis = { erstellt, fehler: fehlerCount };
+    nachholErstellen = false;
+    showToast(`${erstellt} Rechnung(en) erstellt${fehlerCount > 0 ? `, ${fehlerCount} Fehler` : ''}`);
+    await ladeRechnungen();
   }
 
   function oeffneSendenModal(r) {
@@ -743,9 +811,15 @@
 
       {:else if modalModus === 'neu'}
         <div class="modal-hdr">
-          <span class="modal-titel">Neue Rechnung erstellen</span>
+          <span class="modal-titel">Rechnung erstellen</span>
           <button class="icon-btn" onclick={schliesseModal}>✕</button>
         </div>
+        <div class="modal-tabs">
+          <button class="modal-tab" class:active={nachholTab === 'manuell'} onclick={() => nachholTab = 'manuell'}>📝 Manuell erstellen</button>
+          <button class="modal-tab" class:active={nachholTab === 'nachholen'} onclick={() => { nachholTab = 'nachholen'; if (nachholBestellungen.length === 0 && !nachholLaeuft) ladeVersendeteOhneRechnung(); }}>📦 Versendete nachholen</button>
+        </div>
+
+        {#if nachholTab === 'manuell'}
         <div class="modal-body">
           <div class="form-group" style="margin-bottom:14px">
             <label>Bestellnr. / Referenz <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
@@ -792,6 +866,80 @@
             {modalLaeuft ? '⏳ Erstelle...' : '🧾 Rechnung erstellen'}
           </button>
         </div>
+
+        {:else}
+        <!-- Tab: Nachholen -->
+        <div class="modal-body">
+          {#if nachholLaeuft}
+            <div class="status-info">⏳ Lade versendete Bestellungen ohne Rechnung...</div>
+          {:else if nachholErgebnis}
+            <div class="nachhol-ergebnis">
+              <div class="ergebnis-icon">{nachholErgebnis.fehler === 0 ? '✅' : '⚠️'}</div>
+              <div class="ergebnis-text">
+                <strong>{nachholErgebnis.erstellt}</strong> Rechnung{nachholErgebnis.erstellt !== 1 ? 'en' : ''} erstellt
+                {#if nachholErgebnis.fehler > 0}
+                  — <span style="color:#ef4444"><strong>{nachholErgebnis.fehler}</strong> Fehler</span>
+                {/if}
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-primary" onclick={schliesseModal}>Schließen</button>
+            </div>
+          {:else if nachholErstellen}
+            <div class="nachhol-progress-wrap">
+              <div class="nachhol-progress-bar"><div class="nachhol-progress-fill" style="width:{nachholFortschritt}%"></div></div>
+              <div class="nachhol-progress-text">{nachholFortschritt}%</div>
+            </div>
+            <p style="text-align:center;font-size:0.82rem;color:var(--text2)">Rechnungen werden erstellt...</p>
+          {:else if nachholBestellungen.length === 0}
+            <div class="nachhol-leer">
+              <div style="font-size:2rem;margin-bottom:8px">🎉</div>
+              <p style="color:var(--text2);font-size:0.85rem">Alle versendeten Bestellungen haben bereits eine Rechnung.</p>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-ghost" onclick={schliesseModal}>Schließen</button>
+              <button class="btn-ghost btn-sm" onclick={ladeVersendeteOhneRechnung}>🔄 Erneut prüfen</button>
+            </div>
+          {:else}
+            <div class="nachhol-info">
+              <strong>{nachholBestellungen.length}</strong> versendete Bestellung{nachholBestellungen.length !== 1 ? 'en' : ''} ohne Rechnung gefunden.
+              Wähle aus, für welche Rechnungen erstellt werden sollen.
+            </div>
+            <div class="nachhol-liste">
+              <div class="nachhol-header">
+                <label class="chk-label" style="width:auto;padding:0">
+                  <input type="checkbox"
+                    checked={nachholBestellungen.every(o => o.ausgewaehlt)}
+                    onchange={() => { const alleSel = nachholBestellungen.every(o => o.ausgewaehlt); nachholBestellungen = nachholBestellungen.map(o => ({...o, ausgewaehlt: !alleSel})); }} />
+                </label>
+                <span class="nachhol-h-col">Bestellnr.</span>
+                <span class="nachhol-h-col nachhol-h-name">Käufer</span>
+                <span class="nachhol-h-col nachhol-h-artikel">Artikel</span>
+                <span class="nachhol-h-col" style="text-align:right">Betrag</span>
+              </div>
+              {#each nachholBestellungen as o, i}
+                <div class="nachhol-item" class:nachhol-deaktiviert={!o.ausgewaehlt}>
+                  <label class="chk-label" style="width:auto;padding:0">
+                    <input type="checkbox" bind:checked={nachholBestellungen[i].ausgewaehlt} />
+                  </label>
+                  <span class="nachhol-col nachhol-orderid">{o.order_id || '—'}</span>
+                  <span class="nachhol-col nachhol-name">{o.buyer_name || '—'}</span>
+                  <span class="nachhol-col nachhol-artikel">{o.artikel_name || '—'}</span>
+                  <span class="nachhol-col" style="text-align:right;font-weight:600">{parseFloat(o.gesamt || 0).toFixed(2)} €</span>
+                </div>
+              {/each}
+            </div>
+            <div class="modal-footer">
+              <button class="btn-ghost" onclick={schliesseModal}>Abbrechen</button>
+              <button class="btn-ghost btn-sm" onclick={ladeVersendeteOhneRechnung}>🔄 Aktualisieren</button>
+              <button class="btn-primary" onclick={nachholRechnungenErstellen}
+                disabled={nachholBestellungen.filter(o => o.ausgewaehlt).length === 0}>
+                🧾 {nachholBestellungen.filter(o => o.ausgewaehlt).length} Rechnung{nachholBestellungen.filter(o => o.ausgewaehlt).length !== 1 ? 'en' : ''} erstellen
+              </button>
+            </div>
+          {/if}
+        </div>
+        {/if}
 
       {:else if modalModus === 'bearbeiten'}
         <div class="modal-hdr">
@@ -1100,7 +1248,7 @@
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
   .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
   .modal-klein { max-width:420px; }
-  .modal-universal { max-width:600px; }
+  .modal-universal { max-width:720px; }
   .modal-bulk { max-width:680px; }
   .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
   .modal-titel { font-size:1rem; font-weight:600; color:var(--text); }
@@ -1163,4 +1311,33 @@
   .form-fehler { color:#ef4444; font-size:0.75rem; margin-top:3px; }
   .chk-label { display:flex; align-items:center; justify-content:center; width:100%; height:100%; min-height:20px; cursor:pointer; padding:4px; box-sizing:border-box; }
   .chk-label input[type="checkbox"] { width:15px; height:15px; cursor:pointer; accent-color:var(--primary); margin:0; }
+  /* Modal Tabs */
+  .modal-tabs { display:flex; border-bottom:1px solid var(--border); padding:0 20px; gap:4px; flex-shrink:0; }
+  .modal-tab { background:none; border:none; border-bottom:2px solid transparent; padding:10px 16px; font-size:0.82rem; font-weight:600; color:var(--text2); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+  .modal-tab:hover { color:var(--text); }
+  .modal-tab.active { color:var(--primary); border-bottom-color:var(--primary); }
+  /* Nachhol-Funktion */
+  .nachhol-info { background:var(--surface2); border-radius:8px; padding:12px 14px; font-size:0.82rem; color:var(--text2); margin-bottom:12px; line-height:1.5; }
+  .nachhol-info strong { color:var(--text); }
+  .nachhol-liste { display:flex; flex-direction:column; gap:0; max-height:340px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
+  .nachhol-header { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--surface2); font-size:0.72rem; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1; }
+  .nachhol-h-col { flex:1; min-width:0; }
+  .nachhol-h-name { flex:1.2; }
+  .nachhol-h-artikel { flex:1.5; }
+  .nachhol-item { display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:0.8rem; border-bottom:1px solid var(--border); transition:background 0.1s; }
+  .nachhol-item:last-child { border-bottom:none; }
+  .nachhol-item:hover { background:var(--surface2); }
+  .nachhol-deaktiviert { opacity:0.4; }
+  .nachhol-col { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .nachhol-orderid { font-family:monospace; font-size:0.75rem; color:var(--primary); font-weight:600; }
+  .nachhol-name { flex:1.2; }
+  .nachhol-artikel { flex:1.5; color:var(--text2); }
+  .nachhol-leer { text-align:center; padding:40px 20px; }
+  .nachhol-ergebnis { display:flex; align-items:center; gap:12px; padding:16px; background:var(--surface2); border-radius:8px; margin-bottom:12px; }
+  .nachhol-ergebnis .ergebnis-icon { font-size:1.4rem; }
+  .nachhol-ergebnis .ergebnis-text { font-size:0.85rem; color:var(--text); }
+  .nachhol-progress-wrap { display:flex; align-items:center; gap:12px; margin-bottom:14px; padding:0 20px; }
+  .nachhol-progress-bar { flex:1; height:8px; background:var(--border); border-radius:99px; overflow:hidden; }
+  .nachhol-progress-fill { height:100%; background:var(--primary); border-radius:99px; transition:width 0.3s; }
+  .nachhol-progress-text { font-size:0.8rem; font-weight:600; color:var(--primary); min-width:36px; text-align:right; }
 </style>
