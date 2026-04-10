@@ -79,6 +79,8 @@
   }
   onMount(() => { const saved = localStorage.getItem('sidebar_collapsed'); if (saved === 'true') sidebarCollapsed.set(true); });
 
+  $: currentPath = $page.url.pathname;
+  $: isActiveMain = (path) => currentPath === path || currentPath.startsWith(path);
 </script>
 
 <aside class="sidebar" class:collapsed>
@@ -115,6 +117,10 @@
 
     <div class="nav-section">
       <div class="nav-label">Verwaltung</div>
+      <a href="/einstellungen" class="nav-item" class:active={isActiveMain('/einstellungen')} data-tooltip="Einstellungen">
+        <span class="nav-icon-wrap">⚙️</span>
+        <span class="nav-label-text">Einstellungen</span>
+      </a>
     </div>
   </nav>
 
