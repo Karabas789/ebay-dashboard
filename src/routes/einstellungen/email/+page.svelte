@@ -5,7 +5,7 @@
 
   let speichertLaeuft = $state(false);
   let testLaeuft = $state(false);
-  let geladen = $state(false);
+  let configLaeuft = $state(false);
 
   let cfg = $state({
     smtp_host: '',
@@ -41,28 +41,32 @@
     showToast('Anbieter gewählt: ' + anbieter.name + ' — ' + anbieter.hinweis);
   }
 
-  onMount(() => {
+  // FIX: async onMount mit try/catch/finally — Seite hängt nie mehr
+  onMount(async () => {
     testEmail = $currentUser?.email || '';
-    geladen = true;
-    if ($currentUser) {
-      apiCall('email-config-laden', { user_id: $currentUser.id })
-        .then(data => {
-          if (data?.config) {
-            cfg = {
-              smtp_host:       data.config.smtp_host       || '',
-              smtp_port:       data.config.smtp_port       || 587,
-              smtp_user:       data.config.smtp_user       || '',
-              smtp_pass:       '',
-              smtp_secure:     data.config.smtp_secure     || false,
-              absender_name:   data.config.absender_name   || '',
-              absender_email:  data.config.absender_email  || '',
-              betreff_vorlage: data.config.betreff_vorlage || cfg.betreff_vorlage,
-              text_vorlage:    data.config.text_vorlage    || cfg.text_vorlage,
-              auto_versand:    data.config.auto_versand    || false,
-            };
-          }
-        })
-        .catch(e => console.warn('Email-Config nicht geladen:', e));
+    if (!$currentUser) return;
+    configLaeuft = true;
+    try {
+      const data = await apiCall('email-config-laden', { user_id: $currentUser.id });
+      if (data?.config) {
+        cfg = {
+          smtp_host:       data.config.smtp_host       || '',
+          smtp_port:       data.config.smtp_port       || 587,
+          smtp_user:       data.config.smtp_user       || '',
+          smtp_pass:       '',
+          smtp_secure:     data.config.smtp_secure     || false,
+          absender_name:   data.config.absender_name   || '',
+          absender_email:  data.config.absender_email  || '',
+          betreff_vorlage: data.config.betreff_vorlage || cfg.betreff_vorlage,
+          text_vorlage:    data.config.text_vorlage    || cfg.text_vorlage,
+          auto_versand:    data.config.auto_versand    || false,
+        };
+      }
+    } catch(e) {
+      console.warn('Email-Config nicht geladen:', e?.message || e);
+      // Kein showToast — leeres Formular ist ok wenn noch kein Config existiert
+    } finally {
+      configLaeuft = false;
     }
   });
 
@@ -90,10 +94,8 @@
     testStatus = null;
     testNachricht = '';
     try {
-      // Zuerst speichern (inkl. Passwort Base64 kodiert), dann testen
       await apiCall('email-config-speichern', { user_id: $currentUser.id, ...cfg });
-      // smtp-testen liest Passwort aus DB — kein Passwort im Request nötig
-      const res = await apiCall('smtp-testen', { user_id: $currentUser.id, to_email: testEmail });
+      await apiCall('smtp-testen', { user_id: $currentUser.id, to_email: testEmail });
       testStatus = 'success';
       testNachricht = 'Test-E-Mail erfolgreich gesendet an ' + testEmail;
       showToast('✅ Test-E-Mail gesendet an ' + testEmail);
@@ -126,7 +128,9 @@
     </button>
   </div>
 
-  {#if geladen}
+  {#if configLaeuft}
+    <div class="config-laedt">⏳ Einstellungen werden geladen…</div>
+  {/if}
 
   <div class="card">
     <div class="card-titel">⚡ Anbieter-Schnellauswahl</div>
@@ -174,7 +178,7 @@
           {:else}
             <input bind:value={cfg.smtp_pass} type="password" placeholder="Passwort eingeben" style="flex:1" />
           {/if}
-          <button class="btn-ghost btn-sm" onclick={() => passwortZeigen = !passwortZeigen} title="Passwort anzeigen/verbergen">
+          <button class="btn-ghost btn-sm" onclick={() => passwortZeigen = !passwortZeigen}>
             {passwortZeigen ? '🙈' : '👁'}
           </button>
         </div>
@@ -239,7 +243,7 @@
       </button>
     </div>
     {#if cfg.auto_versand}
-      <div class="auto-aktiv-hinweis">✅ Auto-Versand aktiv — Rechnungen werden automatisch nach Erstellung per E-Mail gesendet</div>
+      <div class="auto-aktiv-hinweis">✅ Auto-Versand aktiv</div>
     {:else}
       <div class="auto-inaktiv-hinweis">⏸ Auto-Versand inaktiv — Rechnungen manuell aus der Rechnungsliste senden</div>
     {/if}
@@ -264,17 +268,12 @@
   <div class="info-box">
     <div class="info-titel">💡 Hinweise</div>
     <ul class="info-liste">
-      <li>Für <strong>Gmail</strong>: Du musst ein <a href="https://myaccount.google.com/apppasswords" target="_blank">App-Passwort</a> erstellen (kein normales Google-Passwort)</li>
-      <li>Die Zugangsdaten werden <strong>pro User</strong> separat gespeichert — jeder User kann eigene SMTP-Einstellungen haben</li>
-      <li>Das Passwort wird Base64-kodiert gespeichert und nie im Frontend angezeigt</li>
-      <li>Über die Rechnungsseite können Rechnungen einzeln oder als Batch per E-Mail gesendet werden</li>
+      <li>Für <strong>Gmail</strong>: <a href="https://myaccount.google.com/apppasswords" target="_blank">App-Passwort</a> erstellen (kein normales Google-Passwort)</li>
+      <li>Zugangsdaten werden <strong>pro User</strong> separat gespeichert</li>
+      <li>Passwort wird Base64-kodiert gespeichert und nie im Frontend angezeigt</li>
+      <li>Rechnungen können einzeln oder als Batch per E-Mail gesendet werden</li>
     </ul>
   </div>
-
-  {:else}
-    <div class="lade-status">Lade Einstellungen…</div>
-  {/if}
-
 </div>
 
 <style>
@@ -282,6 +281,7 @@
   .page-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
   .page-title { font-size:1.4rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.83rem; color:var(--text2); margin-top:2px; }
+  .config-laedt { font-size:0.8rem; color:var(--text2); padding:6px 12px; background:var(--surface2); border-radius:8px; }
   .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 24px; display:flex; flex-direction:column; gap:14px; }
   .card-titel { font-size:0.9rem; font-weight:700; color:var(--text); }
   .card-sub { font-size:0.8rem; color:var(--text2); margin-top:-8px; }
@@ -291,7 +291,7 @@
   .anbieter-btn:hover { border-color:var(--primary); color:var(--primary); }
   .anbieter-btn.aktiv { background:var(--primary); color:#fff; border-color:var(--primary); font-weight:600; }
   .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .form-span2 { grid-column: 1 / -1; }
+  .form-span2 { grid-column:1 / -1; }
   .form-group { display:flex; flex-direction:column; gap:5px; }
   .form-group label { font-size:0.78rem; color:var(--text2); font-weight:500; }
   .form-group input, .form-group textarea { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:0.85rem; outline:none; font-family:inherit; width:100%; box-sizing:border-box; }
@@ -334,7 +334,6 @@
   .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text2); padding:8px 12px; border-radius:8px; font-size:0.84rem; cursor:pointer; }
   .btn-ghost:hover { border-color:var(--primary); color:var(--primary); }
   .btn-sm { padding:6px 10px; font-size:0.8rem; }
-  .lade-status { padding:40px; text-align:center; color:var(--text2); font-size:0.85rem; }
   @media(max-width:600px) {
     .form-grid { grid-template-columns:1fr; }
     .form-span2 { grid-column:1; }
