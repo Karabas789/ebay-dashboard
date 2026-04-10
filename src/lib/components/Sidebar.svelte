@@ -39,10 +39,16 @@
   });
 
   const nav = [
-    { path: '/nachrichten',      icon: '\u{1F4E9}', label: 'Nachrichten',      section: 'main' },
-    { path: '/produkte',         icon: '\u{1F4E6}', label: 'Produkte',          section: 'main' },
-    { path: '/bestellungen',     icon: '\u{1F6D2}', label: 'Bestellungen',      section: 'main' },
-    { path: '/rechnungen',       icon: '\u{1F9FE}', label: 'Rechnungen',        section: 'main' },
+    { path: '/nachrichten',  icon: '📩', label: 'Nachrichten' },
+    { path: '/produkte',     icon: '📦', label: 'Produkte' },
+    { path: '/bestellungen', icon: '🛒', label: 'Bestellungen' },
+    { path: '/rechnungen',   icon: '🧾', label: 'Rechnungen' },
+  ];
+
+  const einstellungenNav = [
+    { path: '/einstellungen',                  icon: '⚙️',  label: 'Allgemein' },
+    { path: '/einstellungen/email',            icon: '📧',  label: 'E-Mail' },
+    { path: '/einstellungen/rechnungsvorlage', icon: '🧾',  label: 'Rechnungsvorlage' },
   ];
 
   function toggleSidebar() {
@@ -124,6 +130,7 @@
   });
 
   $: currentPath = $page.url.pathname;
+  $: istInEinstellungen = currentPath.startsWith('/einstellungen');
 </script>
 
 <aside class="sidebar" class:collapsed>
@@ -165,7 +172,7 @@
     <div class="nav-section">
       {#if !collapsed}<div class="nav-label">Übersicht</div>{/if}
       {#each nav as item}
-        <a
+        
           href={item.path}
           class="nav-item"
           class:active={currentPath === item.path || currentPath.startsWith(item.path)}
@@ -176,17 +183,51 @@
         </a>
       {/each}
     </div>
+
     <div class="nav-section">
       {#if !collapsed}<div class="nav-label">Verwaltung</div>{/if}
-      <a
+
+      <!-- Einstellungen Hauptlink -->
+      
         href="/einstellungen"
         class="nav-item"
-        class:active={currentPath.startsWith('/einstellungen')}
+        class:active={currentPath === '/einstellungen'}
         data-tooltip="Einstellungen"
       >
         <span class="nav-icon-wrap">⚙️</span>
         {#if !collapsed}<span class="nav-label-text">Einstellungen</span>{/if}
       </a>
+
+      <!-- Untermenü wenn in Einstellungen (ausgeklappt) -->
+      {#if istInEinstellungen && !collapsed}
+        <div class="submenu">
+          {#each einstellungenNav as sub}
+            
+              href={sub.path}
+              class="nav-item nav-item-sub"
+              class:active={currentPath === sub.path || (sub.path !== '/einstellungen' && currentPath.startsWith(sub.path))}
+              data-tooltip={sub.label}
+            >
+              <span class="nav-icon-wrap sub-icon">{sub.icon}</span>
+              <span class="nav-label-text">{sub.label}</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Untermenü wenn in Einstellungen (eingeklappt) -->
+      {#if istInEinstellungen && collapsed}
+        {#each einstellungenNav as sub}
+          
+            href={sub.path}
+            class="nav-item"
+            class:active={currentPath === sub.path || (sub.path !== '/einstellungen' && currentPath.startsWith(sub.path))}
+            data-tooltip={sub.label}
+          >
+            <span class="nav-icon-wrap">{sub.icon}</span>
+          </a>
+        {/each}
+      {/if}
     </div>
   </nav>
 
@@ -361,10 +402,21 @@
   .nav-label-text { flex: 1; }
   .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
 
-  /* Tooltip when collapsed */
-  .sidebar.collapsed .nav-item {
-    position: relative;
+  /* ── Untermenü Einstellungen ── */
+  .submenu {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-left: 8px;
+    border-left: 2px solid var(--border);
+    padding-left: 4px;
+    margin-top: 2px;
   }
+  .nav-item-sub { font-size: 12px; padding: 6px 10px; }
+  .sub-icon { font-size: 13px; }
+
+  /* Tooltip when collapsed */
+  .sidebar.collapsed .nav-item { position: relative; }
   .sidebar.collapsed .nav-item::after {
     content: attr(data-tooltip);
     position: absolute;
