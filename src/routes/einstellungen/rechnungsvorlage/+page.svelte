@@ -7,7 +7,7 @@
   const LS_KEY = 'rechnungsvorlage_draft';
 
   const B = {
-    rechnung_nr: '202658155', datum: '04.04.2026', zahlungsziel: '11.04.2026',
+    rechnung_nr: '202658155', datum: '04.04.2026', zahlungsziel: '11.04.2026', order_id: '27-14383-32478',
     artikel_name: 'Microsoft Windows 10 Pro Produktschlüssel Key MS Software Professional Original',
     artikel_nr: '1054', menge: 1, einzelpreis: 15.57,
     netto_betrag: 13.08, steuer_betrag: 2.49, brutto_betrag: 15.57, steuersatz: 19,
@@ -702,6 +702,7 @@
 
           <div style="margin:14px 0 2px;">
             <div style="font-size:{v.schriftgroesse+4}px;font-weight:700;color:#1a1a1a;">Rechnung {B.rechnung_nr}</div>
+            <div style="font-size:{v.schriftgroesse}px;color:#444;margin-bottom:4px;">Ihre Bestellung Nr. {B.order_id} vom {B.datum}</div>
             <div style="font-size:{Math.max(7,v.schriftgroesse-2)}px;color:#999;margin-bottom:12px;">Das Rechnungsdatum entspricht dem Leistungsdatum</div>
           </div>
 
