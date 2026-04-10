@@ -29,12 +29,20 @@
   let bestellungLaeuft = $state(false);
   let bestellungFehler = $state('');
   let duplikatRechnung = $state(null);
-  let aenderungsgrund = $state('');   // ← wieder da
+  let aenderungsgrund = $state('');
 
+  // --- E-Mail Modal (Einzel) ---
   let sendenModal = $state(false);
   let sendenRechnung = $state(null);
   let sendenEmail = $state('');
   let sendenLaeuft = $state(false);
+
+  // --- Bulk E-Mail Modal ---
+  let bulkEmailModal = $state(false);
+  let bulkEmailListe = $state([]);    // Array von { rechnung, email, einschliessen }
+  let bulkEmailLaeuft = $state(false);
+  let bulkEmailFortschritt = $state(0);
+  let bulkEmailErgebnis = $state(null); // { gesendet, fehler, liste }
 
   let stornoModal = $state(false);
   let stornoRechnung = $state(null);
@@ -105,10 +113,8 @@
     modalOffen = true;
   }
 
-  // Beim Bearbeiten: frische Daten per invoice_id aus DB laden
   async function oeffneBearbeitenModal(r) {
     resetForm();
-    // Werte aus r zwischenspeichern bevor form überschrieben wird
     const initial = {
       order_id:        r.order_id        || '',
       kaeufer_name:    r.kaeufer_name    || '',
@@ -128,12 +134,8 @@
     modalModus = 'bearbeiten';
     modalOffen = true;
 
-    // Frische Daten per invoice_id laden (holt Adresse aus orders-Tabelle)
     try {
-      const data = await apiCall('bestellung-laden', {
-        user_id: $currentUser.id,
-        invoice_id: r.id
-      });
+      const data = await apiCall('bestellung-laden', { user_id: $currentUser.id, invoice_id: r.id });
       if (data?.bestellung) {
         const b = data.bestellung;
         form = {
@@ -151,9 +153,7 @@
           einzelpreis:     parseFloat(b.einzelpreis) || parseFloat(b.brutto_betrag) || initial.einzelpreis,
         };
       }
-    } catch(e) {
-      // Fehler ignorieren — initial Daten bleiben
-    }
+    } catch(e) {}
   }
 
   function schliesseModal() {
@@ -244,7 +244,6 @@
     } catch(e) { showToast('Fehler: ' + e.message); } finally { modalLaeuft = false; }
   }
 
-  // Direktes Update mit Änderungsgrund
   async function speichereBearbeitung() {
     if (!form.kaeufer_name || !form.artikel_name || !form.einzelpreis) {
       showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
@@ -286,16 +285,77 @@
     } catch(e) { showToast('Fehler beim Speichern'); } finally { toggleLaeuft = false; }
   }
 
-  function oeffneSendenModal(r) { sendenRechnung = r; sendenEmail = r.kaeufer_email || ''; sendenModal = true; schliesseModal(); }
+  // --- Einzel E-Mail ---
+  function oeffneSendenModal(r) {
+    sendenRechnung = r;
+    sendenEmail = r.kaeufer_email || '';
+    sendenModal = true;
+    schliesseModal();
+  }
   async function sendeRechnung() {
     if (!sendenEmail) { showToast('Bitte E-Mail eingeben.'); return; }
     sendenLaeuft = true;
     try {
       await apiCall('rechnung-senden', { invoice_id: sendenRechnung.id, user_id: $currentUser.id, to_email: sendenEmail });
-      showToast('Rechnung gesendet'); sendenModal = false; await ladeRechnungen();
+      showToast('✅ Rechnung gesendet an ' + sendenEmail);
+      sendenModal = false;
+      await ladeRechnungen();
     } catch(e) { showToast('Fehler: ' + e.message); } finally { sendenLaeuft = false; }
   }
 
+  // --- Bulk E-Mail Modal öffnen ---
+  function oeffneBulkEmailModal() {
+    const liste = rechnungen.filter(r => ausgewaehlt.has(r.id) && r.rechnung_typ !== 'storno' && r.status !== 'storniert');
+    bulkEmailListe = liste.map(r => ({
+      rechnung: r,
+      email: r.kaeufer_email || '',
+      einschliessen: true,
+      status: null // null | 'success' | 'error' | 'keine-email'
+    }));
+    bulkEmailErgebnis = null;
+    bulkEmailFortschritt = 0;
+    bulkEmailModal = true;
+  }
+
+  async function sendeBulkEmails() {
+    const zuSenden = bulkEmailListe.filter(item => item.einschliessen && item.email?.trim());
+    if (zuSenden.length === 0) { showToast('Keine Rechnungen zum Senden ausgewählt.'); return; }
+
+    bulkEmailLaeuft = true;
+    bulkEmailFortschritt = 0;
+    let gesendet = 0;
+    let fehlerCount = 0;
+
+    for (let i = 0; i < bulkEmailListe.length; i++) {
+      const item = bulkEmailListe[i];
+      if (!item.einschliessen || !item.email?.trim()) {
+        if (!item.email?.trim()) bulkEmailListe[i].status = 'keine-email';
+        continue;
+      }
+      try {
+        await apiCall('rechnung-senden', {
+          invoice_id: item.rechnung.id,
+          user_id: $currentUser.id,
+          to_email: item.email.trim()
+        });
+        bulkEmailListe[i].status = 'success';
+        gesendet++;
+      } catch(e) {
+        bulkEmailListe[i].status = 'error';
+        fehlerCount++;
+      }
+      bulkEmailFortschritt = Math.round(((i + 1) / bulkEmailListe.length) * 100);
+      // Kurze Pause um den Server nicht zu überlasten
+      await new Promise(res => setTimeout(res, 300));
+    }
+
+    bulkEmailErgebnis = { gesendet, fehler: fehlerCount };
+    bulkEmailLaeuft = false;
+    showToast(`${gesendet} Rechnung(en) gesendet${fehlerCount > 0 ? `, ${fehlerCount} Fehler` : ''}`);
+    await ladeRechnungen();
+  }
+
+  // --- Sonstige ---
   function oeffneStornoModal(r) { stornoRechnung = r; stornoModal = true; schliesseModal(); }
   async function erstelleStorno() {
     stornoLaeuft = true;
@@ -309,14 +369,7 @@
     const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
     for (const r of liste) { await ladePDF(r); await new Promise(res => setTimeout(res, 400)); }
   }
-  async function bulkEmailSenden() {
-    const liste = rechnungen.filter(r => ausgewaehlt.has(r.id)); let gesendet = 0;
-    for (const r of liste) {
-      if (!r.kaeufer_email) continue;
-      try { await apiCall('rechnung-senden', { invoice_id: r.id, user_id: $currentUser.id, to_email: r.kaeufer_email }); gesendet++; } catch(e) {}
-    }
-    showToast(`${gesendet} Rechnung(en) gesendet`); await ladeRechnungen();
-  }
+
   function bulkExportCSV() {
     const liste = rechnungen.filter(r => ausgewaehlt.has(r.id));
     const header = ['Rechnungsnr.','Datum','Kaeufer','E-Mail','Strasse','PLZ','Ort','Artikel','Bestellnr.','Netto','MwSt.','Brutto','Status'];
@@ -439,6 +492,11 @@
     if (key === 'gesendet') return rechnungen.filter(r => r.status === 'gesendet').length;
     return 0;
   }
+
+  // Anzahl auswählbare (keine Stornos) in Bulk-Auswahl
+  let bulkSendbar = $derived(
+    rechnungen.filter(r => ausgewaehlt.has(r.id) && r.rechnung_typ !== 'storno' && r.status !== 'storniert').length
+  );
 </script>
 
 <div class="page-container" onclick={() => { if (eRechnungMenuOffen) { eRechnungMenuOffen = false; eRechnungRechnung = null; } }}>
@@ -494,9 +552,11 @@
     <div class="bulk-bar">
       <span><strong>{ausgewaehlt.size}</strong> Rechnung{ausgewaehlt.size > 1 ? 'en' : ''} ausgewählt</span>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-        <button class="btn-ghost btn-sm" onclick={bulkDrucken}>PDFs laden</button>
-        <button class="btn-ghost btn-sm" onclick={bulkEmailSenden}>Per E-Mail senden</button>
-        <button class="btn-ghost btn-sm" onclick={bulkExportCSV}>CSV exportieren</button>
+        <button class="btn-ghost btn-sm" onclick={bulkDrucken}>📥 PDFs laden</button>
+        <button class="btn-email btn-sm" onclick={oeffneBulkEmailModal} disabled={bulkSendbar === 0}>
+          📧 E-Mails senden ({bulkSendbar})
+        </button>
+        <button class="btn-ghost btn-sm" onclick={bulkExportCSV}>📊 CSV exportieren</button>
       </div>
     </div>
   {/if}
@@ -529,27 +589,35 @@
               <td class="td-check" onclick={(e) => e.stopPropagation()}><label class="chk-label"><input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleAuswahl(r.id)} /></label></td>
               <td class="td-nr">{r.rechnung_nr || '-'}</td>
               <td class="td-datum">{fmtDatum(r.erstellt_am)}</td>
-              <td class="td-kaeufer">{r.kaeufer_name || '-'}</td>
+              <td class="td-kaeufer">
+                <div>{r.kaeufer_name || '-'}</div>
+                {#if r.kaeufer_email}<div class="td-email">{r.kaeufer_email}</div>{/if}
+              </td>
               <td class="td-artikel">{r.artikel_name || '-'}</td>
               <td class="td-right">{fmt(r.netto_betrag)} EUR</td>
               <td class="td-right">{fmt(r.steuer_betrag)} EUR</td>
               <td class="td-right td-bold">{fmt(r.brutto_betrag)} EUR</td>
-              <td><span class="badge {badge.cls}">{badge.label}</span></td>
+              <td>
+                <span class="badge {badge.cls}">{badge.label}</span>
+                {#if r.status === 'gesendet' && r.email_gesendet_an}
+                  <div class="td-gesendet-an" title="Gesendet an: {r.email_gesendet_an}">✉ gesendet</div>
+                {/if}
+              </td>
               <td class="td-actions" onclick={(e) => e.stopPropagation()}>
                 <button class="icon-btn" title="Details" onclick={() => oeffneDetailModal(r)}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
-                <button class="icon-btn" title="PDF" onclick={() => ladePDF(r)}>
+                <button class="icon-btn" title="PDF herunterladen" onclick={() => ladePDF(r)}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
                 {#if r.status !== 'storniert' && r.rechnung_typ !== 'storno'}
-                  <button class="icon-btn" title="E-Mail senden" onclick={() => oeffneSendenModal(r)}>
+                  <button class="icon-btn icon-btn-email" title="Per E-Mail senden" onclick={() => oeffneSendenModal(r)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                   </button>
                   <button class="icon-btn icon-btn-edit" title="Bearbeiten" onclick={() => oeffneBearbeitenModal(r)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>
-                  <button class="icon-btn icon-btn-erechnung" title="E-Rechnung" onclick={(e) => oeffneERechnungMenu(r, e)}>
+                  <button class="icon-btn icon-btn-erechnung" title="E-Rechnung erstellen" onclick={(e) => oeffneERechnungMenu(r, e)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                   </button>
                   <button class="icon-btn icon-btn-danger" title="Stornieren" onclick={() => oeffneStornoModal(r)}>
@@ -595,11 +663,11 @@
   </div>
 {/if}
 
+<!-- DETAIL / NEU / BEARBEITEN MODAL -->
 {#if modalOffen}
   <div class="modal-overlay" onclick={schliesseModal}>
     <div class="modal-box modal-universal" onclick={(e) => e.stopPropagation()}>
 
-      <!-- DETAIL -->
       {#if modalModus === 'detail' && modalRechnung}
         {@const r = modalRechnung}
         {@const badge = statusBadge(r)}
@@ -651,23 +719,22 @@
           </div>
           {#if r.email_gesendet_an}
             <div class="bm-section" style="margin-top:12px">
-              <div class="bm-section-titel">Gesendet an</div>
+              <div class="bm-section-titel">E-Mail gesendet an</div>
               <div style="font-size:0.82rem;color:var(--text2)">{r.email_gesendet_an}</div>
             </div>
           {/if}
         </div>
         <div class="modal-footer">
           <button class="btn-ghost btn-sm" onclick={schliesseModal}>Schließen</button>
-          <button class="btn-secondary btn-sm" onclick={() => ladePDF(r)}>PDF</button>
+          <button class="btn-secondary btn-sm" onclick={() => ladePDF(r)}>📥 PDF</button>
           {#if r.status !== 'storniert' && r.rechnung_typ !== 'storno'}
-            <button class="btn-secondary btn-sm" onclick={() => oeffneSendenModal(r)}>E-Mail</button>
+            <button class="btn-email-sm" onclick={() => oeffneSendenModal(r)}>📧 E-Mail senden</button>
             <button class="btn-secondary btn-sm" onclick={(e) => oeffneERechnungMenu(r, e)}>E-Rechnung ▾</button>
             <button class="btn-secondary btn-sm" onclick={() => oeffneBearbeitenModal(r)}>✏️ Bearbeiten</button>
             <button class="btn-danger btn-sm" onclick={() => oeffneStornoModal(r)}>Stornieren</button>
           {/if}
         </div>
 
-      <!-- NEU -->
       {:else if modalModus === 'neu'}
         <div class="modal-hdr">
           <span class="modal-titel">Neue Rechnung erstellen</span>
@@ -675,13 +742,10 @@
         </div>
         <div class="modal-body">
           <div class="form-group" style="margin-bottom:14px">
-            <label>Bestellnr. / Referenz <span style="font-weight:400;color:var(--text3)">(optional — eBay, Onlineshop, Barverkauf ...)</span></label>
+            <label>Bestellnr. / Referenz <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
             <div style="display:flex;gap:8px">
-              <input bind:value={form.order_id}
-                placeholder="z. B. eBay-Bestellnr., Auftragsnr., Kassennr. ..."
-                style="flex:1"
-                oninput={onOrderIdInput}
-                onkeydown={(e) => e.key === 'Enter' && form.order_id?.trim() && ladeBestellungDaten()} />
+              <input bind:value={form.order_id} placeholder="z. B. eBay-Bestellnr., Auftragsnr. ..." style="flex:1"
+                oninput={onOrderIdInput} onkeydown={(e) => e.key === 'Enter' && form.order_id?.trim() && ladeBestellungDaten()} />
               {#if form.order_id?.trim()}
                 <button class="btn-primary btn-sm" onclick={ladeBestellungDaten} disabled={bestellungLaeuft} style="white-space:nowrap">
                   {bestellungLaeuft ? '...' : 'Laden'}
@@ -690,23 +754,12 @@
             </div>
             {#if bestellungFehler}<p class="form-fehler">{bestellungFehler}</p>{/if}
           </div>
-
           {#if duplikatRechnung}
             <div class="hinweis hinweis-rot" style="margin-bottom:14px">
               ⚠️ Für diese Bestellung existiert bereits <strong>{duplikatRechnung.rechnung_nr}</strong>.
               <button class="btn-link" onclick={() => oeffneDetailModal(duplikatRechnung)}>Anzeigen →</button>
             </div>
           {/if}
-          {#if form.order_id && !duplikatRechnung && !bestellungLaeuft}
-            {@const vorh = findeVorhandeneRechnung(form.order_id)}
-            {#if vorh}
-              <div class="hinweis hinweis-gruen" style="margin-bottom:14px">
-                ✅ Rechnung <strong>{vorh.rechnung_nr}</strong> bereits vorhanden.
-                <button class="btn-link" onclick={() => oeffneDetailModal(vorh)}>Anzeigen →</button>
-              </div>
-            {/if}
-          {/if}
-
           <div class="form-grid">
             <div class="form-group"><label>Käufer *</label><input bind:value={form.kaeufer_name} placeholder="Max Mustermann" /></div>
             <div class="form-group"><label>E-Mail</label><input bind:value={form.kaeufer_email} type="email" placeholder="max@example.com" /></div>
@@ -719,10 +772,7 @@
             <div class="form-group"><label>Artikel *</label><input bind:value={form.artikel_name} placeholder="Produktname" /></div>
             <div class="form-group form-2col">
               <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={form.ebay_artikel_id} placeholder="123456789012" /></div>
-              <div class="form-group">
-                <label>Variante (SKU)</label>
-                <input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
-              </div>
+              <div class="form-group"><label>Variante (SKU)</label><input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" /></div>
             </div>
             <div class="form-group form-2col">
               <div class="form-group"><label>Menge *</label><input bind:value={form.menge} type="number" min="1" /></div>
@@ -737,23 +787,15 @@
           </button>
         </div>
 
-      <!-- BEARBEITEN — Daten kommen direkt aus Rechnung, kein Laden-Button -->
       {:else if modalModus === 'bearbeiten'}
         <div class="modal-hdr">
           <span class="modal-titel">✏️ Rechnung bearbeiten — {modalRechnung?.rechnung_nr}</span>
           <button class="icon-btn" onclick={schliesseModal}>✕</button>
         </div>
         <div class="modal-body">
-
-          <div class="hinweis hinweis-gelb">
-            Die Änderungen werden direkt an der Rechnung gespeichert. Bitte gib unten einen Grund für die Änderung an.
-          </div>
-
+          <div class="hinweis hinweis-gelb">Die Änderungen werden direkt an der Rechnung gespeichert. Bitte Grund angeben.</div>
           <div class="form-grid">
-            <div class="form-group">
-              <label>Bestellnr. / Referenz <span style="font-weight:400;color:var(--text3)">(optional)</span></label>
-              <input bind:value={form.order_id} placeholder="z. B. eBay-Bestellnr., Auftragsnr. ..." />
-            </div>
+            <div class="form-group"><label>Bestellnr. / Referenz</label><input bind:value={form.order_id} placeholder="optional" /></div>
             <div class="form-group"><label>Käufer *</label><input bind:value={form.kaeufer_name} placeholder="Max Mustermann" /></div>
             <div class="form-group"><label>E-Mail</label><input bind:value={form.kaeufer_email} type="email" placeholder="max@example.com" /></div>
             <div class="form-group"><label>Straße</label><input bind:value={form.kaeufer_strasse} placeholder="Musterstr. 1" /></div>
@@ -765,31 +807,19 @@
             <div class="form-group"><label>Artikel *</label><input bind:value={form.artikel_name} placeholder="Produktname" /></div>
             <div class="form-group form-2col">
               <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={form.ebay_artikel_id} placeholder="123456789012" /></div>
-              <div class="form-group">
-                <label>Variante (SKU)</label>
-                <input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" />
-              </div>
+              <div class="form-group"><label>Variante (SKU)</label><input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" /></div>
             </div>
             <div class="form-group form-2col">
               <div class="form-group"><label>Menge *</label><input bind:value={form.menge} type="number" min="1" /></div>
               <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={form.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
             </div>
           </div>
-
-          <!-- Änderungsgrund Pflichtfeld -->
           <div class="form-group" style="margin-top:18px">
             <label>Grund der Änderung * <span style="font-weight:400;color:var(--text3)">(wird intern gespeichert)</span></label>
-            <textarea
-              bind:value={aenderungsgrund}
-              placeholder="z. B. Käufer hat neue Lieferadresse mitgeteilt, Preis korrigiert ..."
-              rows="3"
-              style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"
-            ></textarea>
-            {#if !aenderungsgrund.trim()}
-              <p class="form-fehler">Pflichtfeld</p>
-            {/if}
+            <textarea bind:value={aenderungsgrund} placeholder="z. B. Käufer hat neue Lieferadresse mitgeteilt ..." rows="3"
+              style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"></textarea>
+            {#if !aenderungsgrund.trim()}<p class="form-fehler">Pflichtfeld</p>{/if}
           </div>
-
         </div>
         <div class="modal-footer">
           <button class="btn-ghost" onclick={schliesseModal}>Abbrechen</button>
@@ -803,22 +833,142 @@
   </div>
 {/if}
 
+<!-- EINZEL E-MAIL MODAL -->
 {#if sendenModal}
   <div class="modal-overlay" onclick={() => sendenModal = false}>
     <div class="modal-box modal-klein" onclick={(e) => e.stopPropagation()}>
-      <div class="modal-hdr"><span class="modal-titel">Rechnung senden</span><button class="icon-btn" onclick={() => sendenModal = false}>✕</button></div>
+      <div class="modal-hdr">
+        <span class="modal-titel">📧 Rechnung per E-Mail senden</span>
+        <button class="icon-btn" onclick={() => sendenModal = false}>✕</button>
+      </div>
       <div class="modal-body">
-        <p class="modal-info">Rechnung <strong>{sendenRechnung?.rechnung_nr}</strong> per E-Mail senden.</p>
-        <div class="form-group"><label>E-Mail</label><input bind:value={sendenEmail} type="email" placeholder="kaeufer@example.com" /></div>
+        <div class="senden-info">
+          <div class="senden-nr">{sendenRechnung?.rechnung_nr}</div>
+          <div class="senden-kaeufer">{sendenRechnung?.kaeufer_name}</div>
+          <div class="senden-betrag">{fmt(sendenRechnung?.brutto_betrag)} EUR</div>
+        </div>
+        <div class="form-group">
+          <label>E-Mail-Adresse *</label>
+          <input bind:value={sendenEmail} type="email" placeholder="kaeufer@example.com" />
+          {#if !sendenRechnung?.kaeufer_email}
+            <span class="hinweis-klein" style="color:#d97706">⚠️ Keine E-Mail in Rechnung hinterlegt</span>
+          {/if}
+        </div>
+        <p style="font-size:0.78rem;color:var(--text3);margin-top:8px;line-height:1.5">
+          Die Rechnung wird als PDF-Anhang mit deiner konfigurierten SMTP-Vorlage gesendet.
+          (<a href="/einstellungen/email" style="color:var(--primary)">E-Mail Einstellungen</a>)
+        </p>
       </div>
       <div class="modal-footer">
         <button class="btn-ghost" onclick={() => sendenModal = false}>Abbrechen</button>
-        <button class="btn-primary" onclick={sendeRechnung} disabled={sendenLaeuft}>{sendenLaeuft ? 'Sende...' : 'Senden'}</button>
+        <button class="btn-primary" onclick={sendeRechnung} disabled={sendenLaeuft || !sendenEmail}>
+          {sendenLaeuft ? '⏳ Sende...' : '📤 Jetzt senden'}
+        </button>
       </div>
     </div>
   </div>
 {/if}
 
+<!-- BULK E-MAIL MODAL -->
+{#if bulkEmailModal}
+  <div class="modal-overlay" onclick={() => { if (!bulkEmailLaeuft) bulkEmailModal = false; }}>
+    <div class="modal-box modal-bulk" onclick={(e) => e.stopPropagation()}>
+      <div class="modal-hdr">
+        <div>
+          <span class="modal-titel">📧 Rechnungen per E-Mail senden</span>
+          <div class="modal-sub">{bulkEmailListe.filter(i => i.einschliessen && i.email?.trim()).length} von {bulkEmailListe.length} Rechnungen werden gesendet</div>
+        </div>
+        {#if !bulkEmailLaeuft}
+          <button class="icon-btn" onclick={() => bulkEmailModal = false}>✕</button>
+        {/if}
+      </div>
+      <div class="modal-body">
+
+        {#if bulkEmailErgebnis}
+          <!-- Ergebnis anzeigen -->
+          <div class="bulk-ergebnis">
+            <div class="ergebnis-icon">{bulkEmailErgebnis.fehler === 0 ? '✅' : '⚠️'}</div>
+            <div class="ergebnis-text">
+              <strong>{bulkEmailErgebnis.gesendet}</strong> Rechnung{bulkEmailErgebnis.gesendet !== 1 ? 'en' : ''} erfolgreich gesendet
+              {#if bulkEmailErgebnis.fehler > 0}
+                — <span style="color:#ef4444"><strong>{bulkEmailErgebnis.fehler}</strong> Fehler</span>
+              {/if}
+            </div>
+          </div>
+          <div class="bulk-liste">
+            {#each bulkEmailListe as item}
+              <div class="bulk-item {item.status ? 'bulk-item-' + item.status : ''}">
+                <div class="bulk-item-nr">{item.rechnung.rechnung_nr}</div>
+                <div class="bulk-item-name">{item.rechnung.kaeufer_name}</div>
+                <div class="bulk-item-email">{item.email || '—'}</div>
+                <div class="bulk-item-status">
+                  {#if item.status === 'success'}✅{:else if item.status === 'error'}❌{:else if item.status === 'keine-email'}⚠️ keine E-Mail{:else}—{/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else if bulkEmailLaeuft}
+          <!-- Fortschritt -->
+          <div class="bulk-progress-wrap">
+            <div class="bulk-progress-bar">
+              <div class="bulk-progress-fill" style="width:{bulkEmailFortschritt}%"></div>
+            </div>
+            <div class="bulk-progress-text">{bulkEmailFortschritt}%</div>
+          </div>
+          <div class="bulk-liste">
+            {#each bulkEmailListe as item}
+              <div class="bulk-item {item.status ? 'bulk-item-' + item.status : ''}">
+                <div class="bulk-item-nr">{item.rechnung.rechnung_nr}</div>
+                <div class="bulk-item-name">{item.rechnung.kaeufer_name}</div>
+                <div class="bulk-item-email">{item.email || '—'}</div>
+                <div class="bulk-item-status">
+                  {#if item.status === 'success'}✅{:else if item.status === 'error'}❌{:else if item.status === 'keine-email'}⚠️{:else}⏳{/if}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <!-- Vorschau & Bearbeitung -->
+          <p style="font-size:0.8rem;color:var(--text2);margin-bottom:12px;line-height:1.5">
+            Überprüfe die E-Mail-Adressen. Du kannst einzelne Rechnungen abwählen oder E-Mail-Adressen korrigieren.
+          </p>
+          <div class="bulk-liste">
+            {#each bulkEmailListe as item, i}
+              <div class="bulk-item {!item.einschliessen ? 'bulk-item-deaktiviert' : ''}">
+                <label class="chk-label" style="width:auto;height:auto;padding:0">
+                  <input type="checkbox" bind:checked={item.einschliessen} style="width:14px;height:14px;accent-color:var(--primary)" />
+                </label>
+                <div class="bulk-item-nr">{item.rechnung.rechnung_nr}</div>
+                <div class="bulk-item-name">{item.rechnung.kaeufer_name}</div>
+                <input class="bulk-email-input" bind:value={item.email} type="email" placeholder="E-Mail eingeben..." disabled={!item.einschliessen} />
+                {#if item.einschliessen && !item.email?.trim()}
+                  <span style="color:#d97706;font-size:0.75rem;white-space:nowrap">⚠️ fehlt</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+          {#if bulkEmailListe.some(i => i.einschliessen && !i.email?.trim())}
+            <div class="hinweis hinweis-gelb" style="margin-top:10px">
+              ⚠️ Rechnungen ohne E-Mail-Adresse werden übersprungen.
+            </div>
+          {/if}
+        {/if}
+      </div>
+      <div class="modal-footer">
+        {#if bulkEmailErgebnis}
+          <button class="btn-primary" onclick={() => bulkEmailModal = false}>Schließen</button>
+        {:else}
+          <button class="btn-ghost" onclick={() => bulkEmailModal = false} disabled={bulkEmailLaeuft}>Abbrechen</button>
+          <button class="btn-primary" onclick={sendeBulkEmails} disabled={bulkEmailLaeuft || bulkEmailListe.filter(i => i.einschliessen && i.email?.trim()).length === 0}>
+            {bulkEmailLaeuft ? `⏳ Sende... ${bulkEmailFortschritt}%` : `📤 ${bulkEmailListe.filter(i => i.einschliessen && i.email?.trim()).length} Rechnungen senden`}
+          </button>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- STORNO MODAL -->
 {#if stornoModal}
   <div class="modal-overlay" onclick={() => stornoModal = false}>
     <div class="modal-box modal-klein" onclick={(e) => e.stopPropagation()}>
@@ -857,7 +1007,7 @@
   .status-an { color:var(--primary, #2563eb); }
   .status-aus { color:#9ca3af; }
   .btn-primary { background:var(--primary); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-size:0.84rem; cursor:pointer; transition:background 0.15s; }
-  .btn-primary:hover:not(:disabled) { background:var(--primary-hover, #1d4ed8); }
+  .btn-primary:hover:not(:disabled) { filter:brightness(1.08); }
   .btn-primary:disabled { opacity:0.6; cursor:not-allowed; }
   .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text2); padding:8px 16px; border-radius:8px; font-size:0.84rem; cursor:pointer; display:flex; align-items:center; gap:6px; }
   .btn-ghost:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
@@ -867,10 +1017,16 @@
   .btn-danger { background:#ef4444; color:#fff; border:none; padding:8px 16px; border-radius:8px; font-size:0.84rem; cursor:pointer; }
   .btn-danger:hover:not(:disabled) { background:#dc2626; }
   .btn-danger:disabled { opacity:0.6; cursor:not-allowed; }
+  .btn-email { background:#0ea5e9; color:#fff; border:none; padding:8px 14px; border-radius:8px; font-size:0.84rem; cursor:pointer; font-weight:500; }
+  .btn-email:hover:not(:disabled) { background:#0284c7; }
+  .btn-email:disabled { opacity:0.6; cursor:not-allowed; }
+  .btn-email-sm { background:#0ea5e9; color:#fff; border:none; padding:6px 12px; border-radius:8px; font-size:0.8rem; cursor:pointer; }
+  .btn-email-sm:hover { background:#0284c7; }
   .btn-sm { padding:6px 12px; font-size:0.8rem; }
   .btn-link { background:none; border:none; color:var(--primary); font-size:0.82rem; cursor:pointer; text-decoration:underline; padding:0; font-weight:600; }
   .icon-btn { background:transparent; border:none; color:var(--text2); padding:5px; border-radius:6px; cursor:pointer; display:inline-flex; align-items:center; transition:color 0.15s, background 0.15s; }
   .icon-btn:hover { color:var(--primary); background:var(--surface2); }
+  .icon-btn-email:hover { color:#0ea5e9; background:#f0f9ff; }
   .icon-btn-edit:hover { color:#7c3aed; background:#f5f3ff; }
   .icon-btn-danger:hover { color:#ef4444; background:#fef2f2; }
   .icon-btn-erechnung:hover { color:#0891b2; background:#ecfeff; }
@@ -901,7 +1057,7 @@
   .tabelle th { padding:10px 12px; text-align:left; font-weight:600; font-size:0.75rem; color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; }
   .th-check { width:36px; }
   .th-right { text-align:right; }
-  .th-actions { width:170px; }
+  .th-actions { width:160px; }
   .tbl-row { border-bottom:1px solid var(--border); cursor:pointer; transition:background 0.12s; }
   .tbl-row:last-child { border-bottom:none; }
   .tbl-row:hover { background:var(--surface2); }
@@ -909,11 +1065,13 @@
   .td-check { width:36px; padding:0 !important; }
   .td-nr { font-weight:600; white-space:nowrap; color:var(--primary); }
   .td-datum { white-space:nowrap; color:var(--text2); font-size:0.8rem; }
-  .td-kaeufer { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .td-kaeufer { max-width:180px; }
+  .td-email { font-size:0.75rem; color:var(--text3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px; }
   .td-artikel { max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text2); }
   .td-right { text-align:right; white-space:nowrap; }
   .td-bold { font-weight:600; }
   .td-actions { white-space:nowrap; }
+  .td-gesendet-an { font-size:0.72rem; color:#16a34a; margin-top:2px; }
   .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:0.73rem; font-weight:500; white-space:nowrap; }
   .badge-erstellt { background:#fffbeb; color:#d97706; }
   .badge-gesendet { background:#f0fdf4; color:#16a34a; }
@@ -932,22 +1090,51 @@
   .page-btn:hover:not(:disabled) { border-color:var(--primary); color:var(--primary); }
   .page-btn.active { background:var(--primary); border-color:var(--primary); color:#fff; font-weight:600; }
   .page-btn:disabled { opacity:0.4; cursor:not-allowed; }
+  /* Modals */
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
-  .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:560px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
-  .modal-klein { max-width:400px; }
+  .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+  .modal-klein { max-width:420px; }
   .modal-universal { max-width:600px; }
+  .modal-bulk { max-width:680px; }
   .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
   .modal-titel { font-size:1rem; font-weight:600; color:var(--text); }
-  .modal-sub { font-size:0.75rem; color:var(--text3); margin-top:2px; font-family:monospace; }
+  .modal-sub { font-size:0.75rem; color:var(--text3); margin-top:2px; }
   .modal-body { padding:20px; overflow-y:auto; flex:1; }
   .modal-footer { display:flex; gap:8px; justify-content:flex-end; padding:14px 20px 18px; border-top:1px solid var(--border); flex-wrap:wrap; flex-shrink:0; }
   .modal-info { font-size:0.85rem; color:var(--text2); margin-bottom:14px; line-height:1.5; }
   .modal-info strong { color:var(--text); }
-  .hinweis { border-radius:8px; padding:10px 14px; font-size:0.82rem; margin-bottom:14px; line-height:1.5; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  /* Senden Info Box */
+  .senden-info { background:var(--surface2); border-radius:8px; padding:12px 14px; margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  .senden-nr { font-size:0.82rem; font-weight:700; color:var(--primary); white-space:nowrap; }
+  .senden-kaeufer { font-size:0.82rem; color:var(--text); flex:1; }
+  .senden-betrag { font-size:0.85rem; font-weight:700; color:var(--text); white-space:nowrap; }
+  /* Bulk E-Mail Liste */
+  .bulk-liste { display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height:300px; overflow-y:auto; }
+  .bulk-item { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--surface2); border-radius:8px; border:1px solid var(--border); font-size:0.8rem; }
+  .bulk-item-deaktiviert { opacity:0.45; }
+  .bulk-item-success { border-color:#bbf7d0; background:#f0fdf4; }
+  .bulk-item-error { border-color:#fecaca; background:#fef2f2; }
+  .bulk-item-nr { font-weight:600; color:var(--primary); white-space:nowrap; min-width:90px; }
+  .bulk-item-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+  .bulk-item-email { flex:1.5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text2); }
+  .bulk-item-status { white-space:nowrap; min-width:24px; text-align:center; }
+  .bulk-email-input { flex:1.5; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:6px; font-size:0.78rem; outline:none; min-width:0; }
+  .bulk-email-input:focus { border-color:var(--primary); }
+  .bulk-email-input:disabled { opacity:0.5; cursor:not-allowed; }
+  .bulk-progress-wrap { display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .bulk-progress-bar { flex:1; height:8px; background:var(--border); border-radius:99px; overflow:hidden; }
+  .bulk-progress-fill { height:100%; background:var(--primary); border-radius:99px; transition:width 0.3s; }
+  .bulk-progress-text { font-size:0.8rem; font-weight:600; color:var(--primary); min-width:36px; text-align:right; }
+  .bulk-ergebnis { display:flex; align-items:center; gap:12px; padding:12px 14px; background:var(--surface2); border-radius:8px; margin-bottom:12px; }
+  .ergebnis-icon { font-size:1.4rem; }
+  .ergebnis-text { font-size:0.85rem; color:var(--text); }
+  /* Formulare */
+  .hinweis { border-radius:8px; padding:10px 14px; font-size:0.82rem; margin-bottom:8px; line-height:1.5; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .hinweis-rot { background:#fef2f2; border:1px solid #fecaca; color:#dc2626; }
   .hinweis-gruen { background:#f0fdf4; border:1px solid #bbf7d0; color:#16a34a; }
   .hinweis-gelb { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
   .hinweis-blau { background:#eff6ff; border:1px solid #bfdbfe; color:#1d4ed8; }
+  .hinweis-klein { font-size:0.72rem; color:var(--text3); }
   .detail-meta { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
   .detail-datum { font-size:0.8rem; color:var(--text2); }
   .betraege-box { background:var(--surface2); border-radius:8px; padding:12px; display:flex; flex-direction:column; gap:6px; }
