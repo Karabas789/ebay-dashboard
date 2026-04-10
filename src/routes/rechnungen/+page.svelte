@@ -168,9 +168,6 @@ function schliesseModal() {
   // sendenEmail und sendenRechnung werden NICHT hier zurückgesetzt
 }
 
-Deploy-Kurzbefehl auf dem Server:
-bash
-
 cd /opt/ebay-dashboard
 # email/+page.svelte und rechnungen/+page.svelte ersetzen
 docker build --no-cache -t ebay-dashboard:latest .
