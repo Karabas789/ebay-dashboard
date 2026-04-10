@@ -46,9 +46,9 @@
   ];
 
   const einstellungenNav = [
-    { path: '/einstellungen',                  icon: '⚙️',  label: 'Allgemein' },
-    { path: '/einstellungen/email',            icon: '📧',  label: 'E-Mail' },
-    { path: '/einstellungen/rechnungsvorlage', icon: '🧾',  label: 'Rechnungsvorlage' },
+    { path: '/einstellungen',                  icon: '⚙️', label: 'Allgemein' },
+    { path: '/einstellungen/email',            icon: '📧', label: 'E-Mail' },
+    { path: '/einstellungen/rechnungsvorlage', icon: '🧾', label: 'Rechnungsvorlage' },
   ];
 
   function toggleSidebar() {
@@ -131,6 +131,14 @@
 
   $: currentPath = $page.url.pathname;
   $: istInEinstellungen = currentPath.startsWith('/einstellungen');
+
+  function isActive(path) {
+    return currentPath === path || currentPath.startsWith(path);
+  }
+  function isActiveSub(path) {
+    if (path === '/einstellungen') return currentPath === '/einstellungen';
+    return currentPath.startsWith(path);
+  }
 </script>
 
 <aside class="sidebar" class:collapsed>
@@ -175,11 +183,13 @@
         
           href={item.path}
           class="nav-item"
-          class:active={currentPath === item.path || currentPath.startsWith(item.path)}
+          class:active={isActive(item.path)}
           data-tooltip={item.label}
         >
           <span class="nav-icon-wrap">{item.icon}</span>
-          {#if !collapsed}<span class="nav-label-text">{item.label}</span>{/if}
+          {#if !collapsed}
+            <span class="nav-label-text">{item.label}</span>
+          {/if}
         </a>
       {/each}
     </div>
@@ -187,7 +197,6 @@
     <div class="nav-section">
       {#if !collapsed}<div class="nav-label">Verwaltung</div>{/if}
 
-      <!-- Einstellungen Hauptlink -->
       
         href="/einstellungen"
         class="nav-item"
@@ -195,17 +204,18 @@
         data-tooltip="Einstellungen"
       >
         <span class="nav-icon-wrap">⚙️</span>
-        {#if !collapsed}<span class="nav-label-text">Einstellungen</span>{/if}
+        {#if !collapsed}
+          <span class="nav-label-text">Einstellungen</span>
+        {/if}
       </a>
 
-      <!-- Untermenü wenn in Einstellungen (ausgeklappt) -->
       {#if istInEinstellungen && !collapsed}
         <div class="submenu">
           {#each einstellungenNav as sub}
             
               href={sub.path}
               class="nav-item nav-item-sub"
-              class:active={currentPath === sub.path || (sub.path !== '/einstellungen' && currentPath.startsWith(sub.path))}
+              class:active={isActiveSub(sub.path)}
               data-tooltip={sub.label}
             >
               <span class="nav-icon-wrap sub-icon">{sub.icon}</span>
@@ -215,13 +225,12 @@
         </div>
       {/if}
 
-      <!-- Untermenü wenn in Einstellungen (eingeklappt) -->
       {#if istInEinstellungen && collapsed}
         {#each einstellungenNav as sub}
           
             href={sub.path}
             class="nav-item"
-            class:active={currentPath === sub.path || (sub.path !== '/einstellungen' && currentPath.startsWith(sub.path))}
+            class:active={isActiveSub(sub.path)}
             data-tooltip={sub.label}
           >
             <span class="nav-icon-wrap">{sub.icon}</span>
@@ -299,7 +308,6 @@
 />
 
 <style>
-  /* ── Sidebar Shell ── */
   .sidebar {
     width: var(--sidebar-width, 220px);
     height: 100vh;
@@ -313,8 +321,6 @@
     transition: width 0.25s cubic-bezier(0.4,0,0.2,1);
   }
   .sidebar.collapsed { width: var(--sidebar-collapsed-width, 68px); }
-
-  /* ── Logo Row ── */
   .sidebar-logo {
     display: flex;
     align-items: center;
@@ -356,8 +362,6 @@
   }
   .sidebar.collapsed .toggle-btn { margin-left: 0; }
   .toggle-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
-
-  /* ── Nav ── */
   .sidebar-nav {
     flex: 1;
     padding: 4px 12px;
@@ -401,8 +405,6 @@
   .nav-icon-wrap { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
   .nav-label-text { flex: 1; }
   .sidebar.collapsed .nav-item { justify-content: center; padding: 10px; }
-
-  /* ── Untermenü Einstellungen ── */
   .submenu {
     display: flex;
     flex-direction: column;
@@ -414,8 +416,6 @@
   }
   .nav-item-sub { font-size: 12px; padding: 6px 10px; }
   .sub-icon { font-size: 13px; }
-
-  /* Tooltip when collapsed */
   .sidebar.collapsed .nav-item { position: relative; }
   .sidebar.collapsed .nav-item::after {
     content: attr(data-tooltip);
@@ -436,8 +436,6 @@
     z-index: 200;
   }
   .sidebar.collapsed .nav-item:hover::after { opacity: 1; }
-
-  /* ── Footer ── */
   .sidebar-footer {
     margin-top: auto;
     padding: 12px;
@@ -481,8 +479,6 @@
   }
   .sidebar.collapsed .sidebar-action-btn { flex: none; width: 38px; }
   .sidebar-action-btn:hover { background: var(--border); }
-
-  /* ── Session Modal ── */
   .session-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.6);
