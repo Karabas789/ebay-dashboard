@@ -106,54 +106,55 @@
   }
 
   // Beim Bearbeiten: frische Daten per invoice_id aus DB laden
-async function oeffneBearbeitenModal(r) {
-  resetForm();
-  // Sofort mit vorhandenen Daten öffnen
-  form = {
-    order_id:        r.order_id        || '',
-    kaeufer_name:    r.kaeufer_name    || '',
-    kaeufer_email:   r.kaeufer_email   || '',
-    kaeufer_strasse: r.kaeufer_strasse || '',
-    kaeufer_plz:     r.kaeufer_plz     || '',
-    kaeufer_ort:     r.kaeufer_ort     || '',
-    kaeufer_land:    r.kaeufer_land    || 'DE',
-    artikel_name:    r.artikel_name    || '',
-    ebay_artikel_id: r.ebay_artikel_id || '',
-    artikel_sku:     r.artikel_sku     || '',
-    menge:           r.artikel_menge   || 1,
-    einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
-  };
-  modalRechnung = r;
-  modalModus = 'bearbeiten';
-  modalOffen = true;
+  async function oeffneBearbeitenModal(r) {
+    resetForm();
+    // Werte aus r zwischenspeichern bevor form überschrieben wird
+    const initial = {
+      order_id:        r.order_id        || '',
+      kaeufer_name:    r.kaeufer_name    || '',
+      kaeufer_email:   r.kaeufer_email   || '',
+      kaeufer_strasse: r.kaeufer_strasse || '',
+      kaeufer_plz:     r.kaeufer_plz     || '',
+      kaeufer_ort:     r.kaeufer_ort     || '',
+      kaeufer_land:    r.kaeufer_land    || 'DE',
+      artikel_name:    r.artikel_name    || '',
+      ebay_artikel_id: r.ebay_artikel_id || '',
+      artikel_sku:     r.artikel_sku     || '',
+      menge:           r.artikel_menge   || 1,
+      einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
+    };
+    form = { ...initial };
+    modalRechnung = r;
+    modalModus = 'bearbeiten';
+    modalOffen = true;
 
-  // Frische Daten per invoice_id laden (holt Adresse aus orders-Tabelle)
-  try {
-    const data = await apiCall('bestellung-laden', {
-      user_id: $currentUser.id,
-      invoice_id: r.id
-    });
-    if (data?.bestellung) {
-      const b = data.bestellung;
-      form = {
-        order_id:        b.order_id        || form.order_id,
-        kaeufer_name:    b.kaeufer_name    || form.kaeufer_name,
-        kaeufer_email:   b.kaeufer_email   || form.kaeufer_email,
-        kaeufer_strasse: b.kaeufer_strasse || form.kaeufer_strasse,
-        kaeufer_plz:     b.kaeufer_plz     || form.kaeufer_plz,
-        kaeufer_ort:     b.kaeufer_ort     || form.kaeufer_ort,
-        kaeufer_land:    b.kaeufer_land    || form.kaeufer_land || 'DE',
-        artikel_name:    b.artikel_name    || form.artikel_name,
-        ebay_artikel_id: b.ebay_artikel_id || form.ebay_artikel_id,
-        artikel_sku:     form.artikel_sku,
-        menge:           b.artikel_menge   || form.menge,
-        einzelpreis:     parseFloat(b.einzelpreis) || parseFloat(b.brutto_betrag) || form.einzelpreis,
-      };
+    // Frische Daten per invoice_id laden (holt Adresse aus orders-Tabelle)
+    try {
+      const data = await apiCall('bestellung-laden', {
+        user_id: $currentUser.id,
+        invoice_id: r.id
+      });
+      if (data?.bestellung) {
+        const b = data.bestellung;
+        form = {
+          order_id:        b.order_id        || initial.order_id,
+          kaeufer_name:    b.kaeufer_name    || initial.kaeufer_name,
+          kaeufer_email:   b.kaeufer_email   || initial.kaeufer_email,
+          kaeufer_strasse: b.kaeufer_strasse || initial.kaeufer_strasse,
+          kaeufer_plz:     b.kaeufer_plz     || initial.kaeufer_plz,
+          kaeufer_ort:     b.kaeufer_ort     || initial.kaeufer_ort,
+          kaeufer_land:    b.kaeufer_land    || initial.kaeufer_land || 'DE',
+          artikel_name:    b.artikel_name    || initial.artikel_name,
+          ebay_artikel_id: b.ebay_artikel_id || initial.ebay_artikel_id,
+          artikel_sku:     initial.artikel_sku,
+          menge:           b.artikel_menge   || initial.menge,
+          einzelpreis:     parseFloat(b.einzelpreis) || parseFloat(b.brutto_betrag) || initial.einzelpreis,
+        };
+      }
+    } catch(e) {
+      // Fehler ignorieren — initial Daten bleiben
     }
-  } catch(e) {
-    // Fehler ignorieren — vorhandene Daten bleiben
   }
-}
 
   function schliesseModal() {
     modalOffen = false;
