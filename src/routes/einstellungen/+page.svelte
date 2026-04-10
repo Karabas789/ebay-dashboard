@@ -2,7 +2,7 @@
   const tiles = [
     { icon: '🏢', title: 'Firmendaten',        desc: 'Name, Adresse, USt-IdNr., Logo',           href: '/einstellungen/firma' },
     { icon: '🔢', title: 'Nummerierung',        desc: 'Rechnungs- und Storno-Nummernkreise',      href: '/einstellungen/nummern' },
-    { icon: '📧', title: 'E-Mail / SMTP',       desc: 'SMTP-Server, Absender, Verbindungstest',   href: '/einstellungen/smtp' },
+    { icon: '📧', title: 'E-Mail / SMTP',       desc: 'SMTP-Server, Absender, Verbindungstest',   href: '/einstellungen/email' },
     { icon: '🖨️', title: 'Rechnungsvorlage',   desc: 'PDF-Layout, Bilder, Texte, Farbschema',    href: '/einstellungen/rechnungsvorlage' },
     { icon: '🤖', title: 'KI-Konfiguration',    desc: 'System-Prompt, Modell, Auto-Send',         href: '/einstellungen/ki' },
     { icon: '💬', title: 'Kauf-Nachricht',       desc: 'Automatische Nachricht nach eBay-Kauf',    href: '/einstellungen/kauf-nachricht' },
