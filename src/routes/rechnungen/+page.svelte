@@ -156,15 +156,37 @@
     } catch(e) {}
   }
 
-  function schliesseModal() {
-    modalOffen = false;
-    modalRechnung = null;
-    bestellungFehler = '';
-    duplikatRechnung = null;
-    aenderungsgrund = '';
-    eRechnungMenuOffen = false;
-    eRechnungRechnung = null;
-  }
+  // NEU — schliesseModal setzt nur Modal-State zurück, nicht sendenEmail
+function schliesseModal() {
+  modalOffen = false;
+  modalRechnung = null;
+  bestellungFehler = '';
+  duplikatRechnung = null;
+  aenderungsgrund = '';
+  eRechnungMenuOffen = false;
+  eRechnungRechnung = null;
+  // sendenEmail und sendenRechnung werden NICHT hier zurückgesetzt
+}
+
+Deploy-Kurzbefehl auf dem Server:
+bash
+
+cd /opt/ebay-dashboard
+# email/+page.svelte und rechnungen/+page.svelte ersetzen
+docker build --no-cache -t ebay-dashboard:latest .
+docker stop ebay-dashboard && docker rm ebay-dashboard
+docker run -d --name ebay-dashboard --restart unless-stopped \
+  --network coolify -e PORT=3000 \
+  -l "traefik.enable=true" \
+  -l "traefik.http.routers.ebay-dashboard.rule=Host(\`ebay.ai-online.cloud\`)" \
+  -l "traefik.http.routers.ebay-dashboard.entrypoints=https" \
+  -l "traefik.http.routers.ebay-dashboard.tls=true" \
+  -l "traefik.http.routers.ebay-dashboard.tls.certresolver=letsencrypt" \
+  -l "traefik.http.services.ebay-dashboard.loadbalancer.server.port=3000" \
+  ebay-dashboard:latest
+
+Für die rechnungen/+page.svelte reichen die zwei Funktionen zu ersetzen — der Rest der Datei bleibt unverändert.
+
 
   function onOrderIdInput() {
     bestellungFehler = '';
@@ -285,13 +307,18 @@
     } catch(e) { showToast('Fehler beim Speichern'); } finally { toggleLaeuft = false; }
   }
 
-  // --- Einzel E-Mail ---
-  function oeffneSendenModal(r) {
-    sendenRechnung = r;
-    sendenEmail = r.kaeufer_email || '';
-    sendenModal = true;
-    schliesseModal();
-  }
+  // NEU — schliesseModal() VOR allem anderen, dann setzen
+function oeffneSendenModal(r) {
+  // Zuerst Detail-Modal schliessen OHNE reset
+  modalOffen = false;
+  eRechnungMenuOffen = false;
+  eRechnungRechnung = null;
+  // DANN E-Mail aus allen möglichen Feldnamen lesen
+  const email = r.kaeufer_email || r.buyer_email || r.email || r.email_gesendet_an || '';
+  sendenRechnung = r;
+  sendenEmail = email;
+  sendenModal = true;
+}
   async function sendeRechnung() {
     if (!sendenEmail) { showToast('Bitte E-Mail eingeben.'); return; }
     sendenLaeuft = true;
