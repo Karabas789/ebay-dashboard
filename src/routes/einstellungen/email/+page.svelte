@@ -22,7 +22,7 @@
 
   let testEmail = $state('');
   let passwortZeigen = $state(false);
-  let testStatus = $state(null); // null | 'success' | 'error'
+  let testStatus = $state(null);
   let testNachricht = $state('');
 
   const anbieterVorlagen = [
@@ -44,7 +44,6 @@
   onMount(() => {
     testEmail = $currentUser?.email || '';
     geladen = true;
-
     if ($currentUser) {
       apiCall('email-config-laden', { user_id: $currentUser.id })
         .then(data => {
@@ -91,11 +90,12 @@
     testStatus = null;
     testNachricht = '';
     try {
-      // Zuerst Einstellungen speichern, dann testen
+      // Zuerst speichern (inkl. Passwort Base64 kodiert), dann testen
       await apiCall('email-config-speichern', { user_id: $currentUser.id, ...cfg });
-      const res = await apiCall('email-test-senden', { user_id: $currentUser.id, to_email: testEmail });
+      // smtp-testen liest Passwort aus DB — kein Passwort im Request nötig
+      const res = await apiCall('smtp-testen', { user_id: $currentUser.id, to_email: testEmail });
       testStatus = 'success';
-      testNachricht = `Test-E-Mail erfolgreich gesendet an ${testEmail}`;
+      testNachricht = 'Test-E-Mail erfolgreich gesendet an ' + testEmail;
       showToast('✅ Test-E-Mail gesendet an ' + testEmail);
     } catch(e) {
       testStatus = 'error';
@@ -128,7 +128,6 @@
 
   {#if geladen}
 
-  <!-- ANBIETER SCHNELLAUSWAHL -->
   <div class="card">
     <div class="card-titel">⚡ Anbieter-Schnellauswahl</div>
     <div class="card-sub">Klicke auf deinen E-Mail-Anbieter um Host und Port automatisch auszufüllen</div>
@@ -142,7 +141,6 @@
     </div>
   </div>
 
-  <!-- SMTP VERBINDUNG -->
   <div class="card">
     <div class="card-titel">🔌 SMTP-Verbindung</div>
     <div class="form-grid">
@@ -180,12 +178,11 @@
             {passwortZeigen ? '🙈' : '👁'}
           </button>
         </div>
-        <span class="hinweis-klein">Das Passwort wird verschlüsselt in der Datenbank gespeichert (Base64)</span>
+        <span class="hinweis-klein">Das Passwort wird Base64-kodiert in der Datenbank gespeichert</span>
       </div>
     </div>
   </div>
 
-  <!-- ABSENDER -->
   <div class="card">
     <div class="card-titel">✉️ Absender</div>
     <div class="card-sub">Name und Adresse die beim Empfänger angezeigt werden</div>
@@ -201,7 +198,6 @@
     </div>
   </div>
 
-  <!-- E-MAIL VORLAGE -->
   <div class="card">
     <div class="card-titel">📝 E-Mail Vorlage</div>
     <div class="card-sub">Vorlage für Betreff und Text beim Rechnungsversand. Variablen werden automatisch ersetzt.</div>
@@ -221,13 +217,12 @@
         <input bind:value={cfg.betreff_vorlage} placeholder="Ihre Rechnung {{rechnung_nr}}" />
       </div>
       <div class="form-group form-span2">
-        <label>E-Mail Text (wird als Fließtext in der E-Mail angezeigt)</label>
+        <label>E-Mail Text</label>
         <textarea bind:value={cfg.text_vorlage} rows="8" placeholder="E-Mail-Text..."></textarea>
       </div>
     </div>
   </div>
 
-  <!-- AUTO-VERSAND -->
   <div class="card">
     <div class="card-titel">🤖 Automatischer Versand</div>
     <div class="auto-row">
@@ -235,7 +230,7 @@
         <div class="auto-titel">Nach Rechnungserstellung automatisch senden</div>
         <div class="auto-sub">
           Wenn aktiviert, wird die Rechnung sofort nach automatischer Erstellung per E-Mail an den Käufer gesendet —
-          aber nur wenn eine E-Mail-Adresse vom Käufer vorhanden ist. Manuell erstellte Rechnungen werden nicht automatisch gesendet.
+          aber nur wenn eine E-Mail-Adresse vom Käufer vorhanden ist.
         </div>
       </div>
       <button class="toggle-btn {cfg.auto_versand ? 'toggle-an' : 'toggle-aus'}"
@@ -244,20 +239,15 @@
       </button>
     </div>
     {#if cfg.auto_versand}
-      <div class="auto-aktiv-hinweis">
-        ✅ Auto-Versand aktiv — Rechnungen werden automatisch nach Erstellung per E-Mail gesendet
-      </div>
+      <div class="auto-aktiv-hinweis">✅ Auto-Versand aktiv — Rechnungen werden automatisch nach Erstellung per E-Mail gesendet</div>
     {:else}
-      <div class="auto-inaktiv-hinweis">
-        ⏸ Auto-Versand inaktiv — Rechnungen müssen manuell aus der Rechnungsliste gesendet werden
-      </div>
+      <div class="auto-inaktiv-hinweis">⏸ Auto-Versand inaktiv — Rechnungen manuell aus der Rechnungsliste senden</div>
     {/if}
   </div>
 
-  <!-- VERBINDUNGSTEST -->
   <div class="card card-test">
     <div class="card-titel">🧪 Verbindung testen</div>
-    <div class="card-sub">Sendet eine Test-E-Mail um die SMTP-Einstellungen zu überprüfen. Einstellungen werden dabei automatisch gespeichert.</div>
+    <div class="card-sub">Einstellungen werden zuerst gespeichert, dann wird eine Test-E-Mail gesendet.</div>
     <div class="test-row">
       <input bind:value={testEmail} type="email" placeholder="test@example.com" style="flex:1;min-width:200px" />
       <button class="btn-primary" onclick={testSenden} disabled={testLaeuft}>
@@ -271,13 +261,12 @@
     {/if}
   </div>
 
-  <!-- INFO-BOX -->
   <div class="info-box">
     <div class="info-titel">💡 Hinweise</div>
     <ul class="info-liste">
       <li>Für <strong>Gmail</strong>: Du musst ein <a href="https://myaccount.google.com/apppasswords" target="_blank">App-Passwort</a> erstellen (kein normales Google-Passwort)</li>
-      <li>Die Zugangsdaten werden <strong>pro User</strong> separat gespeichert und sind nur für dein Konto aktiv</li>
-      <li>Das Passwort wird Base64-kodiert in der Datenbank gespeichert</li>
+      <li>Die Zugangsdaten werden <strong>pro User</strong> separat gespeichert — jeder User kann eigene SMTP-Einstellungen haben</li>
+      <li>Das Passwort wird Base64-kodiert gespeichert und nie im Frontend angezeigt</li>
       <li>Über die Rechnungsseite können Rechnungen einzeln oder als Batch per E-Mail gesendet werden</li>
     </ul>
   </div>
@@ -331,7 +320,7 @@
   .test-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .test-row input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box; }
   .test-row input:focus { border-color:var(--primary); }
-  .test-result { padding:10px 14px; border-radius:8px; font-size:0.82rem; }
+  .test-result { padding:10px 14px; border-radius:8px; font-size:0.82rem; margin-top:4px; }
   .test-ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
   .test-fehler { background:#fef2f2; border:1px solid #fecaca; color:#dc2626; }
   .info-box { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:16px 20px; }
