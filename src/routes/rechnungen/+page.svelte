@@ -1415,7 +1415,7 @@
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
   .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
   .modal-klein { max-width:420px; }
-  .modal-universal { max-width:720px; }
+  .modal-universal { max-width:960px; }
   .modal-bulk { max-width:680px; }
   .modal-hdr { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
   .modal-titel { font-size:1rem; font-weight:600; color:var(--text); }
