@@ -23,9 +23,44 @@
   let form = $state({
     order_id: '', kaeufer_name: '', kaeufer_email: '',
     kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE',
-    artikel_name: '', ebay_artikel_id: '', artikel_sku: '',
-    menge: 1, einzelpreis: ''
+    freitext: ''
   });
+
+  let positionen = $state([
+    { bezeichnung: '', artikel_nr: '', ebay_artikel_id: '', menge: 1, einzelpreis: '', mwst_satz: 19, rabatt_pct: 0 }
+  ]);
+
+  const mwstOptionen = [
+    { wert: 19, label: '19 %' },
+    { wert: 7, label: '7 %' },
+    { wert: 0, label: '0 %' },
+  ];
+
+  function addPosition() {
+    positionen = [...positionen, { bezeichnung: '', artikel_nr: '', ebay_artikel_id: '', menge: 1, einzelpreis: '', mwst_satz: 19, rabatt_pct: 0 }];
+  }
+
+  function removePosition(idx) {
+    if (positionen.length <= 1) return;
+    positionen = positionen.filter((_, i) => i !== idx);
+  }
+
+  let berechnetePositionen = $derived.by(() => {
+    return positionen.map((p, idx) => {
+      const menge = parseInt(p.menge) || 1;
+      const ep = parseFloat(p.einzelpreis) || 0;
+      const ms = parseFloat(p.mwst_satz) || 0;
+      const rp = parseFloat(p.rabatt_pct) || 0;
+      const bruttoGesamt = (ep * menge) * (1 - rp / 100);
+      const netto = bruttoGesamt / (1 + ms / 100);
+      const steuer = bruttoGesamt - netto;
+      return { ...p, pos_nr: idx + 1, netto, steuer, brutto: bruttoGesamt };
+    });
+  });
+
+  let summeNettoBer = $derived(berechnetePositionen.reduce((s, p) => s + p.netto, 0));
+  let summeSteuerBer = $derived(berechnetePositionen.reduce((s, p) => s + p.steuer, 0));
+  let summeBruttoBer = $derived(berechnetePositionen.reduce((s, p) => s + p.brutto, 0));
   let bestellungLaeuft = $state(false);
   let bestellungFehler = $state('');
   let duplikatRechnung = $state(null);
@@ -90,9 +125,11 @@
     form = {
       order_id: '', kaeufer_name: '', kaeufer_email: '',
       kaeufer_strasse: '', kaeufer_plz: '', kaeufer_ort: '', kaeufer_land: 'DE',
-      artikel_name: '', ebay_artikel_id: '', artikel_sku: '',
-      menge: 1, einzelpreis: ''
+      freitext: ''
     };
+    positionen = [
+      { bezeichnung: '', artikel_nr: '', ebay_artikel_id: '', menge: 1, einzelpreis: '', mwst_satz: 19, rabatt_pct: 0 }
+    ];
     bestellungFehler = '';
     duplikatRechnung = null;
     aenderungsgrund = '';
@@ -100,7 +137,14 @@
 
   function oeffneNeuModal(vorbelegung = null) {
     resetForm();
-    if (vorbelegung) form = { ...form, ...vorbelegung };
+    if (vorbelegung) {
+      form = { ...form, order_id: vorbelegung.order_id || '', kaeufer_name: vorbelegung.kaeufer_name || '', kaeufer_email: vorbelegung.kaeufer_email || '', kaeufer_strasse: vorbelegung.kaeufer_strasse || '', kaeufer_plz: vorbelegung.kaeufer_plz || '', kaeufer_ort: vorbelegung.kaeufer_ort || '', kaeufer_land: vorbelegung.kaeufer_land || 'DE' };
+      positionen = [{
+        bezeichnung: vorbelegung.artikel_name || '', artikel_nr: vorbelegung.artikel_sku || '',
+        ebay_artikel_id: vorbelegung.ebay_artikel_id || '', menge: vorbelegung.menge || 1,
+        einzelpreis: vorbelegung.einzelpreis || '', mwst_satz: 19, rabatt_pct: 0
+      }];
+    }
     modalRechnung = null;
     modalModus = 'neu';
     modalOffen = true;
@@ -115,21 +159,29 @@
 
   async function oeffneBearbeitenModal(r) {
     resetForm();
-    const initial = {
-      order_id:        r.order_id        || '',
-      kaeufer_name:    r.kaeufer_name    || '',
-      kaeufer_email:   r.kaeufer_email   || '',
-      kaeufer_strasse: r.kaeufer_strasse || '',
-      kaeufer_plz:     r.kaeufer_plz     || '',
-      kaeufer_ort:     r.kaeufer_ort     || '',
-      kaeufer_land:    r.kaeufer_land    || 'DE',
-      artikel_name:    r.artikel_name    || '',
-      ebay_artikel_id: r.ebay_artikel_id || '',
-      artikel_sku:     r.artikel_sku     || '',
-      menge:           r.artikel_menge   || 1,
-      einzelpreis:     parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
+    form = {
+      order_id: r.order_id || '', kaeufer_name: r.kaeufer_name || '',
+      kaeufer_email: r.kaeufer_email || '', kaeufer_strasse: r.kaeufer_strasse || '',
+      kaeufer_plz: r.kaeufer_plz || '', kaeufer_ort: r.kaeufer_ort || '',
+      kaeufer_land: r.kaeufer_land || 'DE', freitext: r.freitext || ''
     };
-    form = { ...initial };
+
+    // Positionen aus invoice_items laden (falls vorhanden)
+    if (Array.isArray(r.positionen) && r.positionen.length > 0) {
+      positionen = r.positionen.map(p => ({
+        bezeichnung: p.bezeichnung || '', artikel_nr: p.artikel_nr || '',
+        ebay_artikel_id: p.ebay_artikel_id || '', menge: p.menge || 1,
+        einzelpreis: p.einzelpreis || 0, mwst_satz: p.mwst_satz ?? 19, rabatt_pct: p.rabatt_pct || 0
+      }));
+    } else {
+      // Fallback: alte Single-Item-Daten
+      positionen = [{
+        bezeichnung: r.artikel_name || '', artikel_nr: '',
+        ebay_artikel_id: r.ebay_artikel_id || '', menge: r.artikel_menge || 1,
+        einzelpreis: parseFloat(r.einzelpreis) || parseFloat(r.brutto_betrag) || 0,
+        mwst_satz: r.steuersatz || 19, rabatt_pct: 0
+      }];
+    }
     modalRechnung = r;
     modalModus = 'bearbeiten';
     modalOffen = true;
@@ -235,14 +287,20 @@
     }
     modalLaeuft = true;
     try {
+      const posPayload = positionen.map(p => ({
+        bezeichnung: p.bezeichnung, artikel_nr: p.artikel_nr || '',
+        ebay_artikel_id: p.ebay_artikel_id || '',
+        menge: Number(p.menge) || 1, einzelpreis: Number(p.einzelpreis) || 0,
+        mwst_satz: Number(p.mwst_satz), rabatt_pct: Number(p.rabatt_pct) || 0
+      }));
       await apiCall('rechnung-erstellen', {
         user_id: $currentUser.id, typ: 'rechnung',
         order_id: form.order_id || '', kaeufer_name: form.kaeufer_name,
         kaeufer_email: form.kaeufer_email, kaeufer_strasse: form.kaeufer_strasse,
         kaeufer_plz: form.kaeufer_plz, kaeufer_ort: form.kaeufer_ort,
-        kaeufer_land: form.kaeufer_land, artikel_name: form.artikel_name,
-        ebay_artikel_id: form.ebay_artikel_id,
-        menge: Number(form.menge), einzelpreis: Number(form.einzelpreis)
+        kaeufer_land: form.kaeufer_land,
+        positionen: posPayload,
+        freitext: form.freitext || ''
       });
       showToast('✅ Rechnung erstellt'); schliesseModal(); await ladeRechnungen();
     } catch(e) { showToast('Fehler: ' + e.message); } finally { modalLaeuft = false; }
@@ -771,9 +829,37 @@
             </div>
           </div>
           <div class="bm-section">
-            <div class="bm-section-titel">Artikel</div>
-            <div class="bm-grid">
-              <div class="bm-field bm-full"><div class="bm-label">Bezeichnung</div><div class="bm-value">{r.artikel_name || '-'}</div></div>
+            <div class="bm-section">
+            <div class="bm-section-titel">Positionen</div>
+            {#if Array.isArray(r.positionen) && r.positionen.length > 0}
+              <table class="detail-pos-tabelle">
+                <thead>
+                  <tr><th>Pos</th><th>Bezeichnung</th><th class="th-right">Menge</th><th class="th-right">EP</th><th class="th-right">MwSt</th><th class="th-right">Betrag</th></tr>
+                </thead>
+                <tbody>
+                  {#each r.positionen as p}
+                    <tr>
+                      <td>{p.pos_nr}</td>
+                      <td>{p.bezeichnung || '-'}{#if p.artikel_nr}<span class="pos-artnr"> ({p.artikel_nr})</span>{/if}</td>
+                      <td class="td-right">{p.menge}</td>
+                      <td class="td-right">{fmt(p.einzelpreis)} €</td>
+                      <td class="td-right">{p.mwst_satz}%</td>
+                      <td class="td-right">{fmt(p.brutto_betrag)} €</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {:else}
+              <div class="bm-grid">
+                <div class="bm-field bm-full"><div class="bm-label">Bezeichnung</div><div class="bm-value">{r.artikel_name || '-'}</div></div>
+                {#if r.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{r.ebay_artikel_id}</div></div>{/if}
+                <div class="bm-field"><div class="bm-label">Menge</div><div class="bm-value">{r.artikel_menge || 1}</div></div>
+              </div>
+            {/if}
+          </div>
+          {#if r.freitext}
+            <div class="hinweis hinweis-gelb" style="margin-bottom:12px">{r.freitext}</div>
+          {/if}
               {#if r.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{r.ebay_artikel_id}</div></div>{/if}
               <div class="bm-field"><div class="bm-label">Menge</div><div class="bm-value">{r.artikel_menge || 1}</div></div>
             </div>
@@ -1338,4 +1424,32 @@
   .nachhol-progress-bar { flex:1; height:8px; background:var(--border); border-radius:99px; overflow:hidden; }
   .nachhol-progress-fill { height:100%; background:var(--primary); border-radius:99px; transition:width 0.3s; }
   .nachhol-progress-text { font-size:0.8rem; font-weight:600; color:var(--primary); min-width:36px; text-align:right; }
+  /* Positionen-Editor */
+  .pos-section { margin-top:16px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .pos-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface2); border-bottom:1px solid var(--border); }
+  .pos-titel { font-size:0.82rem; font-weight:600; color:var(--text); }
+  .pos-row { display:flex; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border); align-items:flex-end; }
+  .pos-row:last-of-type { border-bottom:none; }
+  .pos-nr { font-size:0.8rem; font-weight:700; color:var(--text3); min-width:20px; padding-bottom:8px; }
+  .pos-fields { display:flex; gap:8px; flex-wrap:wrap; flex:1; align-items:flex-end; }
+  .pos-field { display:flex; flex-direction:column; gap:3px; }
+  .pos-field label { font-size:0.72rem; color:var(--text3); font-weight:500; }
+  .pos-field input, .pos-field select { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:0.82rem; outline:none; }
+  .pos-field input:focus, .pos-field select:focus { border-color:var(--primary); }
+  .pos-field-wide { flex:2; min-width:160px; }
+  .pos-field-wide input { width:100%; }
+  .pos-field-summe { min-width:80px; }
+  .pos-betrag { font-size:0.85rem; font-weight:600; color:var(--text); padding:6px 0; }
+  .pos-remove { background:none; border:none; color:var(--text3); font-size:0.8rem; cursor:pointer; padding:6px; border-radius:4px; }
+  .pos-remove:hover { color:#ef4444; background:#fef2f2; }
+  .pos-summen { padding:10px 14px; background:var(--surface2); border-top:1px solid var(--border); display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .pos-summen-zeile { display:flex; gap:20px; font-size:0.82rem; color:var(--text2); }
+  .pos-summen-zeile span:last-child { min-width:80px; text-align:right; }
+  .pos-summen-brutto { font-weight:700; color:var(--text); font-size:0.9rem; border-top:1px solid var(--border); padding-top:6px; margin-top:2px; }
+  /* Detail-Positionen-Tabelle */
+  .detail-pos-tabelle { width:100%; border-collapse:collapse; font-size:0.82rem; }
+  .detail-pos-tabelle th { padding:6px 8px; text-align:left; font-size:0.72rem; color:var(--text3); font-weight:600; border-bottom:1px solid var(--border); }
+  .detail-pos-tabelle td { padding:6px 8px; border-bottom:1px solid var(--border); color:var(--text); }
+  .detail-pos-tabelle tr:last-child td { border-bottom:none; }
+  .pos-artnr { font-size:0.72rem; color:var(--text3); }
 </style>
