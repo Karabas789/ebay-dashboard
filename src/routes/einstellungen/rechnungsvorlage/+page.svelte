@@ -667,6 +667,7 @@
           <div class="rw-rz w"  onmousedown={(e)=>onResizeMousedown(e,bild,'w')}></div>
         </div>
       {/each}
+      {/if}
 
       <!-- Inhalt: im Bilder-Tab pointer-events:none → Klicks gehen durch zum Bild-Wrap -->
       <div class="rw-inhalt" style={aktivesTab==='bilder' ? 'pointer-events:none;' : ''}>
