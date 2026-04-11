@@ -964,6 +964,7 @@
                   {#if positionen.length > 1}
                     <button class="pos-remove" type="button" onclick={() => removePosition(i)} title="Entfernen">✕</button>
                   {/if}
+                  </div>
                 </div>
               </div>
             {/each}
@@ -1122,6 +1123,7 @@
                   {#if positionen.length > 1}
                     <button class="pos-remove" type="button" onclick={() => removePosition(i)} title="Entfernen">✕</button>
                   {/if}
+                  </div>
                 </div>
               </div>
             {/each}
