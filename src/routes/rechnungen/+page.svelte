@@ -819,7 +819,6 @@
             </div>
           </div>
           <div class="bm-section">
-            <div class="bm-section">
             <div class="bm-section-titel">Positionen</div>
             {#if Array.isArray(r.positionen) && r.positionen.length > 0}
               <table class="detail-pos-tabelle">
