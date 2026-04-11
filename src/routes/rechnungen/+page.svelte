@@ -926,16 +926,17 @@
           <div class="pos-section">
             <div class="pos-header">
               <span class="pos-titel">Positionen</span>
-              <button class="btn-ghost btn-sm" type="button" onclick={addPosition}>+ Position</button>
+              <button class="btn-add-pos" type="button" onclick={addPosition}>+ Position</button>
             </div>
             {#each positionen as pos, i}
               <div class="pos-row">
                 <div class="pos-nr">{i + 1}</div>
                 <div class="pos-fields">
-                  <div class="pos-field pos-field-wide">
+                  <div class="pos-field pos-field-bez">
                     <label>Bezeichnung *</label>
                     <input bind:value={positionen[i].bezeichnung} placeholder="Produktname" />
                   </div>
+                  <div class="pos-detail-row">
                   <div class="pos-field">
                     <label>Art-Nr.</label>
                     <input bind:value={positionen[i].artikel_nr} placeholder="SKU" />
@@ -1083,16 +1084,17 @@
           <div class="pos-section">
             <div class="pos-header">
               <span class="pos-titel">Positionen</span>
-              <button class="btn-ghost btn-sm" type="button" onclick={addPosition}>+ Position</button>
+              <button class="btn-add-pos" type="button" onclick={addPosition}>+ Position</button>
             </div>
             {#each positionen as pos, i}
               <div class="pos-row">
                 <div class="pos-nr">{i + 1}</div>
                 <div class="pos-fields">
-                  <div class="pos-field pos-field-wide">
+                  <div class="pos-field pos-field-bez">
                     <label>Bezeichnung *</label>
                     <input bind:value={positionen[i].bezeichnung} placeholder="Produktname" />
                   </div>
+                  <div class="pos-detail-row">
                   <div class="pos-field">
                     <label>Art-Nr.</label>
                     <input bind:value={positionen[i].artikel_nr} placeholder="SKU" />
@@ -1510,6 +1512,8 @@
   /* Positionen-Editor */
   .pos-section { margin-top:16px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
   .pos-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--surface2); border-bottom:1px solid var(--border); }
+  .btn-add-pos { background:var(--primary); color:#fff; border:none; padding:6px 14px; border-radius:7px; font-size:0.8rem; font-weight:600; cursor:pointer; transition:filter 0.15s; }
+  .btn-add-pos:hover { filter:brightness(1.1); }
   .pos-titel { font-size:0.82rem; font-weight:600; color:var(--text); }
   .pos-row { display:flex; gap:10px; padding:12px 14px; border-bottom:1px solid var(--border); align-items:flex-end; }
   .pos-row:last-of-type { border-bottom:none; }
@@ -1519,8 +1523,13 @@
   .pos-field label { font-size:0.72rem; color:var(--text3); font-weight:500; }
   .pos-field input, .pos-field select { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:6px; font-size:0.82rem; outline:none; }
   .pos-field input:focus, .pos-field select:focus { border-color:var(--primary); }
-  .pos-field-wide { flex:2; min-width:160px; }
-  .pos-field-wide input { width:100%; }
+  .pos-field-bez { flex:1 1 100%; }
+  .pos-field-bez input { width:100%; }
+  .pos-detail-row { display:flex; gap:8px; flex-wrap:wrap; flex:1 1 100%; align-items:flex-end; }
+  .pos-field-artnr { flex:1; min-width:80px; }
+  .pos-field-menge { flex:0 0 70px; }
+  .pos-field-ep { flex:1; min-width:90px; }
+  .pos-field-mwst { flex:0 0 80px; }
   .pos-field-summe { min-width:80px; }
   .pos-betrag { font-size:0.85rem; font-weight:600; color:var(--text); padding:6px 0; }
   .pos-remove { background:none; border:none; color:var(--text3); font-size:0.8rem; cursor:pointer; padding:6px; border-radius:4px; }
