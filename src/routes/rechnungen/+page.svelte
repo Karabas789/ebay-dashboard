@@ -296,8 +296,6 @@
     if (positionen.length === 0 || positionen.some(p => !p.bezeichnung || !p.einzelpreis)) {
       showToast('Bitte alle Positionen mit Bezeichnung und Preis ausfüllen.'); return;
     }
-      showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
-    }
     if (!aenderungsgrund.trim()) {
       showToast('Bitte Grund der Änderung angeben.'); return;
     }
@@ -1081,16 +1079,62 @@
               <div class="form-group"><label>Ort</label><input bind:value={form.kaeufer_ort} placeholder="Berlin" /></div>
             </div>
             <div class="form-group"><label>Land</label><input bind:value={form.kaeufer_land} placeholder="DE" /></div>
-            <div class="form-group"><label>Artikel *</label><input bind:value={form.artikel_name} placeholder="Produktname" /></div>
-            <div class="form-group form-2col">
-              <div class="form-group"><label>eBay Artikel-ID</label><input bind:value={form.ebay_artikel_id} placeholder="123456789012" /></div>
-              <div class="form-group"><label>Variante (SKU)</label><input value={form.artikel_sku || ''} readonly placeholder="—" style="background:var(--surface2);color:var(--primary);font-family:monospace;font-size:0.82rem;" /></div>
             </div>
-            <div class="form-group form-2col">
-              <div class="form-group"><label>Menge *</label><input bind:value={form.menge} type="number" min="1" /></div>
-              <div class="form-group"><label>Einzelpreis Brutto *</label><input bind:value={form.einzelpreis} type="number" step="0.01" placeholder="9.99" /></div>
+          <!-- Positionen-Editor -->
+          <div class="pos-section">
+            <div class="pos-header">
+              <span class="pos-titel">Positionen</span>
+              <button class="btn-ghost btn-sm" type="button" onclick={addPosition}>+ Position</button>
+            </div>
+            {#each positionen as pos, i}
+              <div class="pos-row">
+                <div class="pos-nr">{i + 1}</div>
+                <div class="pos-fields">
+                  <div class="pos-field pos-field-wide">
+                    <label>Bezeichnung *</label>
+                    <input bind:value={positionen[i].bezeichnung} placeholder="Produktname" />
+                  </div>
+                  <div class="pos-field">
+                    <label>Art-Nr.</label>
+                    <input bind:value={positionen[i].artikel_nr} placeholder="SKU" />
+                  </div>
+                  <div class="pos-field">
+                    <label>Menge</label>
+                    <input bind:value={positionen[i].menge} type="number" min="1" />
+                  </div>
+                  <div class="pos-field">
+                    <label>EP Brutto *</label>
+                    <input bind:value={positionen[i].einzelpreis} type="number" step="0.01" placeholder="9.99" />
+                  </div>
+                  <div class="pos-field">
+                    <label>MwSt.</label>
+                    <select bind:value={positionen[i].mwst_satz}>
+                      {#each mwstOptionen as opt}
+                        <option value={opt.wert}>{opt.label}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  <div class="pos-field pos-field-summe">
+                    <label>Brutto</label>
+                    <span class="pos-betrag">{fmt(berechnetePositionen[i]?.brutto || 0)} €</span>
+                  </div>
+                  {#if positionen.length > 1}
+                    <button class="pos-remove" type="button" onclick={() => removePosition(i)} title="Entfernen">✕</button>
+                  {/if}
+                </div>
+              </div>
+            {/each}
+            <div class="pos-summen">
+              <div class="pos-summen-zeile"><span>Netto</span><span>{fmt(summeNettoBer)} €</span></div>
+              <div class="pos-summen-zeile"><span>MwSt.</span><span>{fmt(summeSteuerBer)} €</span></div>
+              <div class="pos-summen-zeile pos-summen-brutto"><span>Brutto</span><span>{fmt(summeBruttoBer)} €</span></div>
             </div>
           </div>
+          <!-- Freitext -->
+          <div class="form-group" style="margin-top:12px">
+            <label>Freitext / Hinweis <span style="font-weight:400;color:var(--text3)">(optional, erscheint auf Rechnung)</span></label>
+            <textarea bind:value={form.freitext} placeholder="z. B. Korrekturhinweis ..." rows="2"
+              style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"></textarea>
           <div class="form-group" style="margin-top:18px">
             <label>Grund der Änderung * <span style="font-weight:400;color:var(--text3)">(wird intern gespeichert)</span></label>
             <textarea bind:value={aenderungsgrund} placeholder="z. B. Käufer hat neue Lieferadresse mitgeteilt ..." rows="3"
