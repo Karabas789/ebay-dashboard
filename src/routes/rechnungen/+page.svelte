@@ -275,17 +275,15 @@
 
   async function ladeAutoRechnungStatus() {
     try {
-      const data = await apiCall('rechnung-settings', { action: 'load', user_id: $currentUser.id });
-      if (data?.success && data?.data) {
-        autoRechnungAktiv = data.data.auto_rechnung ?? false;
-      }
+      const data = await apiCall('auto-rechnung-einstellungen', { user_id: $currentUser.id }, 'GET');
+      autoRechnungAktiv = data?.auto_rechnung_aktiv ?? true;
     } catch(e) {}
   }
 
   async function toggleAutoRechnung() {
     toggleLaeuft = true; const neuerWert = !autoRechnungAktiv;
     try {
-      await apiCall('rechnung-settings', { action: 'save', user_id: $currentUser.id, auto_rechnung: neuerWert });
+      await apiCall('auto-rechnung-einstellungen', { user_id: $currentUser.id, aktiv: neuerWert });
       autoRechnungAktiv = neuerWert;
       showToast(neuerWert ? '✅ Auto-Rechnung aktiviert — Rechnungen werden nach Versand erstellt' : 'Auto-Rechnung deaktiviert');
     } catch(e) { showToast('Fehler beim Speichern'); } finally { toggleLaeuft = false; }
