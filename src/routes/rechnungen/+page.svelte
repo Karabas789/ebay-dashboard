@@ -1135,6 +1135,7 @@
             <label>Freitext / Hinweis <span style="font-weight:400;color:var(--text3)">(optional, erscheint auf Rechnung)</span></label>
             <textarea bind:value={form.freitext} placeholder="z. B. Korrekturhinweis ..." rows="2"
               style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:0.85rem;outline:none;resize:vertical;font-family:inherit;width:100%;box-sizing:border-box;"></textarea>
+    </div>     
           <div class="form-group" style="margin-top:18px">
             <label>Grund der Änderung * <span style="font-weight:400;color:var(--text3)">(wird intern gespeichert)</span></label>
             <textarea bind:value={aenderungsgrund} placeholder="z. B. Käufer hat neue Lieferadresse mitgeteilt ..." rows="3"
