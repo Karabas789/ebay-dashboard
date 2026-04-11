@@ -186,26 +186,6 @@
     modalModus = 'bearbeiten';
     modalOffen = true;
 
-    try {
-      const data = await apiCall('bestellung-laden', { user_id: $currentUser.id, invoice_id: r.id });
-      if (data?.bestellung) {
-        const b = data.bestellung;
-        form = {
-          order_id:        b.order_id        || initial.order_id,
-          kaeufer_name:    b.kaeufer_name    || initial.kaeufer_name,
-          kaeufer_email:   b.kaeufer_email   || initial.kaeufer_email,
-          kaeufer_strasse: b.kaeufer_strasse || initial.kaeufer_strasse,
-          kaeufer_plz:     b.kaeufer_plz     || initial.kaeufer_plz,
-          kaeufer_ort:     b.kaeufer_ort     || initial.kaeufer_ort,
-          kaeufer_land:    b.kaeufer_land    || initial.kaeufer_land || 'DE',
-          artikel_name:    b.artikel_name    || initial.artikel_name,
-          ebay_artikel_id: b.ebay_artikel_id || initial.ebay_artikel_id,
-          artikel_sku:     initial.artikel_sku,
-          menge:           b.artikel_menge   || initial.menge,
-          einzelpreis:     parseFloat(b.einzelpreis) || parseFloat(b.brutto_betrag) || initial.einzelpreis,
-        };
-      }
-    } catch(e) {}
   }
 
   function schliesseModal() {
@@ -310,7 +290,12 @@
   }
 
   async function speichereBearbeitung() {
-    if (!form.kaeufer_name || !form.artikel_name || !form.einzelpreis) {
+    if (!form.kaeufer_name) {
+      showToast('Bitte Käufername ausfüllen.'); return;
+    }
+    if (positionen.length === 0 || positionen.some(p => !p.bezeichnung || !p.einzelpreis)) {
+      showToast('Bitte alle Positionen mit Bezeichnung und Preis ausfüllen.'); return;
+    }
       showToast('Bitte alle Pflichtfelder ausfüllen.'); return;
     }
     if (!aenderungsgrund.trim()) {
@@ -867,10 +852,7 @@
           {#if r.freitext}
             <div class="hinweis hinweis-gelb" style="margin-bottom:12px">{r.freitext}</div>
           {/if}
-              {#if r.ebay_artikel_id}<div class="bm-field"><div class="bm-label">eBay Artikel-ID</div><div class="bm-value" style="font-family:monospace">{r.ebay_artikel_id}</div></div>{/if}
-              <div class="bm-field"><div class="bm-label">Menge</div><div class="bm-value">{r.artikel_menge || 1}</div></div>
-            </div>
-          </div>
+
           {#if r.order_id}
             <div class="bm-section">
               <div class="bm-section-titel">Bestellnummer</div>
