@@ -967,3 +967,121 @@ const tiles = [
 ```
 
 Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
+
+## Skill-Datei Aktualisierung
+
+Hier die relevanten Abschnitte, die in der SKILL.md geändert/ergänzt werden müssen:
+
+### 3a) Datenbank-Schema — Neue Tabelle `invoice_items` ergänzen
+
+Nach dem `invoices`-Block einfügen:
+
+```markdown
+#### `invoice_items`
+| Spalte | Beschreibung |
+|---|---|
+| `id` | Primärschlüssel |
+| `invoice_id` | Fremdschlüssel → invoices.id |
+| `pos_nr` | Positionsnummer (1, 2, 3…) |
+| `bezeichnung` | Positionsbezeichnung / Artikelname |
+| `artikel_nr` | Interne Artikelnummer |
+| `ebay_artikel_id` | eBay-Artikel-ID |
+| `menge` | Menge |
+| `einzelpreis` | Einzelpreis (brutto) |
+| `mwst_satz` | MwSt-Satz pro Position (z.B. 19, 7, 0) |
+| `rabatt_pct` | Rabatt in Prozent |
+| `netto_betrag` | Netto-Betrag der Position |
+| `steuer_betrag` | Steuer-Betrag der Position |
+| `brutto_betrag` | Brutto-Betrag der Position |
+```
+
+### 3b) `invoices`-Tabelle — Spalte `positionen_migriert` ergänzen
+
+In der `invoices`-Tabelle ergänzen:
+
+```
+| `positionen_migriert` | Boolean — true wenn Positionen in invoice_items gespeichert sind |
+```
+
+### 3c) Rechnungssystem-Workflows — Aktualisieren
+
+Die Workflow-Tabelle in Abschnitt 4.3 ersetzen durch:
+
+```markdown
+### 4.3 Rechnungssystem-Workflows
+
+| ID | WF-ID | Endpoint | Funktion |
+|---|---|---|---|
+| WF-RE-01 | `dw0xRsxT4i74dbN6` | POST `/rechnung-erstellen` | Multi-Positionen → Berechnung → HTML (aus vorlage_json) → Gotenberg PDF → invoices + invoice_items speichern |
+| WF-RE-02 | — | POST `/rechnung-senden` | Rechnung aus DB laden → SMTP → E-Mail mit PDF senden |
+| WF-RE-03 | `8oE5YeeFENDKGXE3` | POST `/rechnungen-laden` | Alle invoices + invoice_items eines Users zurückgeben |
+| WF-RE-04 | — | POST `/rechnung-settings` | Firmendaten + Config + SMTP laden oder speichern (`action: load/save`) |
+| WF-RE-05 | — | POST `/smtp-testen` | SMTP-Daten → `email.ai-online.cloud/test` → Ergebnis |
+| WF-RE-06 | — | POST `/rechnung-pdf` | PDF Base64 aus `invoices`-Tabelle abrufen |
+| WF-RE-07 | `WKvZ9xJ8aHzHdpnu` | POST `/rechnung-neu-generieren` | Bestehende Rechnung → HTML (aus vorlage_json) → neues PDF → DB update |
+| E-Rechnung | `8aNYc6uei9w9Y2Of` | POST `/e-rechnung-erstellen` | XRechnung 3.0.2 XML oder ZUGFeRD 2.4 PDF (mit vorlage_json) |
+
+**Alle Rechnungs-Workflows unterstützen Multi-Positionen** mit `invoice_items` und MwSt pro Position.
+
+**API-Format (neu):**
+```json
+{
+  "user_id": 4,
+  "typ": "rechnung",
+  "order_id": "12-12345-12345",
+  "kaeufer_name": "Max Mustermann",
+  "kaeufer_strasse": "Musterstr. 1",
+  "kaeufer_plz": "12345",
+  "kaeufer_ort": "Berlin",
+  "kaeufer_land": "DE",
+  "kaeufer_email": "max@example.de",
+  "positionen": [
+    {
+      "bezeichnung": "Artikel A",
+      "artikel_nr": "A001",
+      "menge": 2,
+      "einzelpreis": 29.99,
+      "mwst_satz": 19
+    },
+    {
+      "bezeichnung": "Versandkosten",
+      "menge": 1,
+      "einzelpreis": 4.99,
+      "mwst_satz": 19
+    }
+  ]
+}
+```
+
+**Rückwärtskompatibel:** Alte Aufrufe mit `artikel_name`, `menge`, `einzelpreis` (ohne `positionen`-Array) werden automatisch als Single-Position behandelt.
+
+**Rechnungsnummern-Format:** `{praefix}{trennzeichen}{YYYY}{trennzeichen}{laufende Nummer}`, z.B. `RE-2026-00001`
+```
+
+### 3d) Projektstruktur — Rechnungsvorlage-Route aktualisieren
+
+```
+        └── einstellungen/
+            ├── +page.svelte
+            ├── firma/+page.svelte
+            ├── nummern/+page.svelte
+            ├── smtp/+page.svelte
+            ├── ki/+page.svelte
+            ├── kauf-nachricht/+page.svelte
+            ├── bilder/+page.svelte
+            └── rechnungsvorlage/+page.svelte  (✅ Rechnungsvorlage-Editor)
+```
+
+### 3e) Einstellungen-Kacheln — Rechnungsvorlage ergänzen
+
+```javascript
+const tiles = [
+  { icon: '🏢', title: 'Firmendaten',         href: '/einstellungen/firma' },
+  { icon: '🔢', title: 'Nummerierung',        href: '/einstellungen/nummern' },
+  { icon: '📧', title: 'E-Mail / SMTP',       href: '/einstellungen/smtp' },
+  { icon: '🤖', title: 'KI-Konfiguration',    href: '/einstellungen/ki' },
+  { icon: '💬', title: 'Kauf-Nachricht',      href: '/einstellungen/kauf-nachricht' },
+  { icon: '🖼️', title: 'Produktbilder',      href: '/einstellungen/bilder' },
+  { icon: '🧾', title: 'Rechnungsvorlage',    href: '/einstellungen/rechnungsvorlage' },
+];
+
