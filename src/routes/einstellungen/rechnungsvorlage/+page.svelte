@@ -55,6 +55,7 @@
   let zeigtPDF = $state(false);
   let aktiverBlock = $state('');
   let aktivesTab = $state('inhalt');
+  let vorlageModus = $state('rechnung'); // 'rechnung' | 'erechnung'
 
   let savedRange = null;
   let hatAuswahl = $state(false);
@@ -434,9 +435,16 @@
     <div class="rw-bar-l">
       <b class="rw-title">🧾 Rechnungsvorlage</b>
       <div class="sep"></div>
+      <div class="rw-modus-toggle">
+        <button class="rw-modus-btn" class:act={vorlageModus==='rechnung'} onclick={()=>vorlageModus='rechnung'}>📄 Rechnung</button>
+        <button class="rw-modus-btn" class:act={vorlageModus==='erechnung'} onclick={()=>{vorlageModus='erechnung'; if(aktivesTab==='bilder') aktivesTab='inhalt';}}>⚡ E-Rechnung</button>
+      </div>
+      <div class="sep"></div>
       <button class="rw-tab" class:act={aktivesTab==='inhalt'} onclick={()=>aktivesTab='inhalt'}>📝 Text</button>
       <button class="rw-tab" class:act={aktivesTab==='layout'} onclick={()=>aktivesTab='layout'}>🎨 Layout</button>
-      <button class="rw-tab" class:act={aktivesTab==='bilder'} onclick={()=>aktivesTab='bilder'}>🖼 Bilder</button>
+      {#if vorlageModus === 'rechnung'}
+        <button class="rw-tab" class:act={aktivesTab==='bilder'} onclick={()=>aktivesTab='bilder'}>🖼 Bilder</button>
+      {/if}
     </div>
     <div class="rw-bar-r">
       {#if autoSaveStatus === 'speichert'}
@@ -537,6 +545,7 @@
       <input type="number" class="rw-num" min="10" max="60" bind:value={v.seitenrand}/>px
     </div>
     <div class="sep-v"></div>
+    {#if vorlageModus === 'rechnung'}
     <div class="rw-panel-group">
       <span class="rw-lbl-head">LOGO</span>
       <label class="rw-btn">{v.logo.base64?'🔄':'🖼'} Logo
@@ -550,6 +559,7 @@
         <button class="rw-btn rw-btn-x" onclick={()=>v.logo.base64=''}>✕</button>
       {/if}
     </div>
+    {/if}
     <div class="sep-v"></div>
     <div class="rw-panel-group">
       <span class="rw-lbl-head">FOOTER</span>
@@ -640,7 +650,8 @@
       --rand:{v.seitenrand}px;
     ">
 
-      <!-- Hintergrundbilder -->
+      <!-- Hintergrundbilder (nur bei normaler Rechnung) -->
+      {#if vorlageModus === 'rechnung'}
       {#each v.hintergrundbilder as bild}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="rw-bild-wrap" style={bildWrapStyle(bild)} onmousedown={(e)=>onBildMousedown(e,bild)}>
@@ -660,19 +671,25 @@
       <!-- Inhalt: im Bilder-Tab pointer-events:none → Klicks gehen durch zum Bild-Wrap -->
       <div class="rw-inhalt" style={aktivesTab==='bilder' ? 'pointer-events:none;' : ''}>
 
-        {#if v.logo.base64}
-          <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
-            <label style="cursor:pointer;pointer-events:auto;" title="Klicken zum Wechseln">
-              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>
-              <img src={v.logo.base64} alt="Logo" style="width:{v.logo.breite}px;max-height:100px;object-fit:contain;display:block;"/>
-            </label>
-          </div>
-        {:else if aktivesTab==='layout'}
-          <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
-            <label class="rw-logo-drop" style="pointer-events:auto;">
-              <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>🖼 Logo
-            </label>
-          </div>
+        {#if vorlageModus === 'rechnung'}
+          {#if v.logo.base64}
+            <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
+              <label style="cursor:pointer;pointer-events:auto;" title="Klicken zum Wechseln">
+                <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>
+                <img src={v.logo.base64} alt="Logo" style="width:{v.logo.breite}px;max-height:100px;object-fit:contain;display:block;"/>
+              </label>
+            </div>
+          {:else if aktivesTab==='layout'}
+            <div style="display:flex;justify-content:{logoJustify()};padding:var(--rand) var(--rand) 0;">
+              <label class="rw-logo-drop" style="pointer-events:auto;">
+                <input type="file" accept="image/*" onchange={handleLogoUpload} style="display:none"/>🖼 Logo
+              </label>
+            </div>
+          {/if}
+        {/if}
+
+        {#if vorlageModus === 'erechnung'}
+          <div style="margin:{v.seitenrand}px {v.seitenrand}px 0;padding:6px 10px;font-size:9px;color:#2563eb;background:#eff6ff;border:1px solid #93c5fd;border-radius:4px;">⚡ E-Rechnung · ZUGFeRD 2.4 EN16931 — Strukturierte Daten sind dieser PDF eingebettet.</div>
         {/if}
 
         <div class="rw-header" style="padding:{v.logo.base64?'10px':'var(--rand)'} var(--rand) 0;">
@@ -882,4 +899,8 @@
   :global(.rw-e:empty::before){content:attr(data-ph);color:#c0c7d0;font-style:italic;pointer-events:none;}
   .rw-pdf{width:794px;height:1123px;flex-shrink:0;background:#fff;border:none;border-radius:2px;box-shadow:0 4px 28px rgba(0,0,0,0.18);}
   @media(max-width:860px){.rw-a4,.rw-pdf{width:100%;min-width:0;}}
+  .rw-modus-toggle{display:flex;background:#f1f5f9;border-radius:6px;padding:2px;gap:2px;}
+  .rw-modus-btn{background:transparent;border:none;padding:3px 10px;font-size:0.72rem;font-weight:600;color:#64748b;cursor:pointer;border-radius:4px;white-space:nowrap;transition:all 0.15s;}
+  .rw-modus-btn:hover{color:#334155;}
+  .rw-modus-btn.act{background:#fff;color:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
 </style>
