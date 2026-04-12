@@ -36,8 +36,58 @@
   let eRechnungWorking = $state(false);
   let rechnungWorking = $state(false);
 
+  // ── Gruppierung: allOrders-Zeilen → gruppierte Bestellungen ──
+  let groupedOrders = $derived.by(() => {
+    const map = new Map();
+    for (const row of allOrders) {
+      const key = String(row.order_id);
+      if (!map.has(key)) {
+        map.set(key, {
+          order_id: row.order_id,
+          id: row.id,
+          buyer_name: row.buyer_name,
+          buyer_username: row.buyer_username,
+          buyer_email: row.buyer_email,
+          buyer_strasse: row.buyer_strasse,
+          buyer_plz: row.buyer_plz,
+          buyer_ort: row.buyer_ort,
+          buyer_land: row.buyer_land,
+          bestelldatum: row.bestelldatum,
+          erstellt_am: row.erstellt_am,
+          status: row.status,
+          archiviert: row.archiviert,
+          tracking_nummer: row.tracking_nummer,
+          versanddienstleister: row.versanddienstleister,
+          hat_rechnung: row.hat_rechnung,
+          invoice_id: row.invoice_id,
+          items: []
+        });
+      }
+      const group = map.get(key);
+      group.items.push({
+        artikel_name: row.artikel_name,
+        ebay_artikel_id: row.ebay_artikel_id,
+        sold_sku: row.sold_sku,
+        menge: row.menge || 1,
+        preis: row.preis,
+        gesamt: row.gesamt,
+        einzelpreis: row.einzelpreis
+      });
+      // Übernehme übergreifende Felder vom neuesten / relevantesten Row
+      if (row.hat_rechnung) { group.hat_rechnung = true; group.invoice_id = row.invoice_id || group.invoice_id; }
+      if (row.tracking_nummer && !group.tracking_nummer) { group.tracking_nummer = row.tracking_nummer; group.versanddienstleister = row.versanddienstleister; }
+    }
+    // Berechne Gesamtsumme und Gesamtmenge pro Gruppe
+    for (const group of map.values()) {
+      group.gesamt_summe = group.items.reduce((sum, item) => sum + parseFloat(item.gesamt || 0), 0);
+      group.gesamt_menge = group.items.reduce((sum, item) => sum + (item.menge || 1), 0);
+      group.artikel_count = group.items.length;
+    }
+    return Array.from(map.values());
+  });
+
   let filteredOrders = $derived.by(() => {
-    let orders = allOrders;
+    let orders = groupedOrders;
     const q = searchQuery.toLowerCase();
     if (ordersFilter === 'archiviert') {
       orders = orders.filter(o => o.archiviert || o.status === 'archiviert');
@@ -50,7 +100,11 @@
         (o.order_id || '').toLowerCase().includes(q) ||
         (o.buyer_name || '').toLowerCase().includes(q) ||
         (o.buyer_username || '').toLowerCase().includes(q) ||
-        (o.artikel_name || '').toLowerCase().includes(q)
+        o.items.some(item =>
+          (item.artikel_name || '').toLowerCase().includes(q) ||
+          (item.sold_sku || '').toLowerCase().includes(q) ||
+          (item.ebay_artikel_id || '').toLowerCase().includes(q)
+        )
       );
     }
     return orders;
@@ -60,12 +114,12 @@
   let isArchivView = $derived(ordersFilter === 'archiviert');
   let selectedCount = $derived(selectedOrderIds.size);
   let singleSelected = $derived(selectedOrderIds.size === 1);
-  let countAlle = $derived(allOrders.filter(o => !o.archiviert && o.status !== 'archiviert').length);
-  let countBezahlt = $derived(allOrders.filter(o => !o.archiviert && o.status !== 'archiviert' && o.status === 'bezahlt').length);
-  let countVersendet = $derived(allOrders.filter(o => !o.archiviert && o.status !== 'archiviert' && o.status === 'versendet').length);
-  let countArchiviert = $derived(allOrders.filter(o => o.archiviert || o.status === 'archiviert').length);
+  let countAlle = $derived(groupedOrders.filter(o => !o.archiviert && o.status !== 'archiviert').length);
+  let countBezahlt = $derived(groupedOrders.filter(o => !o.archiviert && o.status !== 'archiviert' && o.status === 'bezahlt').length);
+  let countVersendet = $derived(groupedOrders.filter(o => !o.archiviert && o.status !== 'archiviert' && o.status === 'versendet').length);
+  let countArchiviert = $derived(groupedOrders.filter(o => o.archiviert || o.status === 'archiviert').length);
   let allFilteredSelected = $derived(
-    filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.has(String(o.order_id || o.id)))
+    filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.has(String(o.order_id)))
   );
 
   onMount(() => { loadBestellungen(); loadProdukte(); });
@@ -143,7 +197,7 @@
 
   async function autoCreateRechnungAfterTracking(orderId) {
     try {
-      const order = allOrders.find(o => String(o.order_id) === String(orderId));
+      const order = groupedOrders.find(o => String(o.order_id) === String(orderId));
       if (!order) return;
       const sd = await apiCall('/rechnung-settings', { action: 'load', user_id: $currentUser.id });
       if (!sd.success || !sd.data?.auto_rechnung) return;
@@ -167,23 +221,34 @@
       if (res?.success) {
         showToast('✅ Rechnung ' + res.rechnung_nr + ' erstellt', 'success');
         await loadBestellungen();
-        const updated = allOrders.find(o => String(o.order_id) === String(order.order_id));
+        const updated = groupedOrders.find(o => String(o.order_id) === String(order.order_id));
         if (updated) detailOrder = updated;
       } else { showToast('Fehler beim Erstellen der Rechnung', 'error'); }
     } catch (e) { showToast('Verbindungsfehler', 'error'); }
     finally { rechnungWorking = false; }
   }
 
+  // ── Multi-Positionen: sendet positionen-Array an WF-RE-01 ──
   async function erstelleRechnungFuerOrder(order) {
     return await apiCall('/rechnung-erstellen', {
-      user_id: $currentUser.id, typ: 'rechnung', order_id: order.order_id,
+      user_id: $currentUser.id,
+      typ: 'rechnung',
+      order_id: order.order_id,
       kaeufer_name: order.buyer_name || order.buyer_username || '',
-      kaeufer_username: order.buyer_username || '', kaeufer_strasse: order.buyer_strasse || '',
-      kaeufer_plz: order.buyer_plz || '', kaeufer_ort: order.buyer_ort || '',
-      kaeufer_land: order.buyer_land || '', kaeufer_email: order.buyer_email || '',
-      artikel_name: order.artikel_name || '', menge: order.menge || 1,
-      einzelpreis: parseFloat(order.gesamt || 0) / (order.menge || 1),
-      ebay_artikel_id: order.ebay_artikel_id || ''
+      kaeufer_username: order.buyer_username || '',
+      kaeufer_strasse: order.buyer_strasse || '',
+      kaeufer_plz: order.buyer_plz || '',
+      kaeufer_ort: order.buyer_ort || '',
+      kaeufer_land: order.buyer_land || '',
+      kaeufer_email: order.buyer_email || '',
+      positionen: order.items.map(item => ({
+        bezeichnung: item.artikel_name || '',
+        menge: item.menge || 1,
+        einzelpreis: parseFloat(item.gesamt || 0) / (item.menge || 1),
+        artikel_nr: item.sold_sku || '',
+        ebay_artikel_id: item.ebay_artikel_id || '',
+        mwst_satz: 19
+      }))
     });
   }
 
@@ -237,9 +302,9 @@
 
   function toggleSelectAll(e) {
     if (e.target.checked) {
-      const newSet = new Set(selectedOrderIds); filteredOrders.forEach(o => newSet.add(String(o.order_id || o.id))); selectedOrderIds = newSet;
+      const newSet = new Set(selectedOrderIds); filteredOrders.forEach(o => newSet.add(String(o.order_id))); selectedOrderIds = newSet;
     } else {
-      const newSet = new Set(selectedOrderIds); filteredOrders.forEach(o => newSet.delete(String(o.order_id || o.id))); selectedOrderIds = newSet;
+      const newSet = new Set(selectedOrderIds); filteredOrders.forEach(o => newSet.delete(String(o.order_id))); selectedOrderIds = newSet;
     }
   }
   function toggleOrderSelect(id, checked) {
@@ -254,12 +319,29 @@
   function openMsgModal() {
     if (selectedOrderIds.size !== 1) return;
     const id = Array.from(selectedOrderIds)[0];
-    const order = allOrders.find(o => String(o.order_id) === String(id) || String(o.id) === String(id));
-    orderMessageBuyer = order?.buyer_username || order?.käufer || null;
+    const order = groupedOrders.find(o => String(o.order_id) === String(id));
+    orderMessageBuyer = order?.buyer_username || null;
     orderMessageBuyerName = order?.buyer_name || orderMessageBuyer || 'Käufer';
     msgSubject = ''; msgText = ''; showMsgModal = true;
   }
   function openDetailModal(order) { detailOrder = order; eRechnungDropdownOpen = false; showDetailModal = true; }
+
+  // Hilfsfunktion: Erstes Produktbild für eine gruppierte Bestellung finden
+  function getOrderImage(order) {
+    for (const item of order.items) {
+      const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
+      if (prod?.bild_url) return prod.bild_url;
+      const varBild = prod?.varianten?.find(v => v.bild_url)?.bild_url;
+      if (varBild) return varBild;
+    }
+    return '';
+  }
+
+  // Hilfsfunktion: Produktbild für einzelnen Artikel
+  function getItemImage(item) {
+    const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
+    return prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || '';
+  }
 
   let _toast = $state({ msg: '', type: 'success', visible: false });
   let _toastTimer = null;
@@ -334,14 +416,15 @@
       {:else if filteredOrders.length === 0}
         <tr><td colspan="9" class="table-empty">{searchQuery ? 'Keine Ergebnisse für „' + searchQuery + '"' : 'Keine Bestellungen gefunden'}</td></tr>
       {:else}
-        {#each filteredOrders as o (o.order_id || o.id)}
-          {@const isSelected = selectedOrderIds.has(String(o.order_id || o.id))}
+        {#each filteredOrders as o (o.order_id)}
+          {@const isSelected = selectedOrderIds.has(String(o.order_id))}
           {@const trackUrl = getTrackingUrl(o.tracking_nummer, o.versanddienstleister)}
-          {@const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(o.ebay_artikel_id))}
-          {@const bild = prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || ''}
+          {@const bild = getOrderImage(o)}
+          {@const isSingle = o.artikel_count === 1}
+          {@const firstItem = o.items[0]}
           <tr class:selected={isSelected}>
             <td style="text-align:center;">
-              <input type="checkbox" checked={isSelected} onchange={(e) => toggleOrderSelect(o.order_id || o.id, e.target.checked)} style="cursor:pointer;width:15px;height:15px;" />
+              <input type="checkbox" checked={isSelected} onchange={(e) => toggleOrderSelect(o.order_id, e.target.checked)} style="cursor:pointer;width:15px;height:15px;" />
             </td>
             <td class="col-date">{formatDate(o.bestelldatum || o.erstellt_am)}</td>
             <td>
@@ -357,18 +440,29 @@
                   <img src={bild} alt="" style="width:56px;height:56px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;" onerror={(e) => { e.currentTarget.style.display='none'; }} />
                 {/if}
                 <div style="min-width:0;">
-                  <div class="artikel-name">
-                    {#if o.ebay_artikel_id}
-                      <a href="https://www.ebay.de/itm/{o.ebay_artikel_id}" target="_blank" class="artikel-ebay-link">{o.artikel_name || '—'}</a>
-                    {:else}{o.artikel_name || '—'}{/if}
-                  </div>
-                  {#if o.sold_sku}<div class="artikel-sku">SKU: {o.sold_sku}</div>{/if}
-                  {#if o.ebay_artikel_id}<div class="artikel-id">eBay: {o.ebay_artikel_id}</div>{/if}
+                  {#if isSingle}
+                    <div class="artikel-name">
+                      {#if firstItem.ebay_artikel_id}
+                        <a href="https://www.ebay.de/itm/{firstItem.ebay_artikel_id}" target="_blank" class="artikel-ebay-link">{firstItem.artikel_name || '—'}</a>
+                      {:else}{firstItem.artikel_name || '—'}{/if}
+                    </div>
+                    {#if firstItem.sold_sku}<div class="artikel-sku">SKU: {firstItem.sold_sku}</div>{/if}
+                    {#if firstItem.ebay_artikel_id}<div class="artikel-id">eBay: {firstItem.ebay_artikel_id}</div>{/if}
+                  {:else}
+                    <div class="artikel-name">
+                      <a href="#" class="artikel-multi-link" onclick={(e) => { e.preventDefault(); openDetailModal(o); }}>
+                        {o.artikel_count} Artikel
+                      </a>
+                    </div>
+                    <div class="artikel-multi-preview">
+                      {o.items.map(i => i.artikel_name || '?').join(', ')}
+                    </div>
+                  {/if}
                 </div>
               </div>
             </td>
-            <td style="text-align:center;">{o.menge || 1}</td>
-            <td style="text-align:right;font-weight:700;">{parseFloat(o.gesamt || 0).toFixed(2)} €</td>
+            <td style="text-align:center;">{o.gesamt_menge}</td>
+            <td style="text-align:right;font-weight:700;">{o.gesamt_summe.toFixed(2)} €</td>
             <td>
               <span class="badge badge-{o.status}">{statusLabel(o.status)}</span>
               {#if o.hat_rechnung}<span class="badge badge-rechnung" title="Rechnung vorhanden">🧾 RE</span>{/if}
@@ -468,7 +562,7 @@
   </div>
 {/if}
 
-<!-- ═══════════════════════════════════════════════════════ DETAIL MODAL -->
+<!-- ═══════════════════════════════════════════════════════ DETAIL MODAL (Multi-Positionen) -->
 {#if showDetailModal && detailOrder}
   {@const o = detailOrder}
   {@const trackUrl = getTrackingUrl(o.tracking_nummer, o.versanddienstleister)}
@@ -489,28 +583,61 @@
         </div>
       </div>
 
-      <!-- Grid -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-        <div class="detail-card">
-          <div class="detail-card-title">📦 Artikel</div>
-          <div class="detail-card-body">
-            <div style="font-size:14px;font-weight:600;line-height:1.4;">
-              {#if o.ebay_artikel_id}
-                <a href="https://www.ebay.de/itm/{o.ebay_artikel_id}" target="_blank" style="color:var(--primary);text-decoration:none;">{o.artikel_name || '—'}</a>
-              {:else}{o.artikel_name || '—'}{/if}
-            </div>
-            {#if o.sold_sku}
-              <div style="margin-top:8px;">
-                <span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;">Variante (SKU)</span>
-                <div style="margin-top:3px;">
-                  <code style="font-size:12px;background:var(--surface);padding:2px 8px;border-radius:5px;border:1px solid var(--border);color:var(--primary);">{o.sold_sku}</code>
-                </div>
-              </div>
-            {/if}
-            {#if o.ebay_artikel_id}<div style="font-size:11px;color:var(--text3);margin-top:6px;">eBay-ID: {o.ebay_artikel_id}</div>{/if}
-          </div>
+      <!-- Positionen-Tabelle -->
+      <div class="detail-card" style="margin-bottom:16px;">
+        <div class="detail-card-title">📦 Artikel ({o.artikel_count} {o.artikel_count === 1 ? 'Position' : 'Positionen'})</div>
+        <div class="detail-card-body">
+          <table class="positionen-table">
+            <thead>
+              <tr>
+                <th style="width:50px;"></th>
+                <th>Artikel</th>
+                <th style="text-align:center;width:60px;">Menge</th>
+                <th style="text-align:right;width:90px;">Preis</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each o.items as item, idx}
+                {@const itemBild = getItemImage(item)}
+                <tr>
+                  <td>
+                    {#if itemBild}
+                      <img src={itemBild} alt="" style="width:40px;height:40px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:var(--surface);" onerror={(e) => { e.currentTarget.style.display='none'; }} />
+                    {:else}
+                      <div style="width:40px;height:40px;background:var(--surface);border-radius:5px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text3);">📦</div>
+                    {/if}
+                  </td>
+                  <td>
+                    <div style="font-size:13px;font-weight:600;line-height:1.4;">
+                      {#if item.ebay_artikel_id}
+                        <a href="https://www.ebay.de/itm/{item.ebay_artikel_id}" target="_blank" style="color:var(--primary);text-decoration:none;">{item.artikel_name || '—'}</a>
+                      {:else}{item.artikel_name || '—'}{/if}
+                    </div>
+                    {#if item.sold_sku}
+                      <div style="font-size:11px;color:var(--primary);font-family:monospace;margin-top:2px;">SKU: {item.sold_sku}</div>
+                    {/if}
+                    {#if item.ebay_artikel_id}
+                      <div style="font-size:10px;color:var(--text3);margin-top:1px;">eBay: {item.ebay_artikel_id}</div>
+                    {/if}
+                  </td>
+                  <td style="text-align:center;font-weight:600;">{item.menge || 1}</td>
+                  <td style="text-align:right;font-weight:700;">{parseFloat(item.gesamt || 0).toFixed(2)} €</td>
+                </tr>
+              {/each}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2"></td>
+                <td style="text-align:center;font-weight:700;border-top:2px solid var(--border);padding-top:10px;">{o.gesamt_menge}</td>
+                <td style="text-align:right;font-weight:800;font-size:15px;border-top:2px solid var(--border);padding-top:10px;">{o.gesamt_summe.toFixed(2)} €</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
+      </div>
 
+      <!-- Info Grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
         <div class="detail-card">
           <div class="detail-card-title">👤 Käufer</div>
           <div class="detail-card-body">
@@ -528,13 +655,13 @@
         <div class="detail-card">
           <div class="detail-card-title">💰 Zahlung</div>
           <div class="detail-card-body">
-            <div style="font-size:22px;font-weight:800;">{parseFloat(o.gesamt || 0).toFixed(2)} €</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:4px;">Menge: {o.menge || 1}</div>
+            <div style="font-size:22px;font-weight:800;">{o.gesamt_summe.toFixed(2)} €</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:4px;">{o.artikel_count} {o.artikel_count === 1 ? 'Position' : 'Positionen'}, {o.gesamt_menge} Stück</div>
             <div style="font-size:12px;color:var(--text2);">Datum: {formatDate(o.bestelldatum || o.erstellt_am)}</div>
           </div>
         </div>
 
-        <div class="detail-card">
+        <div class="detail-card" style="grid-column: span 2;">
           <div class="detail-card-title">🚚 Versand</div>
           <div class="detail-card-body">
             {#if o.tracking_nummer}
@@ -559,7 +686,7 @@
         <button class="btn-cancel" onclick={() => { showDetailModal = false; eRechnungDropdownOpen = false; }}>Schließen</button>
 
         {#if o.status !== 'archiviert' && o.status !== 'storniert'}
-          <button class="btn-secondary" onclick={() => { showDetailModal = false; selectedOrderIds = new Set([String(o.order_id || o.id)]); openMsgModal(); }}>
+          <button class="btn-secondary" onclick={() => { showDetailModal = false; selectedOrderIds = new Set([String(o.order_id)]); openMsgModal(); }}>
             ✉️ Nachricht
           </button>
 
@@ -655,6 +782,9 @@
   .artikel-id { font-size: 11px; color: var(--text3); margin-top: 2px; }
   .artikel-ebay-link { color: var(--text); text-decoration: none; }
   .artikel-ebay-link:hover { color: var(--primary); text-decoration: underline; }
+  .artikel-multi-link { color: var(--primary); font-weight: 700; text-decoration: none; cursor: pointer; }
+  .artikel-multi-link:hover { text-decoration: underline; }
+  .artikel-multi-preview { font-size: 11px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
   .col-tracking { min-width: 140px; }
   .tracking-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 12px; display: block; }
   .tracking-link:hover { text-decoration: underline; }
@@ -673,6 +803,13 @@
   :global([data-theme="dark"]) .badge-storniert { background: rgba(239,68,68,0.15); color: #fca5a5; }
   :global([data-theme="dark"]) .badge-bezahlt   { background: rgba(245,158,11,0.15); color: #fcd34d; }
   :global([data-theme="dark"]) .badge-rechnung  { background: rgba(37,99,235,0.15); color: #93c5fd; }
+
+  /* ── Positionen-Tabelle im Detail-Modal ─────────────────── */
+  .positionen-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .positionen-table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .positionen-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .positionen-table tbody tr:last-child td { border-bottom: none; }
+  .positionen-table tfoot td { border-bottom: none; }
 
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
   .modal-overlay.open { display: flex; }
