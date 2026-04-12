@@ -1,3 +1,4 @@
+[SKILL.md](https://github.com/user-attachments/files/26660629/SKILL.md)
 ---
 name: ebay-dashboard-erstellung
 description: >
@@ -18,8 +19,8 @@ description: >
 connected: false
 metadata:
   author: Vitali
-  version: '3.0'
-  based_on: Wissensbasis (Stand 2026-03-31)
+  version: '3.1'
+  based_on: Wissensbasis (Stand 2026-04-12)
 ---
 
 # eBay-Dashboard: Vollständiger Entwicklungs-Skill
@@ -43,7 +44,8 @@ metadata:
 | **Datenbank** | PostgreSQL |
 | **eBay API** | Trading API (XML/SOAP) |
 | **KI** | Mistral API (Kundenservice), Claude/Octopus AI (Angebotserstellung) |
-| **PDF-Service** | Gotenberg (`gotenberg.ai-online.cloud`) — HTML→PDF |
+| **PDF-Service** | Gotenberg (`gotenberg.ai-online.cloud`) — HTML→PDF, PDF/A-3b nativ |
+| **E-Rechnung** | ZUGFeRD 2.4 (EN16931) via Python `factur-x` 3.16 im n8n-Container |
 | **E-Mail-Service** | Node.js/Express/Nodemailer (`email.ai-online.cloud`) |
 | **Proxy/Deploy** | Coolify + Traefik v3.6.5, Docker-Netzwerk: `coolify` |
 | **VCS** | GitHub: `https://github.com/Karabas789/ebay-dashboard` |
@@ -60,6 +62,8 @@ metadata:
 | PostgreSQL-Credential | `ebay_automation`, ID: `4yOALkbLmo3zuewo` |
 | eBay App-Name | `VitaliDu-TestAPI-PRD-2b448418d-05f39944` |
 | Server-Pfad | `/opt/ebay-dashboard` |
+| n8n-Container | `n8n-x04008o88c4w0cg4gwkskkk8` |
+| n8n Coolify-Compose | `/data/coolify/services/x04008o88c4w0cg4gwkskkk8/docker-compose.yml` |
 
 ### Service-Endpunkte
 
@@ -167,11 +171,36 @@ Math.min(lagerbestand, min_lagerbestand)
 |---|---|
 | `id` | Primärschlüssel |
 | `user_id` | Benutzer-Zuordnung |
-| `kaeufer_daten` | Käuferdaten (JSON) |
-| `positionen` | Rechnungspositionen (JSON) |
-| `betraege` | Beträge: Netto, MwSt., Brutto |
+| `order_id` | eBay-Bestellnummer |
+| `rechnung_typ` | `rechnung` oder `storno` |
+| `storno_von` | FK → invoices.id (bei Storno) |
+| `rechnung_nr` | Eindeutige Rechnungsnummer (UNIQUE) |
+| `kaeufer_name/strasse/plz/ort/land/email` | Käuferdaten |
+| `artikel_name` | Erste Position (Rückwärtskompatibilität) |
+| `artikel_menge, einzelpreis, rabatt_pct` | Erste Position Beträge |
+| `netto_betrag, steuersatz, steuer_betrag, brutto_betrag` | Gesamtbeträge |
+| `kleinunternehmer` | Boolean |
 | `pdf_base64` | PDF als Base64-String |
+| `pdf_generiert_am` | Zeitstempel der PDF-Generierung |
 | `status` | Rechnungsstatus (erstellt / gesendet / storniert) |
+| `positionen_migriert` | Boolean — Multi-Positionen in `invoice_items` |
+
+#### `invoice_items`
+| Spalte | Beschreibung |
+|---|---|
+| `id` | Primärschlüssel |
+| `invoice_id` | FK → invoices.id |
+| `pos_nr` | Positionsnummer |
+| `bezeichnung` | Artikelbezeichnung |
+| `artikel_nr` | Interne Artikelnummer |
+| `ebay_artikel_id` | eBay-Artikel-ID |
+| `menge` | Menge |
+| `einzelpreis` | Einzelpreis (Brutto) |
+| `mwst_satz` | MwSt-Satz (z.B. 19) |
+| `rabatt_pct` | Rabatt in Prozent |
+| `netto_betrag` | Netto pro Position |
+| `steuer_betrag` | Steuer pro Position |
+| `brutto_betrag` | Brutto pro Position |
 
 #### `user_firmendaten`
 | Spalte | Beschreibung |
@@ -270,7 +299,7 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 
 | ID | Endpoint | Funktion |
 |---|---|---|
-| WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Berechnung → HTML → Gotenberg PDF → DB speichern |
+| WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Berechnung → HTML → Gotenberg PDF → DB speichern (inkl. invoice_items). Rundungsfix: Steuer = netto × mwst/100, brutto = netto + steuer |
 | WF-RE-02 | POST `/rechnung-senden` | Rechnung aus DB laden → SMTP → E-Mail mit PDF senden |
 | WF-RE-03 | POST `/rechnungen-laden` | Alle invoices eines Users zurückgeben |
 | WF-RE-04 | POST `/rechnung-settings` | Firmendaten + Config + SMTP laden oder speichern (`action: load/save`) |
@@ -303,6 +332,108 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 | POST `/orders-laden` | Bestellungen laden |
 | POST `/order-tracking` | Tracking-Informationen speichern |
 | POST `/orders-archivieren` | Bestellungen archivieren |
+
+---
+
+### 4.6 E-Rechnung Workflow (ZUGFeRD / XRechnung)
+
+- **Workflow-ID:** `8aNYc6uei9w9Y2Of`
+- **Endpoint:** POST `/e-rechnung-erstellen`
+- **Status:** ✅ Aktiv, validiert (EU-Rechnung v2.51 + Bund-Validator = 0 Fehler)
+
+**Ablauf:**
+1. Auth prüfen (Token → users)
+2. Rechnung + Firmendaten + Positionen + Vorlage aus DB laden (JOIN invoices, invoice_items, user_firmendaten, user_rechnung_config, user_rechnung_vorlage)
+3. Format-Routing: `xrechnung` | `zugferd_en16931` | `zugferd_extended`
+4. XML generieren (XRechnung = UBL 2.1, ZUGFeRD = CII)
+5. PDF über Gotenberg (mit `pdfa: PDF/A-3b` Parameter)
+6. ZUGFeRD: XML in PDF einbetten via Python `factur-x` Library → echtes PDF/A-3
+7. Response: `{ success, format, xml, pdf_base64, zugferd_embedded, filename }`
+
+**Formate:**
+
+| Format | XML-Standard | GuidelineID | PDF |
+|---|---|---|---|
+| `xrechnung` | UBL 2.1 | `urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0` | Kein PDF |
+| `zugferd_en16931` | CII (CrossIndustryInvoice) | `urn:cen.eu:en16931:2017` | PDF/A-3b mit eingebettetem XML |
+| `zugferd_extended` | CII (CrossIndustryInvoice) | `urn:cen.eu:en16931:2017` | PDF/A-3b mit eingebettetem XML |
+
+**ZUGFeRD GuidelineID — WICHTIG:**
+Die offizielle `FACTURX_EN16931_codedb.xml` (cl id="1") erlaubt **nur** `urn:cen.eu:en16931:2017` — kein Suffix wie `#compliant#urn:factur-x.eu:1p0:en16931`. Die factur-x Python Library 3.16 akzeptiert das mit `check_xsd=False`.
+
+**ZUGFeRD-Embedding (Python factur-x):**
+```python
+from facturx import generate_from_file
+result_pdf = generate_from_file(
+    pdf_file,
+    xml_data,
+    flavor='factur-x',
+    level='en16931',      # oder 'extended'
+    check_xsd=False,      # Pflicht wegen GuidelineID ohne Suffix
+    output_pdf_file=out
+)
+```
+
+**Gotenberg PDF/A-3b:**
+Im fields-Array des Gotenberg-Uploads:
+```javascript
+{ name: 'pdfa', value: 'PDF/A-3b' }
+```
+Dieser Parameter muss im **Gotenberg Upload**-Block stehen, NICHT doppelt deklariert.
+
+**Rundungsfix (WF-RE-01 „Nummer + Berechnung"):**
+```javascript
+// KORREKT: Steuer aus Netto berechnen, Brutto = Netto + Steuer
+const netto = parseFloat((bruttoGesamt / (1 + mwstSatz / 100)).toFixed(2));
+const steuer = parseFloat((netto * mwstSatz / 100).toFixed(2));
+const brutto = parseFloat((netto + steuer).toFixed(2));
+// FALSCH (Rundungsfehler): steuer = bruttoGesamt - netto
+```
+
+**n8n-Container Docker-Setup (factur-x permanent):**
+Dockerfile unter `/data/coolify/services/x04008o88c4w0cg4gwkskkk8/Dockerfile`:
+```dockerfile
+FROM python:3.12-alpine AS python-build
+RUN apk add --no-cache gcc musl-dev libxml2-dev libxslt-dev && \
+    pip install --no-cache-dir factur-x
+
+FROM docker.n8n.io/n8nio/n8n:2.14.2
+USER root
+COPY --from=python-build /usr/local/bin/python3 /usr/local/bin/python3
+COPY --from=python-build /usr/local/bin/python3.12 /usr/local/bin/python3.12
+COPY --from=python-build /usr/local/lib/python3.12 /usr/local/lib/python3.12
+COPY --from=python-build /usr/local/lib/libpython3.12.so* /usr/local/lib/
+COPY --from=python-build /usr/lib/libxml2* /usr/lib/
+COPY --from=python-build /usr/lib/libxslt* /usr/lib/
+COPY --from=python-build /usr/lib/libexslt* /usr/lib/
+COPY --from=python-build /usr/lib/libffi* /usr/lib/
+COPY --from=python-build /usr/lib/libz* /usr/lib/
+COPY --from=python-build /usr/lib/liblzma* /usr/lib/
+COPY --from=python-build /usr/lib/libgcrypt* /usr/lib/
+COPY --from=python-build /usr/lib/libgpg-error* /usr/lib/
+ENV LD_LIBRARY_PATH=/usr/local/lib
+RUN ln -sf /usr/local/bin/python3 /usr/bin/python3
+USER node
+```
+docker-compose.yml: `image:` → `build: context: . dockerfile: Dockerfile` + Netzwerke `coolify: external: true`
+
+**Validierungsstatus (Stand 2026-04-12):**
+
+| Prüfung | Ergebnis |
+|---|---|
+| ZUGFeRD 2.4 (EN16931) erkannt | ✅ |
+| factur-x.xml eingebettet | ✅ |
+| PDF/A-3B (veraPDF) | ✅ |
+| XML konform (KoSIT Validator) | ✅ 0 Fehler |
+| Schematron (FACTUR-X_EN16931) | ✅ 0 Fehler |
+| EU-Rechnung v2.51 Gesamturteil | ✅ konform |
+| Bund-Validator (erechnungsvalidator.service.bund.de) | ✅ 0 Fehler |
+
+**Bekannte Hinweise (nur Informationen, keine Fehler):**
+- PEPPOL-EN16931-R001: Business process — nur für XRechnung relevant
+- PEPPOL-EN16931-R020/R010: Seller/Buyer electronic address — nur für PEPPOL
+- BR-DE-21: Specification identifier soll XRechnung entsprechen — irrelevant für ZUGFeRD
+- BR-DE-2: Seller Contact — nur für XRechnung
 
 ---
 
@@ -347,7 +478,7 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 | 1 | Nachrichten | ✅ PORTIERT | Ordner-Sidebar, Thread-Ansicht, KI-Antwort, Überarbeiten-Chat |
 | 2 | Produkte | ✅ PORTIERT | Grid-Cards, Varianten-Modal, Bestand-Update, Import, CSV-Export |
 | 3 | Bestellungen | ✅ PORTIERT | Tabelle, Filter-Tabs (Alle/Bezahlt/Versendet/Archiv), Tracking-Modal, Order-Detail-Modal, Archivierung, Nachricht senden, Auto-Rechnung |
-| 4 | Rechnungen | ⏳ | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Manuell erstellen |
+| 4 | Rechnungen | ⏳ | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Manuell erstellen, E-Rechnung (ZUGFeRD/XRechnung) |
 | 5 | Einstellungen/Firma | ⏳ | Firmendaten-Formular → `/rechnung-settings` (action: save) |
 | 6 | Einstellungen/Nummern | ⏳ | RE/SR Konfiguration mit Live-Vorschau |
 | 7 | Einstellungen/SMTP | ⏳ | SMTP-Formular + Test-Button |
@@ -967,121 +1098,3 @@ const tiles = [
 ```
 
 Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
-
-## Skill-Datei Aktualisierung
-
-Hier die relevanten Abschnitte, die in der SKILL.md geändert/ergänzt werden müssen:
-
-### 3a) Datenbank-Schema — Neue Tabelle `invoice_items` ergänzen
-
-Nach dem `invoices`-Block einfügen:
-
-```markdown
-#### `invoice_items`
-| Spalte | Beschreibung |
-|---|---|
-| `id` | Primärschlüssel |
-| `invoice_id` | Fremdschlüssel → invoices.id |
-| `pos_nr` | Positionsnummer (1, 2, 3…) |
-| `bezeichnung` | Positionsbezeichnung / Artikelname |
-| `artikel_nr` | Interne Artikelnummer |
-| `ebay_artikel_id` | eBay-Artikel-ID |
-| `menge` | Menge |
-| `einzelpreis` | Einzelpreis (brutto) |
-| `mwst_satz` | MwSt-Satz pro Position (z.B. 19, 7, 0) |
-| `rabatt_pct` | Rabatt in Prozent |
-| `netto_betrag` | Netto-Betrag der Position |
-| `steuer_betrag` | Steuer-Betrag der Position |
-| `brutto_betrag` | Brutto-Betrag der Position |
-```
-
-### 3b) `invoices`-Tabelle — Spalte `positionen_migriert` ergänzen
-
-In der `invoices`-Tabelle ergänzen:
-
-```
-| `positionen_migriert` | Boolean — true wenn Positionen in invoice_items gespeichert sind |
-```
-
-### 3c) Rechnungssystem-Workflows — Aktualisieren
-
-Die Workflow-Tabelle in Abschnitt 4.3 ersetzen durch:
-
-```markdown
-### 4.3 Rechnungssystem-Workflows
-
-| ID | WF-ID | Endpoint | Funktion |
-|---|---|---|---|
-| WF-RE-01 | `dw0xRsxT4i74dbN6` | POST `/rechnung-erstellen` | Multi-Positionen → Berechnung → HTML (aus vorlage_json) → Gotenberg PDF → invoices + invoice_items speichern |
-| WF-RE-02 | — | POST `/rechnung-senden` | Rechnung aus DB laden → SMTP → E-Mail mit PDF senden |
-| WF-RE-03 | `8oE5YeeFENDKGXE3` | POST `/rechnungen-laden` | Alle invoices + invoice_items eines Users zurückgeben |
-| WF-RE-04 | — | POST `/rechnung-settings` | Firmendaten + Config + SMTP laden oder speichern (`action: load/save`) |
-| WF-RE-05 | — | POST `/smtp-testen` | SMTP-Daten → `email.ai-online.cloud/test` → Ergebnis |
-| WF-RE-06 | — | POST `/rechnung-pdf` | PDF Base64 aus `invoices`-Tabelle abrufen |
-| WF-RE-07 | `WKvZ9xJ8aHzHdpnu` | POST `/rechnung-neu-generieren` | Bestehende Rechnung → HTML (aus vorlage_json) → neues PDF → DB update |
-| E-Rechnung | `8aNYc6uei9w9Y2Of` | POST `/e-rechnung-erstellen` | XRechnung 3.0.2 XML oder ZUGFeRD 2.4 PDF (mit vorlage_json) |
-
-**Alle Rechnungs-Workflows unterstützen Multi-Positionen** mit `invoice_items` und MwSt pro Position.
-
-**API-Format (neu):**
-```json
-{
-  "user_id": 4,
-  "typ": "rechnung",
-  "order_id": "12-12345-12345",
-  "kaeufer_name": "Max Mustermann",
-  "kaeufer_strasse": "Musterstr. 1",
-  "kaeufer_plz": "12345",
-  "kaeufer_ort": "Berlin",
-  "kaeufer_land": "DE",
-  "kaeufer_email": "max@example.de",
-  "positionen": [
-    {
-      "bezeichnung": "Artikel A",
-      "artikel_nr": "A001",
-      "menge": 2,
-      "einzelpreis": 29.99,
-      "mwst_satz": 19
-    },
-    {
-      "bezeichnung": "Versandkosten",
-      "menge": 1,
-      "einzelpreis": 4.99,
-      "mwst_satz": 19
-    }
-  ]
-}
-```
-
-**Rückwärtskompatibel:** Alte Aufrufe mit `artikel_name`, `menge`, `einzelpreis` (ohne `positionen`-Array) werden automatisch als Single-Position behandelt.
-
-**Rechnungsnummern-Format:** `{praefix}{trennzeichen}{YYYY}{trennzeichen}{laufende Nummer}`, z.B. `RE-2026-00001`
-```
-
-### 3d) Projektstruktur — Rechnungsvorlage-Route aktualisieren
-
-```
-        └── einstellungen/
-            ├── +page.svelte
-            ├── firma/+page.svelte
-            ├── nummern/+page.svelte
-            ├── smtp/+page.svelte
-            ├── ki/+page.svelte
-            ├── kauf-nachricht/+page.svelte
-            ├── bilder/+page.svelte
-            └── rechnungsvorlage/+page.svelte  (✅ Rechnungsvorlage-Editor)
-```
-
-### 3e) Einstellungen-Kacheln — Rechnungsvorlage ergänzen
-
-```javascript
-const tiles = [
-  { icon: '🏢', title: 'Firmendaten',         href: '/einstellungen/firma' },
-  { icon: '🔢', title: 'Nummerierung',        href: '/einstellungen/nummern' },
-  { icon: '📧', title: 'E-Mail / SMTP',       href: '/einstellungen/smtp' },
-  { icon: '🤖', title: 'KI-Konfiguration',    href: '/einstellungen/ki' },
-  { icon: '💬', title: 'Kauf-Nachricht',      href: '/einstellungen/kauf-nachricht' },
-  { icon: '🖼️', title: 'Produktbilder',      href: '/einstellungen/bilder' },
-  { icon: '🧾', title: 'Rechnungsvorlage',    href: '/einstellungen/rechnungsvorlage' },
-];
-
