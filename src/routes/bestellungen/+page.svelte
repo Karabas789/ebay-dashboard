@@ -52,14 +52,16 @@
           buyer_plz: row.buyer_plz,
           buyer_ort: row.buyer_ort,
           buyer_land: row.buyer_land,
+          buyer_telefon: row.buyer_telefon,
           bestelldatum: row.bestelldatum,
           erstellt_am: row.erstellt_am,
           status: row.status,
           archiviert: row.archiviert,
           tracking_nummer: row.tracking_nummer,
           versanddienstleister: row.versanddienstleister,
-          hat_rechnung: row.hat_rechnung,
-          invoice_id: row.invoice_id,
+          versendet_am: row.versendet_am,
+          hat_rechnung: false,
+          invoice_id: null,
           items: []
         });
       }
@@ -68,16 +70,17 @@
         artikel_name: row.artikel_name,
         ebay_artikel_id: row.ebay_artikel_id,
         sold_sku: row.sold_sku,
-        menge: row.menge || 1,
+        menge: parseInt(row.menge) || 1,
         preis: row.preis,
         gesamt: row.gesamt,
         einzelpreis: row.einzelpreis
       });
-      // Übernehme übergreifende Felder vom neuesten / relevantesten Row
       if (row.hat_rechnung) { group.hat_rechnung = true; group.invoice_id = row.invoice_id || group.invoice_id; }
-      if (row.tracking_nummer && !group.tracking_nummer) { group.tracking_nummer = row.tracking_nummer; group.versanddienstleister = row.versanddienstleister; }
+      if (row.tracking_nummer && !group.tracking_nummer) {
+        group.tracking_nummer = row.tracking_nummer;
+        group.versanddienstleister = row.versanddienstleister;
+      }
     }
-    // Berechne Gesamtsumme und Gesamtmenge pro Gruppe
     for (const group of map.values()) {
       group.gesamt_summe = group.items.reduce((sum, item) => sum + parseFloat(item.gesamt || 0), 0);
       group.gesamt_menge = group.items.reduce((sum, item) => sum + (item.menge || 1), 0);
@@ -326,21 +329,21 @@
   }
   function openDetailModal(order) { detailOrder = order; eRechnungDropdownOpen = false; showDetailModal = true; }
 
-  // Hilfsfunktion: Erstes Produktbild für eine gruppierte Bestellung finden
+  function getItemImage(item) {
+    const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
+    return prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || '';
+  }
   function getOrderImage(order) {
     for (const item of order.items) {
-      const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
-      if (prod?.bild_url) return prod.bild_url;
-      const varBild = prod?.varianten?.find(v => v.bild_url)?.bild_url;
-      if (varBild) return varBild;
+      const img = getItemImage(item);
+      if (img) return img;
     }
     return '';
   }
 
-  // Hilfsfunktion: Produktbild für einzelnen Artikel
-  function getItemImage(item) {
-    const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
-    return prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || '';
+  function varianteAusSku(sku) {
+    if (!sku) return '';
+    return sku.replace(/-\d{2,3}$/, '').replace(/-/g, ' ');
   }
 
   let _toast = $state({ msg: '', type: 'success', visible: false });
@@ -447,15 +450,14 @@
                       {:else}{firstItem.artikel_name || '—'}{/if}
                     </div>
                     {#if firstItem.sold_sku}<div class="artikel-sku">SKU: {firstItem.sold_sku}</div>{/if}
-                    {#if firstItem.ebay_artikel_id}<div class="artikel-id">eBay: {firstItem.ebay_artikel_id}</div>{/if}
                   {:else}
                     <div class="artikel-name">
                       <a href="#" class="artikel-multi-link" onclick={(e) => { e.preventDefault(); openDetailModal(o); }}>
-                        {o.artikel_count} Artikel
+                        📦 {o.artikel_count} Artikel
                       </a>
                     </div>
                     <div class="artikel-multi-preview">
-                      {o.items.map(i => i.artikel_name || '?').join(', ')}
+                      {o.items.map(i => i.sold_sku ? varianteAusSku(i.sold_sku) : (i.artikel_name || '?')).join(' · ')}
                     </div>
                   {/if}
                 </div>
@@ -562,127 +564,137 @@
   </div>
 {/if}
 
-<!-- ═══════════════════════════════════════════════════════ DETAIL MODAL (Multi-Positionen) -->
+<!-- ═══════════════════════════════════════════════════════ DETAIL MODAL — eBay-Style -->
 {#if showDetailModal && detailOrder}
   {@const o = detailOrder}
   {@const trackUrl = getTrackingUrl(o.tracking_nummer, o.versanddienstleister)}
   <div class="modal-overlay open" onclick={(e) => { if (e.target === e.currentTarget) { showDetailModal = false; eRechnungDropdownOpen = false; } }}>
-    <div class="modal" style="max-width:640px;max-height:85vh;overflow-y:auto;">
+    <div class="modal detail-modal">
 
       <!-- Header -->
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;">
+      <div class="detail-header">
         <div>
-          <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Bestellung</div>
-          <div style="font-size:20px;font-weight:800;color:var(--text);margin-top:4px;">{o.order_id}</div>
+          <div class="detail-header-label">BESTELLUNG</div>
+          <div class="detail-header-id">{o.order_id}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-          <span class="badge badge-{o.status}" style="font-size:13px;padding:4px 14px;">{statusLabel(o.status)}</span>
+          <span class="badge badge-{o.status}" style="font-size:13px;padding:5px 16px;">{statusLabel(o.status)}</span>
           {#if o.hat_rechnung}
-            <span class="badge badge-rechnung" style="font-size:11px;padding:3px 10px;">🧾 Rechnung vorhanden</span>
+            <span class="badge badge-rechnung" style="font-size:11px;padding:3px 10px;">🧾 Rechnung</span>
           {/if}
         </div>
       </div>
 
-      <!-- Positionen-Tabelle -->
-      <div class="detail-card" style="margin-bottom:16px;">
-        <div class="detail-card-title">📦 Artikel ({o.artikel_count} {o.artikel_count === 1 ? 'Position' : 'Positionen'})</div>
-        <div class="detail-card-body">
-          <table class="positionen-table">
-            <thead>
-              <tr>
-                <th style="width:50px;"></th>
-                <th>Artikel</th>
-                <th style="text-align:center;width:60px;">Menge</th>
-                <th style="text-align:right;width:90px;">Preis</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each o.items as item, idx}
-                {@const itemBild = getItemImage(item)}
-                <tr>
-                  <td>
+      <!-- eBay-Style 2-Column Layout -->
+      <div class="detail-layout">
+
+        <!-- Links: Artikel-Liste -->
+        <div class="detail-left">
+          <div class="artikel-section">
+            <div class="artikel-section-title">Artikel</div>
+
+            {#each o.items as item, idx}
+              {@const itemBild = getItemImage(item)}
+              {@const ep = parseFloat(item.gesamt || 0) / (item.menge || 1)}
+              {@const itemGesamt = parseFloat(item.gesamt || 0)}
+
+              {#if idx > 0}<div class="artikel-divider"></div>{/if}
+
+              <!-- Spaltenköpfe nur beim ersten Artikel -->
+              {#if idx === 0}
+                <div class="artikel-cols-header">
+                  <div></div>
+                  <div class="ach-stk">Stückzahl</div>
+                  <div class="ach-ep">Artikelpreis</div>
+                  <div class="ach-sum">Artikel insgesamt</div>
+                </div>
+              {/if}
+
+              <div class="artikel-item">
+                <div class="ai-info">
+                  <div style="display:flex;gap:12px;align-items:flex-start;">
                     {#if itemBild}
-                      <img src={itemBild} alt="" style="width:40px;height:40px;object-fit:contain;border-radius:5px;border:1px solid var(--border);background:var(--surface);" onerror={(e) => { e.currentTarget.style.display='none'; }} />
+                      <img src={itemBild} alt="" class="ai-bild" onerror={(e) => { e.currentTarget.style.display='none'; }} />
                     {:else}
-                      <div style="width:40px;height:40px;background:var(--surface);border-radius:5px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text3);">📦</div>
+                      <div class="ai-bild-ph">📦</div>
                     {/if}
-                  </td>
-                  <td>
-                    <div style="font-size:13px;font-weight:600;line-height:1.4;">
-                      {#if item.ebay_artikel_id}
-                        <a href="https://www.ebay.de/itm/{item.ebay_artikel_id}" target="_blank" style="color:var(--primary);text-decoration:none;">{item.artikel_name || '—'}</a>
-                      {:else}{item.artikel_name || '—'}{/if}
+                    <div>
+                      <div class="ai-name">
+                        {#if item.ebay_artikel_id}
+                          <a href="https://www.ebay.de/itm/{item.ebay_artikel_id}" target="_blank">{item.artikel_name || '—'}</a>
+                        {:else}{item.artikel_name || '—'}{/if}
+                      </div>
+                      {#if item.sold_sku}
+                        <div class="ai-variante">Ausführung: <strong>{varianteAusSku(item.sold_sku)}</strong></div>
+                        <div class="ai-sku">Bestandseinheit (SKU): {item.sold_sku}</div>
+                      {/if}
+                      <div class="ai-meta">Artikelnummer: {item.ebay_artikel_id || '—'}</div>
                     </div>
-                    {#if item.sold_sku}
-                      <div style="font-size:11px;color:var(--primary);font-family:monospace;margin-top:2px;">SKU: {item.sold_sku}</div>
-                    {/if}
-                    {#if item.ebay_artikel_id}
-                      <div style="font-size:10px;color:var(--text3);margin-top:1px;">eBay: {item.ebay_artikel_id}</div>
-                    {/if}
-                  </td>
-                  <td style="text-align:center;font-weight:600;">{item.menge || 1}</td>
-                  <td style="text-align:right;font-weight:700;">{parseFloat(item.gesamt || 0).toFixed(2)} €</td>
-                </tr>
-              {/each}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td colspan="2"></td>
-                <td style="text-align:center;font-weight:700;border-top:2px solid var(--border);padding-top:10px;">{o.gesamt_menge}</td>
-                <td style="text-align:right;font-weight:800;font-size:15px;border-top:2px solid var(--border);padding-top:10px;">{o.gesamt_summe.toFixed(2)} €</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      <!-- Info Grid -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-        <div class="detail-card">
-          <div class="detail-card-title">👤 Käufer</div>
-          <div class="detail-card-body">
-            <div style="font-weight:600;">{o.buyer_name || '—'}</div>
-            {#if o.buyer_username}<div style="font-size:11px;color:var(--text3);">@{o.buyer_username}</div>{/if}
-            {#if o.buyer_email}<div style="font-size:12px;color:var(--text2);margin-top:4px;">📧 {o.buyer_email}</div>{/if}
-            {#if o.buyer_strasse}
-              <div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5;">
-                {o.buyer_strasse}<br/>{o.buyer_plz || ''} {o.buyer_ort || ''}<br/>{o.buyer_land || ''}
+                  </div>
+                </div>
+                <div class="ai-stk">{item.menge || 1}</div>
+                <div class="ai-ep">{ep.toFixed(2)} €</div>
+                <div class="ai-sum">{itemGesamt.toFixed(2)} €</div>
               </div>
-            {/if}
+            {/each}
           </div>
-        </div>
 
-        <div class="detail-card">
-          <div class="detail-card-title">💰 Zahlung</div>
-          <div class="detail-card-body">
-            <div style="font-size:22px;font-weight:800;">{o.gesamt_summe.toFixed(2)} €</div>
-            <div style="font-size:12px;color:var(--text2);margin-top:4px;">{o.artikel_count} {o.artikel_count === 1 ? 'Position' : 'Positionen'}, {o.gesamt_menge} Stück</div>
-            <div style="font-size:12px;color:var(--text2);">Datum: {formatDate(o.bestelldatum || o.erstellt_am)}</div>
-          </div>
-        </div>
-
-        <div class="detail-card" style="grid-column: span 2;">
-          <div class="detail-card-title">🚚 Versand</div>
-          <div class="detail-card-body">
-            {#if o.tracking_nummer}
-              <div style="font-size:12px;color:var(--text2);">{o.versanddienstleister || 'Versanddienstleister'}</div>
-              {#if trackUrl}
-                <a href={trackUrl} target="_blank" class="tracking-link" style="font-size:13px;">📦 {o.tracking_nummer}</a>
+          <!-- Käufer + Versand unterhalb der Artikel -->
+          <div class="detail-bottom-cards">
+            <div class="dbc-card">
+              <div class="dbc-title">👤 Käufer</div>
+              <div style="font-weight:600;">{o.buyer_name || '—'}</div>
+              {#if o.buyer_username}<div class="dbc-sub">@{o.buyer_username}</div>{/if}
+              {#if o.buyer_email}<div class="dbc-email">📧 {o.buyer_email}</div>{/if}
+              {#if o.buyer_strasse}
+                <div class="dbc-addr">{o.buyer_strasse}<br/>{o.buyer_plz || ''} {o.buyer_ort || ''}<br/>{o.buyer_land || ''}</div>
+              {/if}
+            </div>
+            <div class="dbc-card">
+              <div class="dbc-title">🚚 Versand</div>
+              {#if o.tracking_nummer}
+                <div style="font-size:12px;color:var(--text2);">{o.versanddienstleister || 'Versanddienstleister'}</div>
+                {#if trackUrl}
+                  <a href={trackUrl} target="_blank" class="tracking-link" style="font-size:13px;margin-top:4px;">📦 {o.tracking_nummer}</a>
+                {:else}
+                  <div style="font-size:13px;font-weight:600;margin-top:4px;">{o.tracking_nummer}</div>
+                {/if}
               {:else}
-                <div style="font-size:13px;font-weight:600;">{o.tracking_nummer}</div>
+                <div style="color:var(--text3);font-size:13px;">Noch nicht versendet</div>
+                {#if o.status !== 'archiviert' && o.status !== 'storniert'}
+                  <button class="btn-add-tracking" style="margin-top:8px;" onclick={() => { showDetailModal = false; openTrackingModal(o.order_id, o.versanddienstleister, ''); }}>+ Tracking eintragen</button>
+                {/if}
               {/if}
-            {:else}
-              <div style="color:var(--text3);font-size:13px;">Noch nicht versendet</div>
-              {#if o.status !== 'archiviert' && o.status !== 'storniert'}
-                <button class="btn-add-tracking" style="margin-top:8px;" onclick={() => { showDetailModal = false; openTrackingModal(o.order_id, o.versanddienstleister, ''); }}>+ Tracking eintragen</button>
-              {/if}
-            {/if}
+            </div>
+          </div>
+        </div>
+
+        <!-- Rechts: Zahlungsübersicht -->
+        <div class="detail-right">
+          <div class="summary-box">
+            <div class="summary-title">Vom Käufer bezahlt</div>
+            <div class="summary-row">
+              <span>Zwischensumme ({o.artikel_count})</span>
+              <span class="sr-val">{o.gesamt_summe.toFixed(2)} €</span>
+            </div>
+            <div class="summary-row">
+              <span>Versand</span>
+              <span class="sr-val">0,00 €</span>
+            </div>
+            <div class="summary-total-row">
+              <span>Gesamtbetrag</span>
+              <span class="sr-total">{o.gesamt_summe.toFixed(2)} €</span>
+            </div>
+          </div>
+
+          <div class="summary-date">
+            {formatDate(o.bestelldatum || o.erstellt_am)}
           </div>
         </div>
       </div>
 
       <!-- Actions -->
-      <div class="modal-actions" style="flex-wrap:wrap;">
+      <div class="modal-actions" style="flex-wrap:wrap;margin-top:24px;">
         <button class="btn-cancel" onclick={() => { showDetailModal = false; eRechnungDropdownOpen = false; }}>Schließen</button>
 
         {#if o.status !== 'archiviert' && o.status !== 'storniert'}
@@ -741,6 +753,7 @@
 {/if}
 
 <style>
+  /* ── Page Header ───────────────────────────────────────── */
   .page-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
   .page-hdr-title { font-size: 22px; font-weight: 800; color: var(--text); }
   .page-hdr-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
@@ -748,6 +761,7 @@
   .btn-refresh:hover { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
   .btn-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  /* ── Toolbar ────────────────────────────────────────────── */
   .orders-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
   .orders-filter { display: flex; gap: 6px; flex-wrap: wrap; }
   .orders-filter-btn { background: var(--surface); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--text2); transition: all 0.15s; display: flex; align-items: center; gap: 5px; }
@@ -756,11 +770,11 @@
   .btn-action-warn { background: #f59e0b; border: none; border-radius: 9px; padding: 7px 14px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .btn-action-primary { background: var(--primary); border: none; border-radius: 9px; padding: 7px 14px; color: white; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .btn-action-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
   .search-wrap { position: relative; }
   .search-box { width: 100%; background: var(--surface); border: 1.5px solid var(--border); border-radius: 9px; padding: 8px 14px; font-size: 13px; color: var(--text); outline: none; transition: border-color 0.15s; }
   .search-box:focus { border-color: var(--primary); }
 
+  /* ── Table ──────────────────────────────────────────────── */
   .orders-table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius, 12px); box-shadow: var(--shadow); overflow: hidden; }
   .orders-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .orders-table th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); border-bottom: 1px solid var(--border); }
@@ -779,7 +793,6 @@
   .col-artikel { max-width: 220px; }
   .artikel-name { font-size: 13px; }
   .artikel-sku { font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 3px; font-family: monospace; }
-  .artikel-id { font-size: 11px; color: var(--text3); margin-top: 2px; }
   .artikel-ebay-link { color: var(--text); text-decoration: none; }
   .artikel-ebay-link:hover { color: var(--primary); text-decoration: underline; }
   .artikel-multi-link { color: var(--primary); font-weight: 700; text-decoration: none; cursor: pointer; }
@@ -793,6 +806,7 @@
   .btn-add-tracking { margin-top: 4px; display: block; background: var(--primary); border: none; border-radius: 6px; padding: 4px 10px; color: white; font-size: 11px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
   .btn-add-tracking:hover { opacity: 0.85; }
 
+  /* ── Badges ─────────────────────────────────────────────── */
   .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 20px; white-space: nowrap; }
   .badge-versendet { background: #f0fdf4; color: #16a34a; }
   .badge-storniert { background: #fef2f2; color: #dc2626; }
@@ -804,13 +818,60 @@
   :global([data-theme="dark"]) .badge-bezahlt   { background: rgba(245,158,11,0.15); color: #fcd34d; }
   :global([data-theme="dark"]) .badge-rechnung  { background: rgba(37,99,235,0.15); color: #93c5fd; }
 
-  /* ── Positionen-Tabelle im Detail-Modal ─────────────────── */
-  .positionen-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .positionen-table th { text-align: left; font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  .positionen-table td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-  .positionen-table tbody tr:last-child td { border-bottom: none; }
-  .positionen-table tfoot td { border-bottom: none; }
+  /* ── Detail Modal — eBay-Style ─────────────────────────── */
+  .detail-modal { max-width: 880px; max-height: 90vh; overflow-y: auto; }
 
+  .detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .detail-header-label { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
+  .detail-header-id { font-size: 22px; font-weight: 800; color: var(--text); margin-top: 2px; }
+
+  .detail-layout { display: grid; grid-template-columns: 1fr 240px; gap: 24px; }
+
+  /* -- Linke Seite: Artikel -- */
+  .detail-left { min-width: 0; }
+
+  .artikel-section { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+  .artikel-section-title { font-size: 15px; font-weight: 800; padding: 16px 20px 12px; color: var(--text); }
+
+  .artikel-cols-header { display: grid; grid-template-columns: 1fr 70px 90px 100px; padding: 0 20px 8px; gap: 8px; }
+  .artikel-cols-header > div { font-size: 11px; color: var(--text3); }
+  .ach-stk, .ach-ep, .ach-sum { text-align: right; }
+
+  .artikel-divider { height: 1px; background: var(--border); margin: 0 20px; }
+
+  .artikel-item { display: grid; grid-template-columns: 1fr 70px 90px 100px; padding: 16px 20px; gap: 8px; align-items: center; }
+
+  .ai-bild { width: 64px; height: 64px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+  .ai-bild-ph { width: 64px; height: 64px; background: var(--surface2); border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+  .ai-name { font-size: 13px; font-weight: 600; line-height: 1.4; }
+  .ai-name a { color: var(--primary); text-decoration: none; }
+  .ai-name a:hover { text-decoration: underline; }
+  .ai-variante { font-size: 12px; margin-top: 4px; color: var(--text); }
+  .ai-sku { font-size: 11px; color: var(--primary); margin-top: 2px; }
+  .ai-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .ai-stk { text-align: right; font-size: 14px; }
+  .ai-ep  { text-align: right; font-size: 14px; }
+  .ai-sum { text-align: right; font-size: 14px; font-weight: 700; }
+
+  /* -- Käufer + Versand Cards -- */
+  .detail-bottom-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .dbc-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface); }
+  .dbc-title { font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .dbc-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .dbc-email { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .dbc-addr { font-size: 12px; color: var(--text2); margin-top: 6px; line-height: 1.5; }
+
+  /* -- Rechte Seite: Zusammenfassung -- */
+  .detail-right { }
+  .summary-box { border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface); }
+  .summary-title { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 14px; }
+  .summary-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; color: var(--text2); }
+  .sr-val { color: var(--text); font-weight: 600; }
+  .summary-total-row { display: flex; justify-content: space-between; padding-top: 12px; margin-top: 8px; border-top: 1.5px solid var(--border); font-size: 14px; font-weight: 700; }
+  .sr-total { font-size: 16px; font-weight: 800; color: var(--text); }
+  .summary-date { font-size: 12px; color: var(--text3); margin-top: 10px; text-align: right; }
+
+  /* ── Modals (shared) ────────────────────────────────────── */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 1000; display: none; align-items: center; justify-content: center; }
   .modal-overlay.open { display: flex; }
   .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 32px; width: 95%; box-shadow: 0 20px 60px rgba(0,0,0,0.2); }
@@ -829,43 +890,13 @@
   .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
 
   /* ── E-Rechnung Split-Button ─────────────────────────────── */
-  .btn-erechnung {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    background: var(--primary);
-    border: none;
-    border-radius: 9px;
-    padding: 0;
-    font-size: 13px;
-    font-weight: 600;
-    color: white;
-    cursor: pointer;
-    transition: opacity 0.15s;
-    overflow: hidden;
-  }
+  .btn-erechnung { display: flex; align-items: center; gap: 0; background: var(--primary); border: none; border-radius: 9px; padding: 0; font-size: 13px; font-weight: 600; color: white; cursor: pointer; transition: opacity 0.15s; overflow: hidden; }
   .btn-erechnung:hover { opacity: 0.9; }
   .btn-erechnung:disabled { opacity: 0.6; cursor: not-allowed; }
-  .btn-erechnung-label {
-    padding: 10px 14px 10px 16px;
-  }
-  .btn-erechnung-divider {
-    width: 1px;
-    height: 36px;
-    background: rgba(255,255,255,0.35);
-    flex-shrink: 0;
-  }
-  .btn-erechnung-chevron {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 12px;
-    transition: transform 0.2s ease;
-  }
-  .btn-erechnung-chevron.open {
-    transform: rotate(180deg);
-  }
-
+  .btn-erechnung-label { padding: 10px 14px 10px 16px; }
+  .btn-erechnung-divider { width: 1px; height: 36px; background: rgba(255,255,255,0.35); flex-shrink: 0; }
+  .btn-erechnung-chevron { display: flex; align-items: center; justify-content: center; padding: 10px 12px; transition: transform 0.2s ease; }
+  .btn-erechnung-chevron.open { transform: rotate(180deg); }
   .erechnung-dropdown { position: absolute; bottom: calc(100% + 8px); right: 0; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.15); min-width: 250px; z-index: 100; overflow: hidden; }
   .erechnung-dropdown button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; background: transparent; border: none; cursor: pointer; text-align: left; transition: background 0.15s; color: var(--text); }
   .erechnung-dropdown button:hover { background: var(--primary-light); }
@@ -874,24 +905,28 @@
   .dd-label { font-size: 13px; font-weight: 700; }
   .dd-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 
-  .detail-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-  .detail-card-title { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-  .detail-card-body { color: var(--text); }
-
+  /* ── Spinner & Toast ────────────────────────────────────── */
   .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
   .spinner-sm { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
-
   .toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.2); animation: slideIn 0.25s ease; }
   .toast-success { background: #22c55e; color: white; }
   .toast-error   { background: #ef4444; color: white; }
   .toast-info    { background: var(--primary); color: white; }
   @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
+  /* ── Responsive ─────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .detail-layout { grid-template-columns: 1fr; }
+    .detail-right { order: -1; }
+    .detail-modal { max-width: 100%; }
+  }
   @media (max-width: 768px) {
     .orders-table { font-size: 12px; }
     .orders-table th, .orders-table td { padding: 8px 10px; }
     .col-artikel { display: none; }
-    .detail-card { grid-column: span 2; }
+    .artikel-cols-header, .artikel-item { grid-template-columns: 1fr 50px 70px 70px; }
+    .ai-bild, .ai-bild-ph { width: 44px; height: 44px; }
+    .detail-bottom-cards { grid-template-columns: 1fr; }
   }
 </style>
