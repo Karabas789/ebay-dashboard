@@ -346,6 +346,21 @@
     return sku.replace(/-\d{2,3}$/, '').replace(/-/g, ' ');
   }
 
+  // Variante aus Artikelname extrahieren: "Produkt[Variante]" → "Variante"
+  function varianteAusName(name) {
+    if (!name) return '';
+    const match = name.match(/\[([^\]]+)\]/);
+    return match ? match[1] : '';
+  }
+
+  // Kurzname für Multi-Artikel-Vorschau: Variante aus Klammern oder erste 3 Wörter
+  function kurzName(item) {
+    const variante = varianteAusName(item.artikel_name);
+    if (variante) return variante;
+    const words = (item.artikel_name || '').split(/\s+/);
+    return words.slice(0, 3).join(' ') + (words.length > 3 ? '…' : '');
+  }
+
   let _toast = $state({ msg: '', type: 'success', visible: false });
   let _toastTimer = null;
   function showToast(msg, type = 'success') {
@@ -440,7 +455,7 @@
             <td class="col-artikel">
               <div style="display:flex;align-items:center;gap:8px;">
                 {#if bild}
-                  <img src={bild} alt="" style="width:64px;height:64px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;" onerror={(e) => { e.currentTarget.style.display='none'; }} />
+                  <img src={bild} alt="" style="width:56px;height:56px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;" onerror={(e) => { e.currentTarget.style.display='none'; }} />
                 {/if}
                 <div style="min-width:0;">
                   {#if isSingle}
@@ -457,8 +472,13 @@
                       </a>
                     </div>
                     <div class="artikel-multi-preview">
-                      {o.items.map(i => i.sold_sku ? varianteAusSku(i.sold_sku) : (i.artikel_name || '?')).join(' · ')}
+                      {o.items.map(i => kurzName(i)).join(' · ')}
                     </div>
+                    {#if o.items.some(i => i.sold_sku)}
+                      <div class="artikel-multi-skus">
+                        SKU: {o.items.filter(i => i.sold_sku).map(i => i.sold_sku).join(', ')}
+                      </div>
+                    {/if}
                   {/if}
                 </div>
               </div>
@@ -798,6 +818,7 @@
   .artikel-multi-link { color: var(--primary); font-weight: 700; text-decoration: none; cursor: pointer; }
   .artikel-multi-link:hover { text-decoration: underline; }
   .artikel-multi-preview { font-size: 11px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+  .artikel-multi-skus { font-size: 10px; color: var(--primary); font-family: monospace; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; opacity: 0.7; }
   .col-tracking { min-width: 140px; }
   .tracking-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 12px; display: block; }
   .tracking-link:hover { text-decoration: underline; }
