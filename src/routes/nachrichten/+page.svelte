@@ -27,6 +27,14 @@
   let renameFolderId = null;
   let renameValue = '';
 
+  // Reply Modal State (Bug 1 Fix)
+  let showReplyModal = false;
+  let replyText = '';
+  let kiGenerating = false;
+  let reviseOpen = false;
+  let reviseInput = '';
+  let reviseSending = false;
+
   const folderLabels = {
     alle: 'Posteingang', mitglieder: 'Mitglieder', 'ebay-system': 'eBay-System',
     bearbeitet: 'Gesendet', archiv: 'Archiv', geloescht: 'Gelöscht'
@@ -194,24 +202,21 @@
     }).length;
   }
 
-  let replyText = '';
-  let kiGenerating = false;
   let showMoveModal = false;
-  let reviseOpen = false;
-  let reviseInput = '';
-  let reviseSending = false;
-  let textareaEl;
-  let aiHeight = 150;
 
   function autoGrow(e) {
     const el = e.target;
     el.style.height = "auto";
-    el.style.height = Math.max(80, Math.min(el.scrollHeight, window.innerHeight * 0.5)) + "px";
+    el.style.height = Math.max(80, Math.min(el.scrollHeight, window.innerHeight * 0.35)) + "px";
   }
 
-  $: if (selectedMsg) {
+  // Open Reply Modal
+  function openReplyModal() {
+    if (!selectedMsg) return;
     replyText = (selectedMsg.status === 'gesendet' || selectedMsg._sent_reply) ? '' : (selectedMsg.ai_reply || '');
-    reviseOpen = false; reviseInput = '';
+    reviseOpen = false;
+    reviseInput = '';
+    showReplyModal = true;
   }
 
   async function generateKiReply() {
@@ -256,6 +261,7 @@
         const msg = allMessages.find(m => m.id === selectedMsg.id);
         if (msg) { msg.status = 'gesendet'; msg.ai_reply = cleaned; msg._sent_reply = true; }
         allMessages = [...allMessages]; replyText = '';
+        showReplyModal = false;
         showToast('Antwort gesendet ✓', 'success');
       } else showToast('Fehler: ' + (data.message||''), 'error');
     } catch (e) { showToast('Verbindungsfehler', 'error'); }
@@ -348,7 +354,6 @@
   }};
   }
 
-  // Renamed: kein prompt() mehr — öffnet In-App Modal
   function renameFolder(folderId) {
     const folder = customFolders.find(f => f.id === folderId);
     renameFolderId = folderId;
@@ -436,33 +441,69 @@
 
   function isEbayMsg(msg) { return (msg.sender||'').toLowerCase() === 'ebay'; }
 
+  // Bug 2 Fix: Clean XML entities like &#xd; &#xa; etc.
+  function cleanXmlEntities(str) {
+    if (!str) return str;
+    return str
+      .replace(/&#x[0-9a-fA-F]+;/g, match => {
+        const code = parseInt(match.slice(3, -1), 16);
+        // Replace control characters (0x00-0x1F except \n \t) with space or nothing
+        if (code <= 0x1F && code !== 0x0A && code !== 0x09) return '';
+        return String.fromCharCode(code);
+      })
+      .replace(/&#\d+;/g, match => {
+        const code = parseInt(match.slice(2, -1), 10);
+        if (code <= 0x1F && code !== 0x0A && code !== 0x09) return '';
+        return String.fromCharCode(code);
+      });
+  }
+
+  // Bug 3 Fix: Render member text preserving <img> tags
   function renderMemberText(body) {
     if (!body) return '—';
+    // First clean XML entities (Bug 2)
+    body = cleanXmlEntities(body);
+
     if (/<html[\s>]/i.test(body) || /<!DOCTYPE/i.test(body) || /<table/i.test(body)) {
       const utm = body.match(/id=["']UserInputtedText["'][^>]*>([\s\S]*?)<\/div>/i);
       if (utm && utm[1].replace(/<[^>]*>/g,'').trim().length > 1) {
-        return utm[1].replace(/<[^>]*>/g,'').trim();
+        return sanitizeKeepImages(utm[1]);
       }
       const nm = body.match(/Neue Nachricht:\s*([\s\S]*?)<\/p>/i);
       if (nm && nm[1].replace(/<[^>]*>/g,'').trim().length > 3) {
-        return nm[1].replace(/<[^>]*>/g,'').trim();
+        return sanitizeKeepImages(nm[1]);
       }
       let t = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
       t = t.replace(/<script[^>]*>[\s\S]*?<\/script>/gi,'');
-      t = t.replace(/<[^>]*>/g,' ');
+      t = sanitizeKeepImages(t);
       t = t.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
       t = t.replace(/\s{2,}/g,' ').trim();
       return t.length > 500 ? t.slice(0,500) + '...' : t;
     }
     let t = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
-    t = t.replace(/<[^>]*>/g,' ');
+    t = sanitizeKeepImages(t);
     t = t.replace(/&nbsp;/g,' ').replace(/&amp;/g,'&');
     t = t.replace(/\s{2,}/g,' ').trim();
     return t || '—';
   }
 
+  // Bug 3: Strip all HTML tags EXCEPT <img> and <br>
+  function sanitizeKeepImages(html) {
+    if (!html) return '';
+    // Keep <img ...> and <br> tags, remove everything else
+    return html.replace(/<(?!\/?(?:img|br)\b)[^>]*>/gi, ' ');
+  }
+
+  // Check if body contains images (for deciding render mode)
+  function bodyHasImages(body) {
+    if (!body) return false;
+    return /<img\b[^>]*>/i.test(body);
+  }
+
   function setupIframe(node, body) {
     function render(html) {
+      // Clean XML entities before rendering in iframe
+      html = cleanXmlEntities(html);
       const isDark = document.documentElement.dataset.theme === 'dark';
       const darkCss = 'body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#d1d1d1;background:#1c1c1c}a{color:#8ab4f8}';
       const lightCss = 'body{font-family:Arial,sans-serif;font-size:14px;margin:8px;color:#333}';
@@ -486,15 +527,23 @@
       update(newBody) { render(newBody); }
     };
   }
-  function escHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function escHtml(str) {
+    // Clean XML entities first (Bug 2)
+    str = cleanXmlEntities(String(str));
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
   function formatDate(str) {
     if (!str) return '—';
     const d = new Date(str);
     return d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
   }
+
   function stripPreview(str) {
     if (!str) return '';
-    let s = str.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
+    let s = cleanXmlEntities(str);
+    s = s.replace(/<style[^>]*>[\s\S]*?<\/style>/gi,'');
     s = s.replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&');
     return s.replace(/\s{2,}/g,' ').trim().slice(0,100);
   }
@@ -589,6 +638,9 @@
           <div class="d-btns">
             <button class="d-btn" on:click={() => { if(selectedMsg) toggleRead(selectedMsg.id); }} title="Gelesen/Ungelesen">{selectedMsg?.is_read ? "✉️" : "📨"}</button>
             <button class="d-btn" on:click={() => showMoveModal = true}>📂 Verschieben</button>
+            {#if !isOutgoingOnly}
+              <button class="d-btn d-btn-reply" on:click={openReplyModal}>💬 Antworten</button>
+            {/if}
             <button class="d-btn d-btn-danger" on:click={deleteMessage}>🗑️ Löschen</button>
           </div>
         </div>
@@ -600,16 +652,17 @@
       </div>
 
       {#key selectedMsgId}
-      <!-- THREAD BODY (scrollable) -->
+      <!-- THREAD BODY (scrollable, now takes full remaining height) -->
       <div class="d-body">
         {#each thread as t}
           {@const isOut = t.direction === 'outgoing'}
           {@const isEbay = (t.sender||'').toLowerCase() === 'ebay'}
+          {@const hasImages = bodyHasImages(t.body)}
           <div class="bubble-label">
             {isOut ? '✅' : isEbay ? '🔔' : '✉️'}
             {isOut ? (user?.ebay_user_id||'Shop') : (t.sender||'—')} · {formatDate(t.received_at)}
           </div>
-          {#if isEbay && (/<html[\s>]/i.test(t.body||'') || /<!DOCTYPE/i.test(t.body||'') || /<table/i.test(t.body||''))}
+          {#if (isEbay || hasImages) && (/<html[\s>]/i.test(t.body||'') || /<!DOCTYPE/i.test(t.body||'') || /<table/i.test(t.body||'') || hasImages)}
             <div class="bubble">
               <iframe class="ebay-iframe" use:setupIframe={t.body||''} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="eBay"></iframe>
             </div>
@@ -617,54 +670,80 @@
             <div class="bubble">{@html escHtml(t.body||'—').replace(/\n/g,'<br>')}</div>
           {:else}
             <div class="bubble" class:bubble-sent={isOut}>
-              {renderMemberText(t.body||'')}
+              {@html renderMemberText(t.body||'')}
             </div>
           {/if}
           {#if !isOut && t.ai_reply && (t.status === 'gesendet' || t.status === 'bearbeitet')}
             <div class="bubble-label">✅ {user?.ebay_user_id||'Shop'} (KI) · {formatDate(t.updated_at||t.received_at)}</div>
-            <div class="bubble bubble-sent">{renderMemberText(t.ai_reply)}</div>
+            <div class="bubble bubble-sent">{@html renderMemberText(t.ai_reply)}</div>
           {/if}
         {/each}
       </div>
       {/key}
-
-      <!-- AI SECTION (fixed bottom) -->
-      {#if !isOutgoingOnly}
-        <div class="d-ai">
-          <div class="d-ai-top">
-            <div class="d-ai-label"><span class="d-ai-dot"></span> KI-ANTWORT</div>
-            <div style="display:flex;gap:8px;">
-              <button class="btn-rev" on:click={() => reviseOpen = !reviseOpen}>✏️ Überarbeiten</button>
-              <button class="btn-ki" on:click={generateKiReply} disabled={kiGenerating}>
-                {kiGenerating ? '⏳ ...' : '✨ KI generieren'}
-              </button>
-            </div>
-          </div>
-          <textarea class="d-ai-text" bind:value={replyText} bind:this={textareaEl} placeholder="KI-Antwort bearbeiten..." rows="5" on:input={autoGrow}></textarea>
-          {#if reviseOpen}
-            <div class="rev-box">
-              <div class="rev-msgs">
-                {#if reviseHistory[selectedMsg?.id]}
-                  {#each reviseHistory[selectedMsg.id] as msg}
-                    <div class={msg.role === 'user' ? 'rev-user' : 'rev-ki'}>{msg.content}</div>
-                  {/each}
-                {/if}
-              </div>
-              <div class="rev-input-row">
-                <textarea class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer..." rows="1" on:input={autoGrow} on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) sendRevise(); }}></textarea>
-                <button class="rev-send" on:click={sendRevise} disabled={reviseSending}>Senden</button>
-              </div>
-            </div>
-          {/if}
-          <div class="d-ai-actions">
-            <button class="d-ai-save" on:click={saveReply}>💾 Speichern</button>
-            <button class="d-ai-send" on:click={sendReply}>→ An eBay senden</button>
-          </div>
-        </div>
-      {/if}
     {/if}
   </div>
 </div>
+
+<!-- MODAL: Antwort (Bug 1 Fix — replaces inline d-ai section) -->
+{#if showReplyModal && selectedMsg}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <div class="reply-overlay" on:click|self={() => showReplyModal = false}>
+    <div class="reply-modal">
+      <!-- Modal Header -->
+      <div class="reply-modal-header">
+        <div class="reply-modal-title">
+          <span style="font-size:18px;">💬</span>
+          <span>Antwort an <b>{selectedMsg.sender||'—'}</b></span>
+        </div>
+        <button class="reply-modal-close" on:click={() => showReplyModal = false}>✕</button>
+      </div>
+
+      <!-- Original Message (readonly) -->
+      <div class="reply-original">
+        <div class="reply-original-label">Käufer-Nachricht</div>
+        <div class="reply-original-body">{@html renderMemberText(selectedMsg.body||'')}</div>
+      </div>
+
+      <!-- AI Reply Area -->
+      <div class="reply-content">
+        <div class="reply-ai-top">
+          <div class="reply-ai-label"><span class="d-ai-dot"></span> KI-ANTWORT</div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-rev" on:click={() => reviseOpen = !reviseOpen}>✏️ Überarbeiten</button>
+            <button class="btn-ki" on:click={generateKiReply} disabled={kiGenerating}>
+              {kiGenerating ? '⏳ ...' : '✨ KI generieren'}
+            </button>
+          </div>
+        </div>
+
+        <textarea class="reply-textarea" bind:value={replyText} placeholder="KI-Antwort bearbeiten..." rows="6" on:input={autoGrow}></textarea>
+
+        <!-- Revise Chat (scrollable, fixed max-height) -->
+        {#if reviseOpen}
+          <div class="rev-box">
+            <div class="rev-msgs">
+              {#if reviseHistory[selectedMsg?.id]}
+                {#each reviseHistory[selectedMsg.id] as msg}
+                  <div class={msg.role === 'user' ? 'rev-user' : 'rev-ki'}>{msg.content}</div>
+                {/each}
+              {/if}
+            </div>
+            <div class="rev-input-row">
+              <textarea class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer..." rows="1" on:input={autoGrow} on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRevise(); } }}></textarea>
+              <button class="rev-send" on:click={sendRevise} disabled={reviseSending}>Senden</button>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Fixed Footer Actions — always visible -->
+      <div class="reply-modal-footer">
+        <button class="reply-footer-save" on:click={saveReply}>💾 Speichern</button>
+        <button class="reply-footer-send" on:click={sendReply}>→ An eBay senden</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- MODAL: Nachricht verschieben -->
 {#if showMoveModal}
@@ -714,7 +793,7 @@
   </div>
 {/if}
 
-<!-- MODAL: Ordner umbenennen (ersetzt browser prompt()) -->
+<!-- MODAL: Ordner umbenennen -->
 {#if showRenameModal}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
   <div class="move-overlay" on:click|self={() => showRenameModal = false}>
@@ -795,6 +874,8 @@
   .d-btns { display: flex; gap: 6px; flex-shrink: 0; }
   .d-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
   .d-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .d-btn-reply { background: var(--primary); color: white !important; border-color: var(--primary); }
+  .d-btn-reply:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: white !important; }
   .d-btn-danger { border-color: #fca5a5; color: var(--danger); }
   .d-btn-danger:hover { background: #fef2f2; border-color: var(--danger); }
   :global([data-theme="dark"]) .d-btn-danger:hover { background: rgba(239,68,68,0.1); }
@@ -805,37 +886,81 @@
   .d-body { flex: 1; overflow-y: auto; padding: 20px 24px; min-height: 0; }
   .bubble-label { font-size: 10px; font-weight: 700; color: var(--text3); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
   .bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; margin-bottom: 16px; }
+  .bubble :global(img) { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; display: block; }
   .bubble-sent { border-color: #86efac; background: rgba(34,197,94,0.05); }
   :global([data-theme="dark"]) .bubble-sent { background: rgba(34,197,94,0.08); }
 
   .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
 
-  .d-ai { padding: 16px 24px; border-top: 1px solid var(--border); flex-shrink: 0; }
-  .d-ai-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-  .d-ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  /* ===== REPLY MODAL (Bug 1 Fix) ===== */
+  .reply-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .reply-modal {
+    background: var(--surface); border-radius: 16px; width: 90%; max-width: 720px;
+    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.35);
+  }
+  .reply-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .reply-modal-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: var(--text); }
+  .reply-modal-close { background: none; border: none; font-size: 18px; color: var(--text3); cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+  .reply-modal-close:hover { background: var(--surface2); color: var(--text); }
+
+  .reply-original {
+    padding: 16px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    max-height: 160px; overflow-y: auto; background: var(--surface2);
+  }
+  .reply-original-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+  .reply-original-body { font-size: 13px; line-height: 1.7; color: var(--text2); white-space: pre-wrap; word-break: break-word; }
+  .reply-original-body :global(img) { max-width: 100%; height: auto; border-radius: 6px; margin: 6px 0; display: block; }
+
+  .reply-content { flex: 1; overflow-y: auto; padding: 20px 24px; min-height: 0; }
+  .reply-ai-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .reply-ai-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+
   .d-ai-dot { width: 7px; height: 7px; background: var(--primary); border-radius: 50%; animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
   .btn-ki { background: linear-gradient(135deg, #6c63ff, #a855f7); border: none; color: white; border-radius: 8px; padding: 7px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
   .btn-ki:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-rev { background: var(--surface); border: 1.5px solid #a855f7; border-radius: 8px; padding: 6px 14px; color: #a855f7; font-size: 12px; font-weight: 600; cursor: pointer; }
-  .d-ai-text { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.7; resize: none; min-height: 80px; max-height: 50vh; transition: height 0.1s; outline: none; }
-  .d-ai-text:focus { border-color: var(--primary); }
-  .d-ai-actions { display: flex; gap: 10px; margin-top: 10px; }
-  .d-ai-save { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 10px 18px; color: var(--text2); font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; }
-  .d-ai-save:hover { border-color: var(--primary); color: var(--primary); }
-  .d-ai-send { flex: 1; background: var(--primary); border: none; border-radius: 9px; padding: 10px; color: white; font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; }
-  .d-ai-send:hover { background: var(--primary-dark); }
 
-  .rev-box { margin-top: 10px; border: 1.5px solid #a855f7; border-radius: 12px; overflow: hidden; background: var(--surface2); }
-  .rev-msgs { max-height: 200px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .reply-textarea {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px;
+    line-height: 1.7; resize: none; min-height: 120px; max-height: 35vh; outline: none; box-sizing: border-box;
+  }
+  .reply-textarea:focus { border-color: var(--primary); }
+
+  .rev-box { margin-top: 12px; border: 1.5px solid #a855f7; border-radius: 12px; overflow: hidden; background: var(--surface2); }
+  .rev-msgs { max-height: 180px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .rev-user { align-self: flex-end; background: #a855f7; color: white; border-radius: 10px 10px 2px 10px; padding: 8px 12px; font-size: 12px; max-width: 80%; }
   .rev-ki { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 10px 2px; padding: 8px 12px; font-size: 12px; max-width: 80%; color: var(--text2); }
   .rev-input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
-  .rev-input { flex: 1; resize: none; min-height: 38px; max-height: 30vh; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; }
+  .rev-input { flex: 1; resize: none; min-height: 38px; max-height: 20vh; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; box-sizing: border-box; }
   .rev-input:focus { border-color: #a855f7; }
   .rev-send { background: #a855f7; border: none; border-radius: 8px; padding: 10px 16px; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
   .rev-send:disabled { opacity: 0.5; }
 
+  .reply-modal-footer {
+    display: flex; gap: 10px; padding: 16px 24px; border-top: 1px solid var(--border);
+    flex-shrink: 0; background: var(--surface);
+  }
+  .reply-footer-save {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+    padding: 12px 20px; color: var(--text2); font-family: var(--font); font-size: 13px;
+    font-weight: 600; cursor: pointer; transition: all 0.15s;
+  }
+  .reply-footer-save:hover { border-color: var(--primary); color: var(--primary); }
+  .reply-footer-send {
+    flex: 1; background: var(--primary); border: none; border-radius: 9px; padding: 12px;
+    color: white; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .reply-footer-send:hover { background: var(--primary-dark); }
+
+  /* Shared modal styles */
   .move-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; }
   .move-box { background: var(--surface); border-radius: 16px; padding: 28px 24px; max-width: 340px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 8px; }
   .move-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
