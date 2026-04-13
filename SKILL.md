@@ -1,4 +1,3 @@
-[SKILL.md](https://github.com/user-attachments/files/26660629/SKILL.md)
 ---
 name: ebay-dashboard-erstellung
 description: >
@@ -19,8 +18,8 @@ description: >
 connected: false
 metadata:
   author: Vitali
-  version: '3.1'
-  based_on: Wissensbasis (Stand 2026-04-12)
+  version: '3.0'
+  based_on: Wissensbasis (Stand 2026-03-31)
 ---
 
 # eBay-Dashboard: Vollständiger Entwicklungs-Skill
@@ -44,8 +43,7 @@ metadata:
 | **Datenbank** | PostgreSQL |
 | **eBay API** | Trading API (XML/SOAP) |
 | **KI** | Mistral API (Kundenservice), Claude/Octopus AI (Angebotserstellung) |
-| **PDF-Service** | Gotenberg (`gotenberg.ai-online.cloud`) — HTML→PDF, PDF/A-3b nativ |
-| **E-Rechnung** | ZUGFeRD 2.4 (EN16931) via Python `factur-x` 3.16 im n8n-Container |
+| **PDF-Service** | Gotenberg (`gotenberg.ai-online.cloud`) — HTML→PDF |
 | **E-Mail-Service** | Node.js/Express/Nodemailer (`email.ai-online.cloud`) |
 | **Proxy/Deploy** | Coolify + Traefik v3.6.5, Docker-Netzwerk: `coolify` |
 | **VCS** | GitHub: `https://github.com/Karabas789/ebay-dashboard` |
@@ -62,8 +60,6 @@ metadata:
 | PostgreSQL-Credential | `ebay_automation`, ID: `4yOALkbLmo3zuewo` |
 | eBay App-Name | `VitaliDu-TestAPI-PRD-2b448418d-05f39944` |
 | Server-Pfad | `/opt/ebay-dashboard` |
-| n8n-Container | `n8n-x04008o88c4w0cg4gwkskkk8` |
-| n8n Coolify-Compose | `/data/coolify/services/x04008o88c4w0cg4gwkskkk8/docker-compose.yml` |
 
 ### Service-Endpunkte
 
@@ -157,6 +153,12 @@ metadata:
 | `access_token` | eBay Access Token |
 | `updated_at` | Zeitstempel der letzten Aktualisierung |
 
+### Tabelle: `orders` (aktualisiert)
+
+Multi-Artikel-Bestellungen: Eine eBay-Bestellung mit mehreren Artikeln/Varianten erzeugt mehrere Zeilen mit gleicher `order_id` aber unterschiedlicher `ebay_artikel_id`/`sold_sku`.
+
+**UNIQUE INDEX:** `orders_order_item_sku_unique ON (order_id, ebay_artikel_id, COALESCE(sold_sku, ''))` — Kein separater Unique-Index auf `order_id` allein (der alte wurde entfernt).
+
 ### eBay-Menge-Logik (übergreifend)
 
 ```js
@@ -171,36 +173,36 @@ Math.min(lagerbestand, min_lagerbestand)
 |---|---|
 | `id` | Primärschlüssel |
 | `user_id` | Benutzer-Zuordnung |
-| `order_id` | eBay-Bestellnummer |
-| `rechnung_typ` | `rechnung` oder `storno` |
-| `storno_von` | FK → invoices.id (bei Storno) |
-| `rechnung_nr` | Eindeutige Rechnungsnummer (UNIQUE) |
-| `kaeufer_name/strasse/plz/ort/land/email` | Käuferdaten |
-| `artikel_name` | Erste Position (Rückwärtskompatibilität) |
-| `artikel_menge, einzelpreis, rabatt_pct` | Erste Position Beträge |
-| `netto_betrag, steuersatz, steuer_betrag, brutto_betrag` | Gesamtbeträge |
-| `kleinunternehmer` | Boolean |
+| `kaeufer_daten` | Käuferdaten (JSON) |
+| `positionen` | Rechnungspositionen (JSON) — Legacy, neue Positionen in `invoice_items` |
+| `betraege` | Beträge: Netto, MwSt., Brutto |
 | `pdf_base64` | PDF als Base64-String |
-| `pdf_generiert_am` | Zeitstempel der PDF-Generierung |
 | `status` | Rechnungsstatus (erstellt / gesendet / storniert) |
-| `positionen_migriert` | Boolean — Multi-Positionen in `invoice_items` |
 
 #### `invoice_items`
 | Spalte | Beschreibung |
 |---|---|
 | `id` | Primärschlüssel |
-| `invoice_id` | FK → invoices.id |
-| `pos_nr` | Positionsnummer |
-| `bezeichnung` | Artikelbezeichnung |
-| `artikel_nr` | Interne Artikelnummer |
-| `ebay_artikel_id` | eBay-Artikel-ID |
+| `invoice_id` | FK → invoices.id (ON DELETE CASCADE) |
+| `pos_nr` | Positionsnummer (1, 2, 3...) |
+| `bezeichnung` | Artikelname |
+| `artikel_nr` | SKU / Artikelnummer |
+| `ebay_artikel_id` | eBay Artikel-ID |
 | `menge` | Menge |
-| `einzelpreis` | Einzelpreis (Brutto) |
-| `mwst_satz` | MwSt-Satz (z.B. 19) |
+| `einzelpreis` | Einzelpreis (brutto) |
+| `mwst_satz` | MwSt-Satz (z.B. 19, 7, 0) |
 | `rabatt_pct` | Rabatt in Prozent |
 | `netto_betrag` | Netto pro Position |
 | `steuer_betrag` | Steuer pro Position |
 | `brutto_betrag` | Brutto pro Position |
+| `erstellt_am` | Zeitstempel |
+
+**Rechnungssystem — Multi-Positionen:**
+- `invoices` = Rechnungskopf (Käufer, Gesamtsummen, PDF, Status)
+- `invoice_items` = Rechnungspositionen (1-N Zeilen pro Rechnung)
+- WF-RE-01 akzeptiert `positionen`-Array im Request Body, rückwärtskompatibel mit altem Einzelartikel-Format
+- WF-RE-01 schreibt in beide Tabellen: erst `invoices`, dann `invoice_items`
+- Frontend Bestellungen-Seite sendet `positionen`-Array bei Rechnungserstellung
 
 #### `user_firmendaten`
 | Spalte | Beschreibung |
@@ -299,7 +301,7 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 
 | ID | Endpoint | Funktion |
 |---|---|---|
-| WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Berechnung → HTML → Gotenberg PDF → DB speichern (inkl. invoice_items). Rundungsfix: Steuer = netto × mwst/100, brutto = netto + steuer |
+| WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Berechnung → HTML → Gotenberg PDF → DB speichern |
 | WF-RE-02 | POST `/rechnung-senden` | Rechnung aus DB laden → SMTP → E-Mail mit PDF senden |
 | WF-RE-03 | POST `/rechnungen-laden` | Alle invoices eines Users zurückgeben |
 | WF-RE-04 | POST `/rechnung-settings` | Firmendaten + Config + SMTP laden oder speichern (`action: load/save`) |
@@ -319,9 +321,30 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 | POST `/antwort-update` | Antwort aktualisieren |
 | POST `/antwort-senden` | Antwort senden |
 | POST `/ki-antwort` | KI-Antwort generieren (Mistral API) |
-| POST `/ki-ueberarbeiten` | KI-Antwort überarbeiten |
+| POST `/ki-ueberarbeiten` | KI-Antwort überarbeiten (mit Verlauf) |
 | POST `/nachricht-verschieben` | Nachricht in anderen Ordner verschieben |
 | POST `/nachricht-loeschen` | Nachricht löschen |
+| POST `/nachricht-ordner` | Ordner-Aktionen: `action` = `list`, `create`, `delete`, `rename`, `move`, `read` |
+
+**`/nachricht-ordner` Actions:**
+- `list` — Custom-Ordner laden (`user_id`)
+- `create` — Ordner erstellen (`user_id`, `name`, `icon`)
+- `delete` — Ordner löschen (`user_id`, `folder_id`) — Nachrichten → Posteingang
+- `rename` — Ordner umbenennen (`user_id`, `folder_id`, `name`)
+- `move` — Nachricht verschieben (`user_id`, `message_id`, `target`) — target = Ordner-Key oder folder_id
+- `read` — Gelesen-Status setzen (`user_id`, `message_ids[]`, `set_read: bool`) — Bulk-fähig
+
+**Nachrichten-Seite Features (Stand April 2026):**
+- 3-Spalten-Layout: Ordner-Sidebar | Nachrichtenliste | Detail-Ansicht
+- Ordner: Posteingang, Mitglieder, eBay-System, Gesendet, Archiv, Gelöscht + Custom-Ordner
+- Thread-Ansicht mit Buyer/Seller Bubbles
+- eBay-System-Nachrichten + Käufer-Nachrichten mit Bildern werden im iFrame gerendert
+- XML-Entity-Bereinigung (`&#xd;` etc.) via `cleanXmlEntities()`
+- **Antwort-Modal** (statt inline): Käufer-Nachricht readonly + KI-Textarea + Überarbeitungs-Chat + fixierter Footer mit Speichern/Senden
+- **Sticky Reply-Bar** am unteren Rand: "Antworten" + "KI-Antwort" Buttons (lila Gradient)
+- **Multi-Select-Modus**: ☑-Button in Suchleiste, Checkboxen pro Nachricht, Bulk-Aktionsleiste (Gelesen/Verschieben/Löschen)
+- **Rechtsklick auf ☑-Button**: Alle sichtbaren Nachrichten als gelesen/ungelesen markieren
+- Lila/Purple Design-Akzent (#a855f7) für Aktions-Buttons, konsistent mit KI-Features
 
 ---
 
@@ -329,111 +352,29 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 
 | Endpoint | Funktion |
 |---|---|
-| POST `/orders-laden` | Bestellungen laden |
+| POST `/orders-laden` | Bestellungen laden (Workflow `5FijlDsJEj7TaSU5`) |
 | POST `/order-tracking` | Tracking-Informationen speichern |
 | POST `/orders-archivieren` | Bestellungen archivieren |
 
----
+**Workflow `orders-laden` (`5FijlDsJEj7TaSU5`):**
+- SQL-Query `LIMIT` muss auf 2000 gesetzt sein (nicht 200)
+- Muss nach Änderung gepublished werden (aktive Version ≠ Draft war ein häufiger Fehler)
 
-### 4.6 E-Rechnung Workflow (ZUGFeRD / XRechnung)
+**Tracking-Sync Workflow `vnk1FceT1WbZ3KiO`:**
+- Pagination: "Orders parsen" Code-Node holt automatisch alle Seiten nach (bis 10 Seiten / 2000 Orders)
+- SKU-Extraktion: Parst `<Variation><SKU>` aus eBay GetOrders XML
+- Deduplizierung: Key = `order_id + ebay_artikel_id + sold_sku` — verschiedene Varianten desselben Produkts werden als separate Zeilen behalten
+- Skip-Schutz: Leere Responses geben `return []` zurück statt Skip-Items
+- INSERT: `ON CONFLICT (order_id, ebay_artikel_id, COALESCE(sold_sku, ''))` für Multi-Artikel-Support
+- CreateTimeFrom: Standard 14 Tage, für Erstimport auf 90 Tage erweiterbar (eBay Maximum)
 
-- **Workflow-ID:** `8aNYc6uei9w9Y2Of`
-- **Endpoint:** POST `/e-rechnung-erstellen`
-- **Status:** ✅ Aktiv, validiert (EU-Rechnung v2.51 + Bund-Validator = 0 Fehler)
-
-**Ablauf:**
-1. Auth prüfen (Token → users)
-2. Rechnung + Firmendaten + Positionen + Vorlage aus DB laden (JOIN invoices, invoice_items, user_firmendaten, user_rechnung_config, user_rechnung_vorlage)
-3. Format-Routing: `xrechnung` | `zugferd_en16931` | `zugferd_extended`
-4. XML generieren (XRechnung = UBL 2.1, ZUGFeRD = CII)
-5. PDF über Gotenberg (mit `pdfa: PDF/A-3b` Parameter)
-6. ZUGFeRD: XML in PDF einbetten via Python `factur-x` Library → echtes PDF/A-3
-7. Response: `{ success, format, xml, pdf_base64, zugferd_embedded, filename }`
-
-**Formate:**
-
-| Format | XML-Standard | GuidelineID | PDF |
-|---|---|---|---|
-| `xrechnung` | UBL 2.1 | `urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0` | Kein PDF |
-| `zugferd_en16931` | CII (CrossIndustryInvoice) | `urn:cen.eu:en16931:2017` | PDF/A-3b mit eingebettetem XML |
-| `zugferd_extended` | CII (CrossIndustryInvoice) | `urn:cen.eu:en16931:2017` | PDF/A-3b mit eingebettetem XML |
-
-**ZUGFeRD GuidelineID — WICHTIG:**
-Die offizielle `FACTURX_EN16931_codedb.xml` (cl id="1") erlaubt **nur** `urn:cen.eu:en16931:2017` — kein Suffix wie `#compliant#urn:factur-x.eu:1p0:en16931`. Die factur-x Python Library 3.16 akzeptiert das mit `check_xsd=False`.
-
-**ZUGFeRD-Embedding (Python factur-x):**
-```python
-from facturx import generate_from_file
-result_pdf = generate_from_file(
-    pdf_file,
-    xml_data,
-    flavor='factur-x',
-    level='en16931',      # oder 'extended'
-    check_xsd=False,      # Pflicht wegen GuidelineID ohne Suffix
-    output_pdf_file=out
-)
-```
-
-**Gotenberg PDF/A-3b:**
-Im fields-Array des Gotenberg-Uploads:
-```javascript
-{ name: 'pdfa', value: 'PDF/A-3b' }
-```
-Dieser Parameter muss im **Gotenberg Upload**-Block stehen, NICHT doppelt deklariert.
-
-**Rundungsfix (WF-RE-01 „Nummer + Berechnung"):**
-```javascript
-// KORREKT: Steuer aus Netto berechnen, Brutto = Netto + Steuer
-const netto = parseFloat((bruttoGesamt / (1 + mwstSatz / 100)).toFixed(2));
-const steuer = parseFloat((netto * mwstSatz / 100).toFixed(2));
-const brutto = parseFloat((netto + steuer).toFixed(2));
-// FALSCH (Rundungsfehler): steuer = bruttoGesamt - netto
-```
-
-**n8n-Container Docker-Setup (factur-x permanent):**
-Dockerfile unter `/data/coolify/services/x04008o88c4w0cg4gwkskkk8/Dockerfile`:
-```dockerfile
-FROM python:3.12-alpine AS python-build
-RUN apk add --no-cache gcc musl-dev libxml2-dev libxslt-dev && \
-    pip install --no-cache-dir factur-x
-
-FROM docker.n8n.io/n8nio/n8n:2.14.2
-USER root
-COPY --from=python-build /usr/local/bin/python3 /usr/local/bin/python3
-COPY --from=python-build /usr/local/bin/python3.12 /usr/local/bin/python3.12
-COPY --from=python-build /usr/local/lib/python3.12 /usr/local/lib/python3.12
-COPY --from=python-build /usr/local/lib/libpython3.12.so* /usr/local/lib/
-COPY --from=python-build /usr/lib/libxml2* /usr/lib/
-COPY --from=python-build /usr/lib/libxslt* /usr/lib/
-COPY --from=python-build /usr/lib/libexslt* /usr/lib/
-COPY --from=python-build /usr/lib/libffi* /usr/lib/
-COPY --from=python-build /usr/lib/libz* /usr/lib/
-COPY --from=python-build /usr/lib/liblzma* /usr/lib/
-COPY --from=python-build /usr/lib/libgcrypt* /usr/lib/
-COPY --from=python-build /usr/lib/libgpg-error* /usr/lib/
-ENV LD_LIBRARY_PATH=/usr/local/lib
-RUN ln -sf /usr/local/bin/python3 /usr/bin/python3
-USER node
-```
-docker-compose.yml: `image:` → `build: context: . dockerfile: Dockerfile` + Netzwerke `coolify: external: true`
-
-**Validierungsstatus (Stand 2026-04-12):**
-
-| Prüfung | Ergebnis |
-|---|---|
-| ZUGFeRD 2.4 (EN16931) erkannt | ✅ |
-| factur-x.xml eingebettet | ✅ |
-| PDF/A-3B (veraPDF) | ✅ |
-| XML konform (KoSIT Validator) | ✅ 0 Fehler |
-| Schematron (FACTUR-X_EN16931) | ✅ 0 Fehler |
-| EU-Rechnung v2.51 Gesamturteil | ✅ konform |
-| Bund-Validator (erechnungsvalidator.service.bund.de) | ✅ 0 Fehler |
-
-**Bekannte Hinweise (nur Informationen, keine Fehler):**
-- PEPPOL-EN16931-R001: Business process — nur für XRechnung relevant
-- PEPPOL-EN16931-R020/R010: Seller/Buyer electronic address — nur für PEPPOL
-- BR-DE-21: Specification identifier soll XRechnung entsprechen — irrelevant für ZUGFeRD
-- BR-DE-2: Seller Contact — nur für XRechnung
+**Bestellungen-Seite `src/routes/bestellungen/+page.svelte`:**
+- Frontend-Gruppierung: `groupedOrders` derived gruppiert DB-Zeilen per `order_id` zu Bestellungen mit `items`-Array
+- Tabelle: Jeder Artikel wird als eigener Block in der Zeile angezeigt (Bild + Name + SKU), wie bei eBay
+- Detail-Modal: eBay-Style 2-Spalten-Layout (Artikel links mit Stückzahl/Artikelpreis/Artikel insgesamt, Zahlungsübersicht rechts)
+- Pagination: 10/25/50/100 pro Seite auswählbar, Seitennavigation
+- Rechnungserstellung: Sendet `positionen`-Array mit allen Artikeln der gruppierten Bestellung
+- Suche: Durchsucht auch alle Items (Artikelname, SKU, eBay-ID) einer gruppierten Bestellung
 
 ---
 
@@ -456,7 +397,7 @@ docker-compose.yml: `image:` → `build: context: . dockerfile: Dockerfile` + Ne
     │       └── Toast.svelte
     └── routes/
         ├── +layout.svelte              (Auth-Guard, Sidebar-Shell, volle Breite)
-        ├── +page.svelte                (Nachrichten — Startseite ✅ PORTIERT, 611 Zeilen)
+        ├── +page.svelte                (Nachrichten — Startseite ✅ PORTIERT, ~1100 Zeilen)
         ├── login/+page.svelte          (Login mit Schwarzblau-Gradient → #2D43A8)
         ├── produkte/+page.svelte       (✅ PORTIERT, ~1890 Zeilen)
         ├── bestellungen/+page.svelte   (⏳ Stub — Nächste Priorität)
@@ -475,10 +416,10 @@ docker-compose.yml: `image:` → `build: context: . dockerfile: Dockerfile` + Ne
 
 | # | Seite | Status | Besonderheiten |
 |---|---|---|---|
-| 1 | Nachrichten | ✅ PORTIERT | Ordner-Sidebar, Thread-Ansicht, KI-Antwort, Überarbeiten-Chat |
+| 1 | Nachrichten | ✅ PORTIERT | Ordner-Sidebar, Thread-Ansicht, iFrame für HTML/Bild-Nachrichten, Antwort-Modal mit KI + Überarbeiten-Chat, Sticky Reply-Bar (lila), Multi-Select mit Bulk-Aktionen (Verschieben/Löschen/Gelesen), Custom-Ordner (CRUD + Rechtsklick-Umbenennung), ~1100 Zeilen |
 | 2 | Produkte | ✅ PORTIERT | Grid-Cards, Varianten-Modal, Bestand-Update, Import, CSV-Export |
-| 3 | Bestellungen | ✅ PORTIERT | Tabelle, Filter-Tabs (Alle/Bezahlt/Versendet/Archiv), Tracking-Modal, Order-Detail-Modal, Archivierung, Nachricht senden, Auto-Rechnung |
-| 4 | Rechnungen | ⏳ | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Manuell erstellen, E-Rechnung (ZUGFeRD/XRechnung) |
+| 3 | Bestellungen | ✅ PORTIERT | Tabelle mit Multi-Artikel-Gruppierung, Filter-Tabs (Alle/Bezahlt/Versendet/Archiv), Tracking-Modal, eBay-Style Detail-Modal (2-Spalten), Archivierung, Nachricht senden, Auto-Rechnung mit Multi-Positionen, Pagination (10/25/50/100) |
+| 4 | Rechnungen | ⏳ | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Manuell erstellen |
 | 5 | Einstellungen/Firma | ⏳ | Firmendaten-Formular → `/rechnung-settings` (action: save) |
 | 6 | Einstellungen/Nummern | ⏳ | RE/SR Konfiguration mit Live-Vorschau |
 | 7 | Einstellungen/SMTP | ⏳ | SMTP-Formular + Test-Button |
