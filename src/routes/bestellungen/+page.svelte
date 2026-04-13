@@ -341,9 +341,16 @@
   function openDetailModal(order) { detailOrder = order; eRechnungDropdownOpen = false; showDetailModal = true; }
 
   function getItemImage(item) {
-    const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
-    return prod?.bild_url || prod?.varianten?.find(v => v.bild_url)?.bild_url || '';
+  const prod = allProdukte.find(p => String(p.ebay_artikel_id) === String(item.ebay_artikel_id));
+  if (!prod) return '';
+  // Zuerst Variantenbild per SKU suchen
+  if (item.sold_sku && prod.varianten) {
+    const varMatch = prod.varianten.find(v => v.ebay_sku === item.sold_sku);
+    if (varMatch?.bild_url) return varMatch.bild_url;
   }
+  // Fallback: Hauptbild oder erstes Variantenbild
+  return prod.bild_url || prod.varianten?.find(v => v.bild_url)?.bild_url || '';
+}
   function getOrderImage(order) {
     for (const item of order.items) {
       const img = getItemImage(item);
