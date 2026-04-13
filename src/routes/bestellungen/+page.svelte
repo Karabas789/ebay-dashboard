@@ -455,7 +455,7 @@
             <td class="col-artikel">
               <div style="display:flex;align-items:center;gap:8px;">
                 {#if bild}
-                  <img src={bild} alt="" style="width:64px;height:64px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;" onerror={(e) => { e.currentTarget.style.display='none'; }} />
+                  <img src={bild} alt="" style="width:72px;height:72px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;" onerror={(e) => { e.currentTarget.style.display='none'; }} />
                 {/if}
                 <div style="min-width:0;">
                   {#if isSingle}
