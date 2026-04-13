@@ -738,7 +738,7 @@
               {/if}
             </div>
             <div class="rev-input-row">
-              <textarea class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer..." rows="1" on:input={autoGrow} on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRevise(); } }}></textarea>
+              <textarea class="rev-input" bind:value={reviseInput} placeholder="z.B. Mach die Antwort kürzer, füge eine Entschuldigung hinzu..." rows="3" on:input={autoGrow} on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendRevise(); } }}></textarea>
               <button class="rev-send" on:click={sendRevise} disabled={reviseSending}>Senden</button>
             </div>
           </div>
@@ -905,23 +905,24 @@
     flex-shrink: 0; background: var(--surface);
   }
   .reply-bar-btn {
-    flex: 1; background: var(--primary); color: white; border: none; border-radius: 10px;
-    padding: 12px 24px; font-size: 14px; font-weight: 700; cursor: pointer;
-    font-family: var(--font); transition: all 0.15s;
+    flex: 1; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none; border-radius: 10px;
+    padding: 14px 24px; font-size: 15px; font-weight: 700; cursor: pointer;
+    font-family: var(--font); transition: all 0.15s; box-shadow: 0 2px 10px rgba(168,85,247,0.3);
   }
-  .reply-bar-btn:hover { background: var(--primary-dark); }
+  .reply-bar-btn:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); box-shadow: 0 4px 14px rgba(168,85,247,0.4); }
   .reply-bar-ki {
     background: linear-gradient(135deg, #6c63ff, #a855f7); color: white; border: none;
-    border-radius: 10px; padding: 12px 20px; font-size: 13px; font-weight: 700;
+    border-radius: 10px; padding: 14px 20px; font-size: 14px; font-weight: 700;
     cursor: pointer; font-family: var(--font); transition: all 0.15s; white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(108,99,255,0.3);
   }
-  .reply-bar-ki:hover { opacity: 0.9; }
+  .reply-bar-ki:hover { background: linear-gradient(135deg, #5b52ff, #9333ea); box-shadow: 0 4px 14px rgba(108,99,255,0.4); }
 
   /* ===== REPLY MODAL (Bug 1 Fix) ===== */
-  .reply-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .reply-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .reply-modal {
-    background: var(--surface); border-radius: 16px; width: 90%; max-width: 720px;
-    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+    background: var(--surface); border-radius: 16px; width: 94%; max-width: 860px;
+    max-height: 92vh; min-height: 500px; display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 24px 80px rgba(0,0,0,0.35);
   }
   .reply-modal-header {
@@ -953,8 +954,8 @@
 
   .reply-textarea {
     width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 14px; color: var(--text); font-family: var(--font); font-size: 13px;
-    line-height: 1.7; resize: none; min-height: 120px; max-height: 35vh; outline: none; box-sizing: border-box;
+    padding: 14px 16px; color: var(--text); font-family: var(--font); font-size: 14px;
+    line-height: 1.7; resize: none; min-height: 160px; max-height: 40vh; outline: none; box-sizing: border-box;
   }
   .reply-textarea:focus { border-color: var(--primary); }
 
@@ -962,8 +963,8 @@
   .rev-msgs { max-height: 180px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
   .rev-user { align-self: flex-end; background: #a855f7; color: white; border-radius: 10px 10px 2px 10px; padding: 8px 12px; font-size: 12px; max-width: 80%; }
   .rev-ki { align-self: flex-start; background: var(--surface); border: 1px solid var(--border); border-radius: 10px 10px 10px 2px; padding: 8px 12px; font-size: 12px; max-width: 80%; color: var(--text2); }
-  .rev-input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface); }
-  .rev-input { flex: 1; resize: none; min-height: 38px; max-height: 20vh; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; box-sizing: border-box; }
+  .rev-input-row { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--surface); align-items: flex-end; }
+  .rev-input { flex: 1; resize: vertical; min-height: 80px; max-height: 25vh; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface2); outline: none; box-sizing: border-box; line-height: 1.6; }
   .rev-input:focus { border-color: #a855f7; }
   .rev-send { background: #a855f7; border: none; border-radius: 8px; padding: 10px 16px; color: white; font-size: 12px; font-weight: 700; cursor: pointer; }
   .rev-send:disabled { opacity: 0.5; }
@@ -979,11 +980,11 @@
   }
   .reply-footer-save:hover { border-color: var(--primary); color: var(--primary); }
   .reply-footer-send {
-    flex: 1; background: var(--primary); border: none; border-radius: 9px; padding: 12px;
+    flex: 1; background: linear-gradient(135deg, #7c3aed, #a855f7); border: none; border-radius: 9px; padding: 13px;
     color: white; font-family: var(--font); font-size: 14px; font-weight: 700; cursor: pointer;
-    transition: background 0.15s;
+    transition: all 0.15s; box-shadow: 0 2px 10px rgba(168,85,247,0.25);
   }
-  .reply-footer-send:hover { background: var(--primary-dark); }
+  .reply-footer-send:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); box-shadow: 0 4px 14px rgba(168,85,247,0.35); }
 
   /* Shared modal styles */
   .move-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; }
