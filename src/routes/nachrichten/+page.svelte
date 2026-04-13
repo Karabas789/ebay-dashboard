@@ -902,17 +902,17 @@
   /* Sticky reply bar at bottom of detail panel */
   .reply-bar {
     display: flex; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--border);
-    flex-shrink: 0; background: var(--surface);
+    flex-shrink: 0; background: var(--surface); justify-content: center;
   }
   .reply-bar-btn {
-    flex: 1; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none; border-radius: 10px;
-    padding: 14px 24px; font-size: 15px; font-weight: 700; cursor: pointer;
+    flex: none; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none; border-radius: 10px;
+    padding: 14px 40px; font-size: 15px; font-weight: 700; cursor: pointer;
     font-family: var(--font); transition: all 0.15s; box-shadow: 0 2px 10px rgba(168,85,247,0.3);
   }
   .reply-bar-btn:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); box-shadow: 0 4px 14px rgba(168,85,247,0.4); }
   .reply-bar-ki {
-    background: linear-gradient(135deg, #6c63ff, #a855f7); color: white; border: none;
-    border-radius: 10px; padding: 14px 20px; font-size: 14px; font-weight: 700;
+    flex: none; background: linear-gradient(135deg, #6c63ff, #a855f7); color: white; border: none;
+    border-radius: 10px; padding: 14px 40px; font-size: 14px; font-weight: 700;
     cursor: pointer; font-family: var(--font); transition: all 0.15s; white-space: nowrap;
     box-shadow: 0 2px 10px rgba(108,99,255,0.3);
   }
