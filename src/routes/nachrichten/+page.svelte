@@ -473,7 +473,23 @@
       }
     } catch(e) { showToast('Fehler', 'error'); }
   }
-
+  async function toggleAllRead() {
+    const visible = filteredMessages;
+    const hasUnread = visible.some(m => m.is_read === false);
+    const ids = visible.map(m => m.id);
+    if (ids.length === 0) return;
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'read', user_id: user?.id, message_ids: ids, set_read: hasUnread });
+      if (data.success) {
+        ids.forEach(id => {
+          const m = allMessages.find(x => x.id === id);
+          if (m) m.is_read = hasUnread;
+        });
+        allMessages = [...allMessages];
+        showToast(hasUnread ? 'Alle als gelesen markiert ✓' : 'Alle als ungelesen markiert ✓', 'success');
+      }
+    } catch(e) { showToast('Fehler', 'error'); }
+  }
   async function markAsRead(msgId) {
     const msg = allMessages.find(m => m.id === msgId);
     if (!msg || msg.is_read) return;
@@ -682,9 +698,12 @@
     <div class="list-top">
       <input class="list-search" placeholder="Suchen..." bind:value={searchQuery} />
       <span class="list-num">{filteredMessages.length}</span>
-      <button class="list-select-toggle" class:list-select-active={multiSelectMode} on:click={toggleMultiSelect} title="Mehrfachauswahl">
-      {multiSelectMode ? '✕ Fertig' : '☑ Auswahl'}
-    </button>
+      <button class="list-select-toggle" class:list-select-active={multiSelectMode}
+        on:click={toggleMultiSelect}
+        on:contextmenu|preventDefault={toggleAllRead}
+        title="Klick: Mehrfachauswahl | Rechtsklick: Alle gelesen/ungelesen">
+        {multiSelectMode ? '✕ Fertig' : '☑ Auswahl'}
+     </button>
     </div>
 
     <!-- Bulk action bar -->
@@ -988,12 +1007,12 @@
   .f-add { opacity: 0.6; transition: opacity 0.15s; }
   .f-add:hover { opacity: 1; background: var(--border); }
 
-  .list { width: 300px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .list { width: 340px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
   .list-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
   .list-search { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
   .list-search:focus { border-color: var(--primary); }
   .list-num { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
-  .list-select-toggle { background: none; border: 1.5px solid #a855f7; border-radius: 8px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; color: #a855f7; transition: all 0.15s; line-height: 1; white-space: nowrap; }
+  .list-select-toggle { background: none; border: 1.5px solid #a855f7; border-radius: 6px; padding: 3px 8px; font-size: 10px; font-weight: 700; cursor: pointer; color: #a855f7; transition: all 0.15s; line-height: 1; white-space: nowrap; }
   .list-select-toggle:hover { background: rgba(168,85,247,0.12); }
   .list-select-active { background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border-color: transparent; }
   .list-select-active:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); }
@@ -1018,8 +1037,8 @@
   .li-checkbox { flex-shrink: 0; padding-top: 2px; }
   .li-checkbox input { width: 16px; height: 16px; accent-color: #a855f7; cursor: pointer; }
   .li-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
-  .li-name { font-size: 13px; font-weight: 700; color: var(--text); }
-  .li-unread .li-name { color: var(--primary); }
+  .li-name { font-size: 13px; font-weight: 400; color: var(--text2); }
+  .li-unread .li-name { color: var(--primary); font-weight: 700; }
   .li-unread .li-preview { font-weight: 600; color: var(--text); }
   .li-time { font-size: 10px; color: var(--text3); }
   .li-preview { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
