@@ -810,15 +810,15 @@
   .order-id-link:hover { text-decoration: underline; }
   .buyer-name { font-weight: 600; }
   .buyer-location { font-size: 11px; color: var(--text3); margin-top: 2px; }
-  .col-artikel { max-width: 220px; }
+  .col-artikel { max-width: 360px; min-width: 200px; }
   .artikel-name { font-size: 13px; }
   .artikel-sku { font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 3px; font-family: monospace; }
   .artikel-ebay-link { color: var(--text); text-decoration: none; }
   .artikel-ebay-link:hover { color: var(--primary); text-decoration: underline; }
   .artikel-multi-link { color: var(--primary); font-weight: 700; text-decoration: none; cursor: pointer; }
   .artikel-multi-link:hover { text-decoration: underline; }
-  .artikel-multi-preview { font-size: 11px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-  .artikel-multi-skus { font-size: 10px; color: var(--primary); font-family: monospace; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; opacity: 0.7; }
+  .artikel-multi-preview { font-size: 11px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+  .artikel-multi-skus { font-size: 10px; color: var(--primary); font-family: monospace; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; opacity: 0.7; }
   .col-tracking { min-width: 140px; }
   .tracking-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 12px; display: block; }
   .tracking-link:hover { text-decoration: underline; }
