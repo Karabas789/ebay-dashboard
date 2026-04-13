@@ -1057,11 +1057,11 @@
   .d-sender { font-size: 17px; font-weight: 800; }
   .d-subject { font-size: 13px; color: var(--text2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .d-btns { display: flex; gap: 6px; flex-shrink: 0; }
-  .d-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
-  .d-btn:hover { border-color: var(--primary); color: var(--primary); }
-  .d-btn-danger { border-color: #fca5a5; color: var(--danger); }
-  .d-btn-danger:hover { background: #fef2f2; border-color: var(--danger); }
-  :global([data-theme="dark"]) .d-btn-danger:hover { background: rgba(239,68,68,0.1); }
+  .d-btn { background: none; border: 1.5px solid #a855f7; color: #a855f7; border-radius: 6px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
+  .d-btn:hover { background: rgba(168,85,247,0.1); }
+  .d-btn-danger { border-color: #ef4444; color: #ef4444; }
+  .d-btn-danger:hover { background: rgba(239,68,68,0.08); border-color: #ef4444; }
+  :global([data-theme="dark"]) .d-btn-danger:hover { background: rgba(239,68,68,0.12); }
   .d-meta { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   .d-chip { font-size: 11px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; }
   .d-chip b { color: var(--text); }
