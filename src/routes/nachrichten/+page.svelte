@@ -678,6 +678,14 @@
             <div class="bubble bubble-sent">{@html renderMemberText(t.ai_reply)}</div>
           {/if}
         {/each}
+        <!-- Prominent reply button at bottom of thread -->
+        {#if !isOutgoingOnly}
+          <div class="reply-cta">
+            <button class="reply-cta-btn" on:click={openReplyModal}>
+              💬 Antworten
+            </button>
+          </div>
+        {/if}
       </div>
       {/key}
     {/if}
@@ -891,6 +899,15 @@
   :global([data-theme="dark"]) .bubble-sent { background: rgba(34,197,94,0.08); }
 
   .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
+
+  /* Reply CTA at bottom of thread */
+  .reply-cta { display: flex; justify-content: center; padding: 20px 0 8px; }
+  .reply-cta-btn {
+    background: var(--primary); color: white; border: none; border-radius: 10px;
+    padding: 12px 32px; font-size: 14px; font-weight: 700; cursor: pointer;
+    font-family: var(--font); transition: all 0.15s; box-shadow: 0 2px 8px rgba(15,46,147,0.2);
+  }
+  .reply-cta-btn:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,46,147,0.3); }
 
   /* ===== REPLY MODAL (Bug 1 Fix) ===== */
   .reply-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
