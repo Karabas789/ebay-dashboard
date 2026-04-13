@@ -905,13 +905,13 @@
     flex-shrink: 0; background: var(--surface); justify-content: center;
   }
   .reply-bar-btn {
-    flex: none; background: linear-gradient(135deg, #6c63ff, #a855f7); color: white; border: none; border-radius: 10px;
+    flex: none; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none; border-radius: 10px;
     padding: 14px 140px; font-size: 15px; font-weight: 700; cursor: pointer;
     font-family: var(--font); transition: all 0.15s; box-shadow: 0 2px 10px rgba(168,85,247,0.3);
   }
   .reply-bar-btn:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); box-shadow: 0 4px 14px rgba(168,85,247,0.4); }
   .reply-bar-ki {
-    flex: none; background: linear-gradient(135deg, #6c63ff, #a855f7); color: white; border: none;
+    flex: none; background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border: none;
     border-radius: 10px; padding: 14px 140px; font-size: 14px; font-weight: 700;
     cursor: pointer; font-family: var(--font); transition: all 0.15s; white-space: nowrap;
     box-shadow: 0 2px 10px rgba(108,99,255,0.3);
