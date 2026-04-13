@@ -10,6 +10,8 @@
   let searchQuery = $state('');
   let loading = $state(true);
   let selectedOrderIds = $state(new Set());
+  let currentPage = $state(1);
+  let perPage = $state(25);
 
   let showTrackingModal = $state(false);
   let trackingOrderId = $state(null);
@@ -124,6 +126,15 @@
   let allFilteredSelected = $derived(
     filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.has(String(o.order_id)))
   );
+
+  // Pagination
+  let totalPages = $derived(Math.max(1, Math.ceil(filteredOrders.length / perPage)));
+  let paginatedOrders = $derived.by(() => {
+    const start = (currentPage - 1) * perPage;
+    return filteredOrders.slice(start, start + perPage);
+  });
+  // Reset auf Seite 1 wenn Filter/Suche sich ändert
+  $effect(() => { ordersFilter; searchQuery; currentPage = 1; });
 
   onMount(() => { loadBestellungen(); loadProdukte(); });
 
@@ -434,62 +445,49 @@
       {:else if filteredOrders.length === 0}
         <tr><td colspan="9" class="table-empty">{searchQuery ? 'Keine Ergebnisse für „' + searchQuery + '"' : 'Keine Bestellungen gefunden'}</td></tr>
       {:else}
-        {#each filteredOrders as o (o.order_id)}
+        {#each paginatedOrders as o (o.order_id)}
           {@const isSelected = selectedOrderIds.has(String(o.order_id))}
           {@const trackUrl = getTrackingUrl(o.tracking_nummer, o.versanddienstleister)}
-          {@const bild = getOrderImage(o)}
           {@const isSingle = o.artikel_count === 1}
           {@const firstItem = o.items[0]}
           <tr class:selected={isSelected}>
-            <td style="text-align:center;">
+            <td style="text-align:center;vertical-align:top;padding-top:16px;">
               <input type="checkbox" checked={isSelected} onchange={(e) => toggleOrderSelect(o.order_id, e.target.checked)} style="cursor:pointer;width:15px;height:15px;" />
             </td>
-            <td class="col-date">{formatDate(o.bestelldatum || o.erstellt_am)}</td>
-            <td>
+            <td class="col-date" style="vertical-align:top;padding-top:16px;">{formatDate(o.bestelldatum || o.erstellt_am)}</td>
+            <td style="vertical-align:top;padding-top:16px;">
               <a href="#" class="order-id-link" onclick={(e) => { e.preventDefault(); openDetailModal(o); }}>{o.order_id}</a>
             </td>
-            <td>
+            <td style="vertical-align:top;padding-top:16px;">
               <div class="buyer-name">{o.buyer_name || '—'}</div>
               {#if o.buyer_ort || o.buyer_land}<div class="buyer-location">{o.buyer_ort || ''} {o.buyer_land || ''}</div>{/if}
             </td>
             <td class="col-artikel">
-              <div style="display:flex;align-items:center;gap:8px;">
-                {#if bild}
-                  <img src={bild} alt="" style="width:72px;height:72px;object-fit:contain;border-radius:6px;border:1px solid var(--border);background:var(--surface2);flex-shrink:0;" onerror={(e) => { e.currentTarget.style.display='none'; }} />
-                {/if}
-                <div style="min-width:0;">
-                  {#if isSingle}
-                    <div class="artikel-name">
-                      {#if firstItem.ebay_artikel_id}
-                        <a href="https://www.ebay.de/itm/{firstItem.ebay_artikel_id}" target="_blank" class="artikel-ebay-link">{firstItem.artikel_name || '—'}</a>
-                      {:else}{firstItem.artikel_name || '—'}{/if}
-                    </div>
-                    {#if firstItem.sold_sku}<div class="artikel-sku">SKU: {firstItem.sold_sku}</div>{/if}
-                  {:else}
-                    <div class="artikel-name">
-                      <a href="#" class="artikel-multi-link" onclick={(e) => { e.preventDefault(); openDetailModal(o); }}>
-                        📦 {o.artikel_count} Artikel
-                      </a>
-                    </div>
-                    <div class="artikel-multi-preview">
-                      {o.items.map(i => kurzName(i)).join(' · ')}
-                    </div>
-                    {#if o.items.some(i => i.sold_sku)}
-                      <div class="artikel-multi-skus">
-                        SKU: {o.items.filter(i => i.sold_sku).map(i => i.sold_sku).join(', ')}
-                      </div>
-                    {/if}
+              {#each o.items as item, idx}
+                {@const itemBild = getItemImage(item)}
+                {#if idx > 0}<div class="artikel-divider-row"></div>{/if}
+                <div class="artikel-item-row" class:clickable={!isSingle} onclick={() => !isSingle && openDetailModal(o)}>
+                  {#if itemBild}
+                    <img src={itemBild} alt="" class="artikel-item-img" onerror={(e) => { e.currentTarget.style.display='none'; }} />
                   {/if}
+                  <div style="min-width:0;flex:1;">
+                    <div class="artikel-name">
+                      {#if item.ebay_artikel_id}
+                        <a href="https://www.ebay.de/itm/{item.ebay_artikel_id}" target="_blank" class="artikel-ebay-link">{item.artikel_name || '—'}</a>
+                      {:else}{item.artikel_name || '—'}{/if}
+                    </div>
+                    {#if item.sold_sku}<div class="artikel-sku">SKU: {item.sold_sku}</div>{/if}
+                  </div>
                 </div>
-              </div>
+              {/each}
             </td>
-            <td style="text-align:center;">{o.gesamt_menge}</td>
-            <td style="text-align:right;font-weight:700;">{o.gesamt_summe.toFixed(2)} €</td>
-            <td>
+            <td style="text-align:center;vertical-align:top;padding-top:16px;">{o.gesamt_menge}</td>
+            <td style="text-align:right;font-weight:700;vertical-align:top;padding-top:16px;">{o.gesamt_summe.toFixed(2)} €</td>
+            <td style="vertical-align:top;padding-top:16px;">
               <span class="badge badge-{o.status}">{statusLabel(o.status)}</span>
               {#if o.hat_rechnung}<span class="badge badge-rechnung" title="Rechnung vorhanden">🧾 RE</span>{/if}
             </td>
-            <td class="col-tracking">
+            <td class="col-tracking" style="vertical-align:top;padding-top:16px;">
               {#if o.tracking_nummer}
                 {#if trackUrl}
                   <a href={trackUrl} target="_blank" class="tracking-link">📦 {o.tracking_nummer}</a>
@@ -509,6 +507,37 @@
     </tbody>
   </table>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════ PAGINATION -->
+{#if !loading && filteredOrders.length > 0}
+  <div class="pagination-bar">
+    <div class="pagination-info">
+      {filteredOrders.length} Bestellungen · Seite {currentPage} von {totalPages}
+    </div>
+    <div class="pagination-controls">
+      <div class="pagination-perpage">
+        <span class="pagination-label">Pro Seite:</span>
+        {#each [10, 25, 50, 100] as n}
+          <button class="pp-btn" class:active={perPage === n} onclick={() => { perPage = n; currentPage = 1; }}>{n}</button>
+        {/each}
+      </div>
+      <div class="pagination-nav">
+        <button class="pn-btn" onclick={() => currentPage = 1} disabled={currentPage <= 1}>«</button>
+        <button class="pn-btn" onclick={() => currentPage--} disabled={currentPage <= 1}>‹</button>
+        {#each Array.from({length: Math.min(totalPages, 7)}, (_, i) => {
+          if (totalPages <= 7) return i + 1;
+          if (currentPage <= 4) return i + 1;
+          if (currentPage >= totalPages - 3) return totalPages - 6 + i;
+          return currentPage - 3 + i;
+        }) as page}
+          <button class="pn-btn" class:active={currentPage === page} onclick={() => currentPage = page}>{page}</button>
+        {/each}
+        <button class="pn-btn" onclick={() => currentPage++} disabled={currentPage >= totalPages}>›</button>
+        <button class="pn-btn" onclick={() => currentPage = totalPages} disabled={currentPage >= totalPages}>»</button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- ═══════════════════════════════════════════════════════ TRACKING MODAL -->
 {#if showTrackingModal}
@@ -810,15 +839,16 @@
   .order-id-link:hover { text-decoration: underline; }
   .buyer-name { font-weight: 600; }
   .buyer-location { font-size: 11px; color: var(--text3); margin-top: 2px; }
-  .col-artikel { max-width: 360px; min-width: 200px; }
-  .artikel-name { font-size: 13px; }
-  .artikel-sku { font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 3px; font-family: monospace; }
+  .col-artikel { min-width: 240px; padding-top: 8px !important; padding-bottom: 8px !important; }
+  .artikel-item-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .artikel-item-row.clickable { cursor: pointer; }
+  .artikel-item-row.clickable:hover .artikel-ebay-link { color: var(--primary); }
+  .artikel-item-img { width: 64px; height: 64px; object-fit: contain; border-radius: 5px; border: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+  .artikel-divider-row { height: 1px; background: var(--border); margin: 2px 0; opacity: 0.5; }
+  .artikel-name { font-size: 13px; line-height: 1.35; }
+  .artikel-sku { font-size: 10px; color: var(--primary); font-weight: 600; margin-top: 2px; font-family: monospace; }
   .artikel-ebay-link { color: var(--text); text-decoration: none; }
   .artikel-ebay-link:hover { color: var(--primary); text-decoration: underline; }
-  .artikel-multi-link { color: var(--primary); font-weight: 700; text-decoration: none; cursor: pointer; }
-  .artikel-multi-link:hover { text-decoration: underline; }
-  .artikel-multi-preview { font-size: 11px; color: var(--text3); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
-  .artikel-multi-skus { font-size: 10px; color: var(--primary); font-family: monospace; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; opacity: 0.7; }
   .col-tracking { min-width: 140px; }
   .tracking-link { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 12px; display: block; }
   .tracking-link:hover { text-decoration: underline; }
@@ -926,6 +956,20 @@
   .dd-label { font-size: 13px; font-weight: 700; }
   .dd-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
 
+  /* ── Pagination ───────────────────────────────────────── */
+  .pagination-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; flex-wrap: wrap; gap: 10px; }
+  .pagination-info { font-size: 12px; color: var(--text2); font-weight: 600; }
+  .pagination-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .pagination-perpage { display: flex; align-items: center; gap: 4px; }
+  .pagination-label { font-size: 12px; color: var(--text3); margin-right: 4px; }
+  .pp-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+  .pp-btn:hover, .pp-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+  .pagination-nav { display: flex; align-items: center; gap: 3px; }
+  .pn-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+  .pn-btn:hover:not(:disabled) { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+  .pn-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+  .pn-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
   /* ── Spinner & Toast ────────────────────────────────────── */
   .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
   .spinner-sm { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
@@ -949,5 +993,7 @@
     .artikel-cols-header, .artikel-item { grid-template-columns: 1fr 50px 70px 70px; }
     .ai-bild, .ai-bild-ph { width: 44px; height: 44px; }
     .detail-bottom-cards { grid-template-columns: 1fr; }
+    .pagination-bar { flex-direction: column; align-items: flex-start; }
+    .pagination-controls { width: 100%; justify-content: space-between; }
   }
 </style>
