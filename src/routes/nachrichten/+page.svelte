@@ -35,6 +35,13 @@
   let reviseInput = '';
   let reviseSending = false;
 
+  // Multi-Select State
+  let multiSelectMode = false;
+  let selectedIds = new Set();
+  let showBulkMoveModal = false;
+
+  $: selectedCount = selectedIds.size;
+
   const folderLabels = {
     alle: 'Posteingang', mitglieder: 'Mitglieder', 'ebay-system': 'eBay-System',
     bearbeitet: 'Gesendet', archiv: 'Archiv', geloescht: 'Gelöscht'
@@ -387,6 +394,86 @@
     } catch(e) { showToast('Fehler', 'error'); }
   }
 
+  // ---- MULTI-SELECT / BULK ACTIONS ----
+  function toggleMultiSelect() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) { selectedIds = new Set(); }
+    selectedMsgId = null;
+  }
+
+  function toggleSelect(id, e) {
+    e?.stopPropagation();
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    selectedIds = next;
+  }
+
+  function selectAll() {
+    if (selectedIds.size === filteredMessages.length) {
+      selectedIds = new Set();
+    } else {
+      selectedIds = new Set(filteredMessages.map(m => m.id));
+    }
+  }
+
+  async function bulkMoveToFolder(target) {
+    if (selectedIds.size === 0) return;
+    showBulkMoveModal = false;
+    const ids = [...selectedIds];
+    let success = 0;
+    for (const id of ids) {
+      try {
+        const data = await apiCall('/nachricht-ordner', { action: 'move', user_id: user?.id, message_id: id, target: target });
+        if (data.success) success++;
+      } catch(e) {}
+    }
+    if (success > 0) {
+      showToast(success + ' Nachricht' + (success > 1 ? 'en' : '') + ' verschoben ✓', 'success');
+      selectedIds = new Set(); selectedMsgId = null;
+      await loadNachrichten();
+    } else { showToast('Fehler beim Verschieben', 'error'); }
+  }
+
+  async function bulkDelete() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    confirmModal = { open: true, title: count + ' Nachrichten löschen', message: 'Möchtest du ' + count + ' Nachricht' + (count > 1 ? 'en' : '') + ' wirklich löschen?', variant: 'danger', onConfirm: async () => {
+      const ids = [...selectedIds];
+      let success = 0;
+      for (const id of ids) {
+        try {
+          const data = await apiCall('/nachricht-loeschen', { id, user_id: user?.id });
+          if (data.success) {
+            deletedIds = [...deletedIds, id];
+            success++;
+          }
+        } catch(e) {}
+      }
+      if (success > 0) {
+        sessionStorage.setItem('deleted_ids', JSON.stringify(deletedIds));
+        allMessages = allMessages.filter(m => !ids.includes(m.id));
+        selectedIds = new Set(); selectedMsgId = null;
+        showToast(success + ' gelöscht ✓', 'success');
+      }
+    }};
+  }
+
+  async function bulkMarkRead(setRead) {
+    if (selectedIds.size === 0) return;
+    const ids = [...selectedIds];
+    try {
+      const data = await apiCall('/nachricht-ordner', { action: 'read', user_id: user?.id, message_ids: ids, set_read: setRead });
+      if (data.success) {
+        ids.forEach(id => {
+          const m = allMessages.find(x => x.id === id);
+          if (m) m.is_read = setRead;
+        });
+        allMessages = [...allMessages];
+        showToast((setRead ? 'Als gelesen' : 'Als ungelesen') + ' markiert ✓', 'success');
+      }
+    } catch(e) { showToast('Fehler', 'error'); }
+  }
+
   async function markAsRead(msgId) {
     const msg = allMessages.find(m => m.id === msgId);
     if (!msg || msg.is_read) return;
@@ -595,7 +682,27 @@
     <div class="list-top">
       <input class="list-search" placeholder="Suchen..." bind:value={searchQuery} />
       <span class="list-num">{filteredMessages.length}</span>
+      <button class="list-select-toggle" class:list-select-active={multiSelectMode} on:click={toggleMultiSelect} title="Mehrfachauswahl">
+        ☑
+      </button>
     </div>
+
+    <!-- Bulk action bar -->
+    {#if multiSelectMode}
+      <div class="bulk-bar">
+        <label class="bulk-check-all">
+          <input type="checkbox" checked={selectedIds.size === filteredMessages.length && filteredMessages.length > 0} on:change={selectAll} />
+          <span>Alle</span>
+        </label>
+        <span class="bulk-count">{selectedCount} ausgewählt</span>
+        <div class="bulk-actions">
+          <button class="bulk-btn" on:click={() => bulkMarkRead(true)} disabled={selectedCount === 0} title="Gelesen">✓</button>
+          <button class="bulk-btn" on:click={() => { showBulkMoveModal = true; }} disabled={selectedCount === 0} title="Verschieben">📂</button>
+          <button class="bulk-btn bulk-btn-danger" on:click={bulkDelete} disabled={selectedCount === 0} title="Löschen">🗑️</button>
+        </div>
+      </div>
+    {/if}
+
     <div class="list-scroll">
       {#if loading}
         <div class="loading"><div class="spinner"></div> Lade...</div>
@@ -604,15 +711,22 @@
       {:else}
         {#each filteredMessages as m}
           {@const name = m.direction === 'outgoing' ? (m.recipient||m.sender||'—') : (m.sender||'—')}
-          <button class="li" class:li-active={m.id === selectedMsgId} class:li-unread={m.is_read === false} on:click={() => { selectedMsgId = m.id; markAsRead(m.id); }}>
-            <div class="li-top">
-              <span class="li-name">{name}</span>
-              <span class="li-time">{formatDate(m.received_at)}</span>
-            </div>
-            <div class="li-preview">{stripPreview(m.body||'')}</div>
-            <div class="li-tags">
-              <span class="t t-{m.status}">{m.status === 'bearbeitet' ? 'gesendet' : m.status}</span>
-              {#if m.ai_category}<span class="t t-{m.ai_category.toLowerCase()}">{m.ai_category}</span>{/if}
+          <button class="li" class:li-active={m.id === selectedMsgId} class:li-selected={selectedIds.has(m.id)} class:li-unread={m.is_read === false} on:click={() => { if (multiSelectMode) { toggleSelect(m.id); } else { selectedMsgId = m.id; markAsRead(m.id); } }}>
+            {#if multiSelectMode}
+              <div class="li-checkbox" on:click|stopPropagation={() => toggleSelect(m.id)}>
+                <input type="checkbox" checked={selectedIds.has(m.id)} tabindex="-1" />
+              </div>
+            {/if}
+            <div class="li-content">
+              <div class="li-top">
+                <span class="li-name">{name}</span>
+                <span class="li-time">{formatDate(m.received_at)}</span>
+              </div>
+              <div class="li-preview">{stripPreview(m.body||'')}</div>
+              <div class="li-tags">
+                <span class="t t-{m.status}">{m.status === 'bearbeitet' ? 'gesendet' : m.status}</span>
+                {#if m.ai_category}<span class="t t-{m.ai_category.toLowerCase()}">{m.ai_category}</span>{/if}
+              </div>
             </div>
           </button>
         {/each}
@@ -754,6 +868,31 @@
   </div>
 {/if}
 
+<!-- MODAL: Bulk verschieben -->
+{#if showBulkMoveModal}
+  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <div class="move-overlay" on:click|self={() => showBulkMoveModal = false}>
+    <div class="move-box">
+      <div style="font-size:16px;font-weight:800;margin-bottom:6px;">📂 {selectedCount} Nachrichten verschieben</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:20px;">Zielordner auswählen</p>
+      {#each moveFolders as f}
+        <button class="move-btn" class:move-btn-danger={f.danger} on:click={() => bulkMoveToFolder(f.key)}>
+          <span style="font-size:20px;">{f.icon}</span> {f.label}
+        </button>
+      {/each}
+      {#if customFolders.length > 0}
+        <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+        {#each customFolders as cf}
+          <button class="move-btn" on:click={() => bulkMoveToFolder(cf.id)}>
+            <span style="font-size:20px;">{cf.icon}</span> {cf.name}
+          </button>
+        {/each}
+      {/if}
+      <button class="move-cancel" on:click={() => showBulkMoveModal = false}>Abbrechen</button>
+    </div>
+  </div>
+{/if}
+
 <!-- MODAL: Nachricht verschieben -->
 {#if showMoveModal}
   <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -854,12 +993,29 @@
   .list-search { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
   .list-search:focus { border-color: var(--primary); }
   .list-num { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
+  .list-select-toggle { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 14px; cursor: pointer; color: var(--text3); transition: all 0.15s; line-height: 1; }
+  .list-select-toggle:hover { border-color: #a855f7; color: #a855f7; }
+  .list-select-active { background: rgba(168,85,247,0.1); border-color: #a855f7; color: #a855f7; }
+  .bulk-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: rgba(168,85,247,0.04); flex-shrink: 0; }
+  .bulk-check-all { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); cursor: pointer; font-weight: 600; }
+  .bulk-check-all input { width: 15px; height: 15px; accent-color: #a855f7; cursor: pointer; }
+  .bulk-count { font-size: 11px; color: #a855f7; font-weight: 700; flex: 1; }
+  .bulk-actions { display: flex; gap: 4px; }
+  .bulk-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer; transition: all 0.12s; }
+  .bulk-btn:hover:not(:disabled) { border-color: #a855f7; background: rgba(168,85,247,0.08); }
+  .bulk-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .bulk-btn-danger:hover:not(:disabled) { border-color: var(--danger); background: rgba(239,68,68,0.06); }
   .list-scroll { flex: 1; overflow-y: auto; }
 
-  .li { display: block; width: 100%; padding: 12px 16px; border: none; outline: none; border-bottom: 1px solid var(--border); cursor: pointer; background: none; text-align: left; font-family: var(--font); transition: background 0.1s; }
+  .li { display: flex; width: 100%; padding: 12px 16px; border: none; outline: none; border-bottom: 1px solid var(--border); cursor: pointer; background: none; text-align: left; font-family: var(--font); transition: background 0.1s; gap: 10px; align-items: flex-start; }
   .li:hover { background: var(--surface2); }
   .li-active { background: var(--border); }
+  .li-selected { background: rgba(168,85,247,0.06); }
   :global([data-theme="dark"]) .li-active { background: rgba(255,255,255,0.05); border-left-color: #fff; }
+  :global([data-theme="dark"]) .li-selected { background: rgba(168,85,247,0.12); }
+  .li-content { flex: 1; min-width: 0; }
+  .li-checkbox { flex-shrink: 0; padding-top: 2px; }
+  .li-checkbox input { width: 16px; height: 16px; accent-color: #a855f7; cursor: pointer; }
   .li-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
   .li-name { font-size: 13px; font-weight: 700; color: var(--text); }
   .li-unread .li-name { color: var(--primary); }
@@ -917,6 +1073,7 @@
     box-shadow: 0 2px 10px rgba(108,99,255,0.3);
   }
   .reply-bar-ki:hover { background: linear-gradient(135deg, #5b52ff, #9333ea); box-shadow: 0 4px 14px rgba(108,99,255,0.4); }
+
 
   /* ===== REPLY MODAL (Bug 1 Fix) ===== */
   .reply-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
