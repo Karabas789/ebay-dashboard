@@ -638,9 +638,6 @@
           <div class="d-btns">
             <button class="d-btn" on:click={() => { if(selectedMsg) toggleRead(selectedMsg.id); }} title="Gelesen/Ungelesen">{selectedMsg?.is_read ? "✉️" : "📨"}</button>
             <button class="d-btn" on:click={() => showMoveModal = true}>📂 Verschieben</button>
-            {#if !isOutgoingOnly}
-              <button class="d-btn d-btn-reply" on:click={openReplyModal}>💬 Antworten</button>
-            {/if}
             <button class="d-btn d-btn-danger" on:click={deleteMessage}>🗑️ Löschen</button>
           </div>
         </div>
@@ -678,16 +675,20 @@
             <div class="bubble bubble-sent">{@html renderMemberText(t.ai_reply)}</div>
           {/if}
         {/each}
-        <!-- Prominent reply button at bottom of thread -->
-        {#if !isOutgoingOnly}
-          <div class="reply-cta">
-            <button class="reply-cta-btn" on:click={openReplyModal}>
-              💬 Antworten
-            </button>
-          </div>
-        {/if}
       </div>
       {/key}
+
+      <!-- Sticky reply bar at bottom — always visible -->
+      {#if !isOutgoingOnly}
+        <div class="reply-bar">
+          <button class="reply-bar-btn" on:click={openReplyModal}>
+            💬 Antworten
+          </button>
+          <button class="reply-bar-ki" on:click={() => { openReplyModal(); setTimeout(generateKiReply, 100); }}>
+            ✨ KI-Antwort
+          </button>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>
@@ -882,8 +883,6 @@
   .d-btns { display: flex; gap: 6px; flex-shrink: 0; }
   .d-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font); transition: all 0.15s; }
   .d-btn:hover { border-color: var(--primary); color: var(--primary); }
-  .d-btn-reply { background: var(--primary); color: white !important; border-color: var(--primary); }
-  .d-btn-reply:hover { background: var(--primary-dark); border-color: var(--primary-dark); color: white !important; }
   .d-btn-danger { border-color: #fca5a5; color: var(--danger); }
   .d-btn-danger:hover { background: #fef2f2; border-color: var(--danger); }
   :global([data-theme="dark"]) .d-btn-danger:hover { background: rgba(239,68,68,0.1); }
@@ -900,14 +899,23 @@
 
   .ebay-iframe { width: 100%; height: 300px; border: none; border-radius: 8px; background: #fff; }
 
-  /* Reply CTA at bottom of thread */
-  .reply-cta { display: flex; justify-content: center; padding: 20px 0 8px; }
-  .reply-cta-btn {
-    background: var(--primary); color: white; border: none; border-radius: 10px;
-    padding: 12px 32px; font-size: 14px; font-weight: 700; cursor: pointer;
-    font-family: var(--font); transition: all 0.15s; box-shadow: 0 2px 8px rgba(15,46,147,0.2);
+  /* Sticky reply bar at bottom of detail panel */
+  .reply-bar {
+    display: flex; gap: 10px; padding: 12px 24px; border-top: 1px solid var(--border);
+    flex-shrink: 0; background: var(--surface);
   }
-  .reply-cta-btn:hover { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,46,147,0.3); }
+  .reply-bar-btn {
+    flex: 1; background: var(--primary); color: white; border: none; border-radius: 10px;
+    padding: 12px 24px; font-size: 14px; font-weight: 700; cursor: pointer;
+    font-family: var(--font); transition: all 0.15s;
+  }
+  .reply-bar-btn:hover { background: var(--primary-dark); }
+  .reply-bar-ki {
+    background: linear-gradient(135deg, #6c63ff, #a855f7); color: white; border: none;
+    border-radius: 10px; padding: 12px 20px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: var(--font); transition: all 0.15s; white-space: nowrap;
+  }
+  .reply-bar-ki:hover { opacity: 0.9; }
 
   /* ===== REPLY MODAL (Bug 1 Fix) ===== */
   .reply-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
