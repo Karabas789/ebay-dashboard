@@ -683,8 +683,8 @@
       <input class="list-search" placeholder="Suchen..." bind:value={searchQuery} />
       <span class="list-num">{filteredMessages.length}</span>
       <button class="list-select-toggle" class:list-select-active={multiSelectMode} on:click={toggleMultiSelect} title="Mehrfachauswahl">
-        ☑
-      </button>
+      {multiSelectMode ? '✕ Fertig' : '☑ Auswahl'}
+    </button>
     </div>
 
     <!-- Bulk action bar -->
@@ -993,9 +993,10 @@
   .list-search { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
   .list-search:focus { border-color: var(--primary); }
   .list-num { font-size: 10px; font-weight: 700; color: var(--text3); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
-  .list-select-toggle { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-size: 14px; cursor: pointer; color: var(--text3); transition: all 0.15s; line-height: 1; }
-  .list-select-toggle:hover { border-color: #a855f7; color: #a855f7; }
-  .list-select-active { background: rgba(168,85,247,0.1); border-color: #a855f7; color: #a855f7; }
+  .list-select-toggle { background: none; border: 1.5px solid #a855f7; border-radius: 8px; padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer; color: #a855f7; transition: all 0.15s; line-height: 1; white-space: nowrap; }
+  .list-select-toggle:hover { background: rgba(168,85,247,0.12); }
+  .list-select-active { background: linear-gradient(135deg, #7c3aed, #a855f7); color: white; border-color: transparent; }
+  .list-select-active:hover { background: linear-gradient(135deg, #6d28d9, #9333ea); }
   .bulk-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: rgba(168,85,247,0.04); flex-shrink: 0; }
   .bulk-check-all { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); cursor: pointer; font-weight: 600; }
   .bulk-check-all input { width: 15px; height: 15px; accent-color: #a855f7; cursor: pointer; }
