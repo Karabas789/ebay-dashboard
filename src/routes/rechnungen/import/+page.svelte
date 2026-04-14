@@ -400,7 +400,7 @@ WOO-1002;2026-04-11;Schmidt;Anna;Hauptstr. 5;80331;München;DE;anna@example.com;
 </div>
 
 <style>
-  .page-container { padding: 24px; max-width: 1200px; }
+  .page-container { padding: 24px; }
   .page-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
   .page-title { font-size:1.3rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.85rem; color:var(--text2); margin-top:2px; }
