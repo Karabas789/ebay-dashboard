@@ -1236,5 +1236,100 @@ apiCall('/shopify-orders-laden',     { user_id, connection_id, status?: 'unfulfi
 8. WooCommerce-Tab auf Import-Seite aktivieren
 9. Shopify analog zu WooCommerce
 
-    
-Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
+---
+
+## 17. Offene Baustellen & bekannte Fehler (Stand 15.04.2026)
+
+### 17.1 WF-IMPORT-01 — Config laden Node: falsche Spaltennamen
+
+**Problem:** Der n8n-Workflow `WF-IMPORT-01 Shop Import Rechnung` verwendet im Node „Config laden" Spaltennamen die nicht mit der echten DB übereinstimmen.
+
+**Fehler die aufgetreten sind:**
+- `column rc.re_stellen does not exist` → wurde per ALTER TABLE behoben
+- `column rc.auto_einstellungen does not exist` → wurde per ALTER TABLE behoben
+- `column f.adresse does not exist` → PostgreSQL schlägt `f.strasse` vor
+
+**Nächster Schritt:**
+1. SQL ausführen um echte Spalten zu sehen:
+```sql
+SELECT column_name FROM information_schema.columns 
+WHERE table_name = 'user_firmendaten' 
+ORDER BY ordinal_position;
+
+SELECT column_name FROM information_schema.columns 
+WHERE table_name = 'user_rechnung_config' 
+ORDER BY ordinal_position;
+```
+2. Im n8n-Workflow `WF-IMPORT-01` den Node **„Config laden"** öffnen
+3. SQL-Query anpassen — `f.adresse` durch den echten Spaltennamen ersetzen
+4. Alle anderen Spalten ebenfalls gegen die echten DB-Spalten prüfen
+
+**Wichtig:** Der bestehende Workflow `WF-RE-01` (`/rechnung-erstellen`) funktioniert bereits korrekt — dessen Config-Query als Referenz nehmen und in `WF-IMPORT-01` übernehmen.
+
+---
+
+### 17.2 CSV-Import — Käufer-Mapping Hostinger
+
+**Problem:** Bei Hostinger-CSV hat `Rechnungsempfänger` Vor- und Nachname zusammen (z.B. `Vitali Dubs`). Das Feld wird aktuell komplett in `nachname` gemappt.
+
+**Nächster Schritt:** Im Node „Orders parsen" in `WF-IMPORT-01` den Namen splitten:
+```javascript
+const vollname = order.kaeufer.nachname || '';
+const teile = vollname.trim().split(' ');
+order.kaeufer.vorname = teile.slice(0, -1).join(' ');
+order.kaeufer.nachname = teile[teile.length - 1] || vollname;
+```
+
+---
+
+### 17.3 Bereits erledigte SQL-Migrationen
+
+```sql
+-- Ausgeführt am 15.04.2026:
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'ebay';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS external_order_id VARCHAR(100);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shop_name VARCHAR(100);
+
+CREATE TABLE IF NOT EXISTS user_shop_connections (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id),
+  shop_type VARCHAR(50) NOT NULL,
+  shop_name VARCHAR(100) NOT NULL,
+  shop_url VARCHAR(255),
+  api_key VARCHAR(255),
+  api_secret VARCHAR(255),
+  access_token VARCHAR(500),
+  extra_config JSONB,
+  aktiv BOOLEAN DEFAULT true,
+  erstellt_am TIMESTAMP DEFAULT NOW()
+);
+
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS re_stellen INT DEFAULT 5;
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_stellen INT DEFAULT 5;
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS jahr INT DEFAULT 2026;
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS auto_einstellungen JSONB;
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS email_vorlage TEXT;
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sprache VARCHAR(5) DEFAULT 'de';
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS waehrung VARCHAR(5) DEFAULT 'EUR';
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_praefix VARCHAR(20) DEFAULT 'SR';
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_trennzeichen VARCHAR(5) DEFAULT '-';
+ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_startnummer INT DEFAULT 1;
+```
+
+---
+
+### 17.4 Neue Dateien (seit 15.04.2026)
+
+| Datei | Status |
+|---|---|
+| `src/routes/rechnungen/import/+page.svelte` | ✅ Fertig — CSV-Import mit Auto-Mapping, Hostinger-Preset, Fallback-Werte |
+| `src/routes/einstellungen/shops/+page.svelte` | ✅ Fertig — Shop-Verbindungen verwalten |
+
+### Neue n8n-Workflows
+
+| ID | Endpoint | Status |
+|---|---|---|
+| WF-IMPORT-01 | POST `/shop-import-rechnung` | ⚠️ Config-Query fehlerhaft — siehe 17.1 |
+| WF-SHOPS-01 | POST `/shop-connections-laden` | ✅ Aktiv |
+| WF-SHOPS-02 | POST `/shop-connection-speichern` | ✅ Aktiv |
+| WF-SHOPS-03 | POST `/shop-connection-loeschen` | ✅ Aktiv |   
