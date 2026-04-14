@@ -1037,5 +1037,204 @@ const tiles = [
   { icon: '🖼️', title: 'Produktbilder',   href: '/einstellungen/bilder' },
 ];
 ```
+---
 
+## 16. Multi-Shop Rechnungssystem — Erweiterung
+
+### Ziel
+Rechnungserstellung nicht nur für eBay, sondern für **alle gängigen Online-Shops**. Das bestehende Rechnungssystem (Gotenberg + SMTP + `invoices`-Tabelle) wird 1:1 wiederverwendet. Neue Shops = nur neue "Connectoren" (CSV, API-Anbindungen).
+
+---
+
+### DB-Erweiterung (einmalig ausführen)
+
+```sql
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'ebay';
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS external_order_id VARCHAR(100);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shop_name VARCHAR(100);
+```
+
+`source`-Werte: `'ebay'` | `'csv'` | `'woocommerce'` | `'shopify'` | `'shopware'` | `'etsy'` | `'amazon'`
+
+---
+
+### Roadmap (Schritt für Schritt)
+
+| Phase | Connector | Status | Priorität |
+|---|---|---|---|
+| **1** | **CSV-Import** (universell) | ⏳ Nächster Schritt | 🔴 Hoch |
+| **2** | **WooCommerce** REST API | ⏳ Geplant | 🔴 Hoch |
+| **3** | **Shopify** Admin API | ⏳ Geplant | 🔴 Hoch |
+| **4** | **Shopware 6** Admin REST API | ⏳ Geplant | 🟡 Mittel |
+| **5** | **Etsy** Open API v3 | ⏳ Geplant | 🟡 Mittel |
+| **6** | **Amazon** SP-API | ⏳ Geplant | 🟠 Aufwändig |
+| **7** | **Billbee / JTL** | ⏳ Geplant | 🟡 Mittel |
+
+---
+
+### Phase 1: CSV-Import
+
+#### Dashboard-Seite
+- **Route:** `/rechnungen/import`
+- **Erreichbar** über Button auf `/rechnungen` ("📥 Importieren")
+
+#### Features der Import-Seite
+1. **Shop-Auswahl-Tabs** (vorbereitet für spätere Phasen): CSV | WooCommerce | Shopify | …
+2. **CSV Upload** — Drag & Drop + Datei-Dialog
+3. **Spalten-Mapping** — User wählt welche CSV-Spalte welchem Feld entspricht (flexibel für verschiedene Shop-Exporte)
+4. **Vorschau-Tabelle** — erkannte Bestellungen vor dem Import
+5. **„Rechnungen erstellen"-Button** → sendet an n8n-Workflow `WF-IMPORT-01`
+6. **Fortschrittsanzeige** + Fehlerprotokoll pro Zeile
+
+#### CSV-Standardformat (eigenes Export-Format)
+```
+bestell_id, datum, vorname, nachname, strasse, plz, ort, land,
+email, artikel, menge, einzelpreis, mwst_satz
+```
+
+#### n8n-Workflow: `WF-IMPORT-01`
+- **Endpoint:** POST `/shop-import-rechnung`
+- **Input:** Array von geparsten Bestellungen + `user_id` + `source`
+- **Ablauf:**
+  1. Loop über alle Bestellungen
+  2. Rechnungsnummer vergeben (gleiche Logik wie eBay)
+  3. Gotenberg PDF generieren
+  4. In `invoices`-Tabelle speichern (mit `source`, `external_order_id`, `shop_name`)
+  5. Falls E-Mail vorhanden + `auto_email` aktiv → SMTP senden
+- **Error-Branch:** Fehlerhafte Zeilen loggen, Rest weiterlaufen lassen
+
+---
+
+### Phase 2: WooCommerce
+
+#### Authentifizierung
+- **Methode:** HTTP Basic Auth (Consumer Key + Consumer Secret)
+- **Endpunkt:** `{shop_url}/wp-json/wc/v3/orders`
+- **Felder:** `?status=processing&per_page=50&page=1`
+
+#### DB-Tabelle für Shop-Credentials
+```sql
+CREATE TABLE IF NOT EXISTS user_shop_connections (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id),
+  shop_type VARCHAR(50),        -- 'woocommerce' | 'shopify' | 'shopware' | 'etsy' | 'amazon'
+  shop_name VARCHAR(100),       -- Anzeigename (z.B. "Mein WooCommerce Shop")
+  shop_url VARCHAR(255),        -- Basis-URL des Shops
+  api_key VARCHAR(255),
+  api_secret VARCHAR(255),
+  access_token VARCHAR(500),    -- für OAuth-Shops (Shopify, Etsy)
+  extra_config JSONB,           -- Shop-spezifische Zusatzfelder
+  aktiv BOOLEAN DEFAULT true,
+  erstellt_am TIMESTAMP DEFAULT NOW()
+);
+```
+
+#### n8n-Workflow: `WF-WOO-01`
+- **Endpoint:** POST `/woocommerce-orders-laden`
+- **Ablauf:** Credentials aus DB → WooCommerce API → Orders normalisieren → Rückgabe an Dashboard
+- Normalisierung auf einheitliches Order-Format (gleich wie CSV-Import)
+
+---
+
+### Phase 3: Shopify
+
+#### Authentifizierung
+- **Methode:** Admin API Access Token (oder OAuth für Multi-Merchant)
+- **Endpunkt:** `https://{shop}.myshopify.com/admin/api/2024-01/orders.json`
+- **Header:** `X-Shopify-Access-Token: {token}`
+
+#### n8n-Workflow: `WF-SHOPIFY-01`
+- **Endpoint:** POST `/shopify-orders-laden`
+- Gleiche Normalisierung wie WooCommerce
+
+---
+
+### Einheitliches Normalisiertes Order-Format
+
+Alle Connectoren (CSV, WooCommerce, Shopify, …) liefern Daten in diesem Format an den Rechnungs-Workflow:
+
+```json
+{
+  "external_order_id": "WOO-1234",
+  "source": "woocommerce",
+  "shop_name": "Mein Shop",
+  "datum": "2026-04-14",
+  "kaeufer": {
+    "vorname": "Max",
+    "nachname": "Mustermann",
+    "strasse": "Musterstr. 1",
+    "plz": "12345",
+    "ort": "Berlin",
+    "land": "DE",
+    "email": "max@example.com"
+  },
+  "positionen": [
+    {
+      "artikel": "Produktname",
+      "menge": 2,
+      "einzelpreis": 19.99,
+      "mwst_satz": 19
+    }
+  ]
+}
+```
+
+---
+
+### Dashboard-Erweiterungen (Rechnungen-Seite)
+
+#### Filter-Erweiterung
+```js
+// Bestehend: Alle / Erstellt / Gesendet / Storniert
+// Neu hinzu: Filter nach Source
+const sourceFilter = ['alle', 'ebay', 'csv', 'woocommerce', 'shopify', ...];
+```
+
+#### Einstellungen-Kachel: Shop-Verbindungen
+```js
+// In /einstellungen/+page.svelte tiles-Array ergänzen:
+{ icon: '🛒', title: 'Shop-Verbindungen', href: '/einstellungen/shops' }
+```
+
+#### Neue Einstellungsseite: `/einstellungen/shops`
+- Liste aller verbundenen Shops (Name, Typ, Status, Letzter Import)
+- „Shop hinzufügen"-Button → Modal mit Shop-Typ-Auswahl + Credentials-Formular
+- Test-Verbindung-Button pro Shop
+- Aktivieren / Deaktivieren / Löschen
+
+---
+
+### API-Endpunkte (Multi-Shop gesamt)
+
+```js
+// Import
+apiCall('/shop-import-rechnung',    { user_id, source, shop_name, orders: [...] })
+
+// Shop-Verbindungen verwalten
+apiCall('/shop-connections-laden',  { user_id })
+apiCall('/shop-connection-speichern', { user_id, shop_type, shop_name, shop_url, api_key, api_secret })
+apiCall('/shop-connection-testen',  { user_id, connection_id })
+apiCall('/shop-connection-loeschen',{ user_id, connection_id })
+
+// Orders aus Shops laden (für zukünftige Auto-Sync)
+apiCall('/woocommerce-orders-laden', { user_id, connection_id, status?: 'processing' })
+apiCall('/shopify-orders-laden',     { user_id, connection_id, status?: 'unfulfilled' })
+```
+
+---
+
+### Entwicklungsreihenfolge (konkret)
+
+**Nächste Schritte:**
+1. `ALTER TABLE invoices` — SQL ausführen (source, external_order_id, shop_name)
+2. n8n-Workflow `WF-IMPORT-01` (`/shop-import-rechnung`) erstellen
+3. SvelteKit-Seite `/rechnungen/import` bauen (CSV-Phase)
+4. Button „📥 Importieren" auf `/rechnungen` ergänzen
+5. `CREATE TABLE user_shop_connections` — SQL ausführen
+6. n8n-Workflow `WF-WOO-01` (`/woocommerce-orders-laden`) erstellen
+7. Einstellungsseite `/einstellungen/shops` bauen
+8. WooCommerce-Tab auf Import-Seite aktivieren
+9. Shopify analog zu WooCommerce
+
+    
 Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
