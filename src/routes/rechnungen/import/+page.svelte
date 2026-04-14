@@ -161,11 +161,11 @@
           email:    getWert(zeile, 'email'),
         },
         positionen: [{
-          artikel:      getWert(zeile, 'artikel'),
+          bezeichnung:  getWert(zeile, 'artikel'),     // ← Feld-Name wie WF-RE-01 erwartet
           menge:        menge,
-          einzelpreis:  ep,
+          einzelpreis:  ep,                             // ← bleibt Brutto, Workflow rechnet um
           mwst_satz:    parseInt(getWert(zeile, 'mwst_satz')) || 19,
-          rabatt:       rabatt,
+          rabatt_pct:   0,                              // ← Feld heißt rabatt_pct, nicht rabatt
         }],
         versandkosten: versandkosten,
         mwst_versand: parseInt(getWert(zeile, 'mwst_versand')) || 19,
@@ -359,7 +359,7 @@ WOO-1002;2026-04-11;Schmidt;Anna;Hauptstr. 5;80331;München;DE;anna@example.com;
             <tbody>
               {#each vorschau as order, i}
                 {@const pos = order.positionen[0]}
-                {@const brutto = (pos.einzelpreis * pos.menge - (pos.rabatt||0)) * (1 + pos.mwst_satz / 100) + (order.versandkosten||0)}
+                {@const brutto = (pos.einzelpreis * pos.menge - (pos.rabatt||0)) + (order.versandkosten||0)}
                 <tr>
                   <td class="td-nr">{i + 1}</td>
                   <td class="td-mono">{order.external_order_id}</td>
