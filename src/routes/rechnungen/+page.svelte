@@ -643,6 +643,7 @@
         Aktualisieren
       </button>
       <button class="btn-primary" onclick={() => oeffneNeuModal()}>+ Rechnung erstellen</button>
+      <a href="/rechnungen/import" class="btn-ghost">📥 Importieren</a>
     </div>
   </div>
 
