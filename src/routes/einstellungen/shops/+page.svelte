@@ -322,7 +322,7 @@
 {/if}
 
 <style>
-  .page-container { padding:24px; max-width:900px; }
+  .page-container { padding:24px; }
   .page-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
   .page-title { font-size:1.3rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.85rem; color:var(--text2); margin-top:2px; }
@@ -365,7 +365,7 @@
 
   /* Modal */
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(3px); z-index:999; display:flex; align-items:center; justify-content:center; padding:20px; }
-  .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:520px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
+  .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:780px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.2); }
   .modal-klein { max-width:400px; }
   .modal-hdr { display:flex; align-items:flex-start; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid var(--border); }
   .modal-titel { font-size:1rem; font-weight:700; color:var(--text); }
