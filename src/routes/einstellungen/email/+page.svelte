@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { currentUser, showToast } from '$lib/stores.js';
   import { apiCall } from '$lib/api.js';
+  import { goto } from '$app/navigation';
 
   let speichertLaeuft = $state(false);
   let testLaeuft = $state(false);
@@ -130,6 +131,7 @@
   </button>
 </div>
 
+<div class="page-container">
   {#if configLaeuft}
     <div class="config-laedt">⏳ Einstellungen werden geladen…</div>
   {/if}
