@@ -277,7 +277,7 @@
 </div>
 
 <style>
-  .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }    //{ display:flex; flex-direction:column; gap:20px; padding:24px; width:1400px; box-sizing:border-box; }//
+  .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }   
   .page-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
   .page-title { font-size:1.4rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.83rem; color:var(--text2); margin-top:2px; }
