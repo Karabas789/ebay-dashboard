@@ -92,6 +92,16 @@ metadata:
 11. **DB-Spaltennamen prüfen** — Vor jedem neuen SQL-Query die echten Spaltennamen aus Abschnitt 3 prüfen. Die Tabellen `user_firmendaten` und `user_rechnung_config` haben andere Spalten als man erwarten würde (siehe Gotchas 13b).
 12. **PostgreSQL-Credential** — ALLE Postgres-Nodes in ALLEN Workflows MÜSSEN `ebay_automation` (ID: `4yOALkbLmo3zuewo`) verwenden. Falsche Credential = `relation does not exist`.
 13. **n8n Active Version** — Nach dem Speichern eines Workflows den **Toggle aus/an** schalten, damit die aktive Version aktualisiert wird. Sonst läuft der alte Code.
+14. **Änderungen kompakt im Chat kommunizieren** — Code-Änderungen direkt im Chat zeigen, nicht erst lange erklären. Format:
+    ```
+    DATEI: src/routes/rechnungen/import/+page.svelte
+    ERSETZE:
+    const pdfBinary = $input.first().binary?.data;
+    const pdfBase64 = pdfBinary ? Buffer.from(pdfBinary.data, 'base64').toString('base64') : '';
+    DURCH:
+    const pdfBase64 = $input.first().json.pdf_base64 || '';
+    ```
+    Bei n8n-Nodes: Node-Name + was ändern (SQL/Code). Kein Code doppelt zeigen. Kein „Hier ist was passiert" — direkt das Delta. Komplette Dateien nur als Download liefern wenn explizit gewünscht oder bei neuen Dateien.
 
 ---
 
@@ -236,7 +246,7 @@ Math.min(lagerbestand, min_lagerbestand)
 
 > ⚠️ **ACHTUNG:** KEINE Spalte `adresse` (aufgeteilt in `strasse`, `hausnummer`, `plz`, `ort`). KEINE Spalte `iban` (heißt `bank_iban`). KEINE Spalte `logo` (Logo wird in `user_rechnung_vorlage.vorlage_json` gespeichert).
 
-#### `user_smtp_config`
+#### `user_email_config`
 | Spalte | Beschreibung |
 |---|---|
 | `user_id` | UNIQUE |
@@ -245,6 +255,8 @@ Math.min(lagerbestand, min_lagerbestand)
 | `user` | SMTP-Benutzername |
 | `pass` | SMTP-Passwort (Base64-kodiert) |
 | `from` | Absender-E-Mail-Adresse |
+
+> ⚠️ **ACHTUNG:** Tabelle heißt `user_email_config`, NICHT `user_smtp_config`. SMTP-Passwort ist Base64-kodiert → vor Nutzung dekodieren: `Buffer.from(pass, 'base64').toString('utf-8')`. E-Mail-Versand läuft über `email.ai-online.cloud/send` (HTTP-Request), NICHT über n8n Email-Send-Node.
 
 #### `user_rechnung_config`
 | Spalte | Beschreibung |
@@ -333,7 +345,7 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 | ID | Endpoint | Funktion |
 |---|---|---|
 | WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Multi-Positionen → Vorlage-basiertes HTML → Gotenberg PDF → DB (invoices + invoice_items) |
-| WF-RE-02 | POST `/rechnung-senden` | Rechnung aus DB laden → SMTP → E-Mail mit PDF senden |
+| WF-RE-02 | POST `/rechnung-senden` | Rechnung + SMTP aus DB laden → HTTP-Request an `email.ai-online.cloud/send` → E-Mail mit PDF |
 | WF-RE-03 | POST `/rechnungen-laden` | Alle invoices eines Users zurückgeben (inkl. kaeufer_email, hat_rechnung-Flag) |
 | WF-RE-04 | POST `/rechnung-settings` | Firmendaten + Config + SMTP laden oder speichern (`action: load/save`) |
 | WF-RE-05 | POST `/rechnung-stornieren` | Stornorechnung erstellen (SR-Nummer aus RE-Nummer abgeleitet) |
@@ -346,6 +358,31 @@ Webhook → Token vorbereiten → Token prüfen → Auth OK? → Firmendaten + V
 
 **WF-RE-07 Node-Kette:**
 Webhook → Token vorbereiten → Token + Rechnung prüfen → Auth OK? → Firmendaten laden → Neu berechnen → HTML bauen → Gotenberg PDF → DB aktualisieren → Items aktualisieren → Items INSERT → Antwort senden
+
+**WF-RE-02 Node-Kette:**
+Webhook → Token vorbereiten → Token prüfen → Auth OK? → Rechnung + SMTP laden → PDF vorbereiten → HTTP-Request (`email.ai-online.cloud/send`) → Status updaten → Antwort senden
+
+**WF-RE-02 E-Mail-Versand (HTTP-Request an Email-Service):**
+```json
+POST https://email.ai-online.cloud/send
+{
+  "smtp": {
+    "host": "{{ smtp_host }}",
+    "port": {{ smtp_port }},
+    "user": "{{ smtp_user }}",
+    "pass": "{{ smtp_pass (Base64-dekodiert!) }}"
+  },
+  "to": "{{ empfaenger_email }}",
+  "subject": "Rechnung {{ rechnung_nr }}",
+  "body_html": "{{ email_vorlage_html }}",
+  "attachment": {
+    "filename": "{{ rechnung_nr }}.pdf",
+    "content_base64": "{{ pdf_base64 }}"
+  }
+}
+```
+
+> ⚠️ **WICHTIG WF-RE-02:** NICHT den n8n Email-Send-Node (`emailSend`) verwenden — dieser nutzt eine feste n8n-Credential und ist nicht Multi-User-fähig. Stattdessen HTTP-Request an `email.ai-online.cloud/send` mit den SMTP-Daten des jeweiligen Users aus `user_email_config`. Das SMTP-Passwort ist Base64-kodiert in der DB → vor Übergabe dekodieren!
 
 > ⚠️ **KRITISCH — Alle Postgres-Nodes** in Rechnungs-Workflows MÜSSEN die Credential `ebay_automation` (ID: `4yOALkbLmo3zuewo`) nutzen. Falsche Credential führt zu `relation "users" does not exist`.
 
@@ -431,7 +468,7 @@ WHERE rc.user_id = {{ $json.user_id }} LIMIT 1
         ├── bestellungen/+page.svelte   (✅ PORTIERT — Multi-Artikel, E-Rechnung, Auto-Rechnung)
         ├── rechnungen/
         │   ├── +page.svelte            (✅ PORTIERT — Tabelle, Bearbeiten, Storno, Vorlage-Editor)
-        │   └── import/+page.svelte     (✅ PORTIERT — CSV-Import mit Spalten-Mapping)
+        │   └── import/+page.svelte     (✅ PORTIERT — CSV-Import mit Spalten-Mapping, Multi-Artikel-Gruppierung, editierbare Vorschau)
         └── einstellungen/
             ├── +page.svelte            (Kacheln-Übersicht ✅)
             ├── firma/+page.svelte      (⏳)
@@ -450,7 +487,7 @@ WHERE rc.user_id = {{ $json.user_id }} LIMIT 1
 | 2 | Produkte | ✅ PORTIERT | Grid-Cards, Varianten-Modal, Bestand-Update, Import, CSV-Export |
 | 3 | Bestellungen | ✅ PORTIERT | Tabelle, Filter-Tabs, Tracking-Modal, Detail-Modal, Archivierung, Auto-Rechnung, E-Rechnung (ZUGFeRD/XRechnung) |
 | 4 | Rechnungen | ✅ PORTIERT | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Bearbeiten-Modal (Multi-Positionen), Vorlage-Editor |
-| 5 | Rechnungen/Import | ✅ PORTIERT | CSV-Import mit Spalten-Mapping, Vorschau, Shop-Import-Workflow |
+| 5 | Rechnungen/Import | ✅ PORTIERT | CSV-Import: Spalten-Mapping, Auto-Mapping (Used-Set), Multi-Artikel-Gruppierung nach Bestell-ID, Namensaufteilung, Datums-Normalisierung (DD.MM.YYYY HH:MM → ISO), editierbare Vorschau (✏️ Modal), Positionen hinzufügen/entfernen, Fortschrittsbalken |
 | 6 | Einstellungen/Firma | ⏳ | Firmendaten-Formular → `/rechnung-settings` (action: save) |
 | 7 | Einstellungen/Nummern | ⏳ | RE/SR Konfiguration mit Live-Vorschau |
 | 8 | Einstellungen/SMTP | ⏳ | SMTP-Formular + Test-Button |
@@ -1026,6 +1063,10 @@ git push origin main
 | 7 | Vorlage wird nicht angewendet | `vorlage_json` nicht geladen | LEFT JOIN auf `user_rechnung_vorlage` im Config-Query |
 | 8 | Workflow gespeichert aber alter Code läuft | Draft ≠ Active Version | Nach Speichern: Toggle **aus/an** damit aktive Version aktualisiert wird |
 | 9 | Doppel-MwSt bei CSV-Import | Einzelpreis ist Brutto, Workflow rechnet nochmal MwSt drauf | Netto = Brutto / (1 + MwSt/100) |
+| 10 | `535 5.7.8 authentication failed` beim Rechnungsversand | n8n Email-Send-Node nutzt feste Credential statt User-SMTP | HTTP-Request an `email.ai-online.cloud/send` mit SMTP aus `user_email_config` |
+| 11 | CSV-Import: 12 Rechnungen statt 7 | Zeilen mit gleicher Bestell-ID werden nicht gruppiert | Frontend gruppiert nach `external_order_id` → Multi-Positionen-Rechnung |
+| 12 | `Invalid Date` auf Rechnung | Datum `01.03.2026 20:01` wird nicht geparst | `normalizeDatum()` konvertiert DD.MM.YYYY HH:MM → YYYY-MM-DD |
+| 13 | Falscher Käufername (Artikelname statt Name) | Auto-Mapping: „Produktnamen" matched auf `nachname` wegen „name" | Used-Set verhindert Doppelbelegung, exakte Matches zuerst |
 
 ---
 
