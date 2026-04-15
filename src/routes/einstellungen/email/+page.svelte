@@ -117,20 +117,18 @@
   ];
 </script>
 
-<div class="hdr-left">
-  <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
-  <div>
-    <div class="page-title">📧 E-Mail Einstellungen</div>
-    <div class="page-sub">SMTP-Konfiguration für den automatischen und manuellen Rechnungsversand</div>
-  </div>
-</div>
+<div class="page-hdr">
+  <div class="hdr-left">
+    <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
+    <div>
       <div class="page-title">📧 E-Mail Einstellungen</div>
       <div class="page-sub">SMTP-Konfiguration für den automatischen und manuellen Rechnungsversand</div>
     </div>
-    <button class="btn-primary" onclick={speichern} disabled={speichertLaeuft}>
-      {speichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
-    </button>
   </div>
+  <button class="btn-primary" onclick={speichern} disabled={speichertLaeuft}>
+    {speichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
+  </button>
+</div>
 
   {#if configLaeuft}
     <div class="config-laedt">⏳ Einstellungen werden geladen…</div>
