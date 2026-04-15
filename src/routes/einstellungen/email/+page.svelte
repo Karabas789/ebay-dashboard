@@ -341,5 +341,8 @@
   @media(max-width:600px) {
     .form-grid { grid-template-columns:1fr; }
     .form-span2 { grid-column:1; }
+ .hdr-left { display:flex; align-items:center; gap:12px; }
+.btn-back { background:none; border:none; color:var(--primary); font-size:0.85rem; cursor:pointer; padding:0; }
+.btn-back:hover { text-decoration:underline; }
   }
 </style>
