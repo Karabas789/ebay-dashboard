@@ -322,7 +322,7 @@
 {/if}
 
 <style>
-  .page-container { padding:24px; }
+  .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .page-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
   .page-title { font-size:1.3rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.85rem; color:var(--text2); margin-top:2px; }
