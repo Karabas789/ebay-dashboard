@@ -282,7 +282,7 @@
 
 <style>
   .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }   
-  .page-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .page-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px; }
   .page-title { font-size:1.4rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.83rem; color:var(--text2); margin-top:2px; }
   .config-laedt { font-size:0.8rem; color:var(--text2); padding:6px 12px; background:var(--surface2); border-radius:8px; }
@@ -338,11 +338,14 @@
   .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text2); padding:8px 12px; border-radius:8px; font-size:0.84rem; cursor:pointer; }
   .btn-ghost:hover { border-color:var(--primary); color:var(--primary); }
   .btn-sm { padding:6px 10px; font-size:0.8rem; }
-  @media(max-width:600px) {
+   @media(max-width:600px) {
     .form-grid { grid-template-columns:1fr; }
     .form-span2 { grid-column:1; }
- .hdr-left { display:flex; align-items:center; gap:12px; }
-.btn-back { background:none; border:none; color:var(--primary); font-size:0.85rem; cursor:pointer; padding:0; }
-.btn-back:hover { text-decoration:underline; }
+  .hdr-left { display:flex; align-items:center; gap:16px; }
+  .btn-back {
+  background: transparent; border: 1px solid var(--border); color: var(--text2);
+  padding: 7px 14px; border-radius: 8px; font-size: 0.83rem; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
   }
+  .btn-back:hover { border-color: var(--primary); color: var(--primary); }
 </style>
