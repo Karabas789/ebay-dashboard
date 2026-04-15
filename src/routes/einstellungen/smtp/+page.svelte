@@ -240,7 +240,7 @@
 </div>
 
 <style>
-  .page-container { display: flex; flex-direction: column; gap: 20px; padding: 24px; width: 100%; box-sizing: border-box; max-width: 860px; }
+  .page-container { padding: 24px; max-width: 1400px; margin: 0 auto; }
   .page-hdr { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .hdr-left { display: flex; align-items: center; gap: 16px; }
   .page-title { font-size: 1.3rem; font-weight: 700; color: var(--text); }
