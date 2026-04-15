@@ -117,25 +117,23 @@
     { key: '{{firmenname}}', beschreibung: 'Eigener Firmenname' },
   ];
 </script>
-
-<div class="page-hdr">
-  <div class="hdr-left">
-    <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
-    <div>
-      <div class="page-title">📧 E-Mail Einstellungen</div>
-      <div class="page-sub">SMTP-Konfiguration für den automatischen und manuellen Rechnungsversand</div>
-    </div>
-  </div>
-  <button class="btn-primary" onclick={speichern} disabled={speichertLaeuft}>
-    {speichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
-  </button>
-</div>
-
 <div class="page-container">
+  <div class="page-hdr">
+    <div class="hdr-left">
+      <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
+      <div>
+        <div class="page-title">📧 E-Mail Einstellungen</div>
+        <div class="page-sub">SMTP-Konfiguration für den automatischen und manuellen Rechnungsversand</div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick={speichern} disabled={speichertLaeuft}>
+      {speichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
+    </button>
+  </div>
+
   {#if configLaeuft}
     <div class="config-laedt">⏳ Einstellungen werden geladen…</div>
   {/if}
-
   <div class="card">
     <div class="card-titel">⚡ Anbieter-Schnellauswahl</div>
     <div class="card-sub">Klicke auf deinen E-Mail-Anbieter um Host und Port automatisch auszufüllen</div>
@@ -338,14 +336,15 @@
   .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text2); padding:8px 12px; border-radius:8px; font-size:0.84rem; cursor:pointer; }
   .btn-ghost:hover { border-color:var(--primary); color:var(--primary); }
   .btn-sm { padding:6px 10px; font-size:0.8rem; }
-   @media(max-width:600px) {
+  @media(max-width:600px) {
     .form-grid { grid-template-columns:1fr; }
     .form-span2 { grid-column:1; }
+  }
   .hdr-left { display:flex; align-items:center; gap:16px; }
   .btn-back {
-  background: transparent; border: 1px solid var(--border); color: var(--text2);
-  padding: 7px 14px; border-radius: 8px; font-size: 0.83rem; cursor: pointer;
-  transition: all 0.15s; white-space: nowrap;
+    background: transparent; border: 1px solid var(--border); color: var(--text2);
+    padding: 7px 14px; border-radius: 8px; font-size: 0.83rem; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
   }
   .btn-back:hover { border-color: var(--primary); color: var(--primary); }
 </style>
