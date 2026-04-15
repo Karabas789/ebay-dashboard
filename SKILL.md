@@ -18,8 +18,8 @@ description: >
 connected: false
 metadata:
   author: Vitali
-  version: '3.0'
-  based_on: Wissensbasis (Stand 2026-03-31)
+  version: '4.0'
+  based_on: Wissensbasis (Stand 2026-04-15)
 ---
 
 # eBay-Dashboard: Vollständiger Entwicklungs-Skill
@@ -89,6 +89,9 @@ metadata:
 8. **eBay Sandbox zuerst** — Immer in der eBay Sandbox testen bevor Live-Daten angefasst werden.
 9. **Rate Limits** — eBay Trading API: max. 5000 Calls/Tag. Immer Pausen einbauen.
 10. **Fehler-Pfad in n8n** — Jeder Workflow braucht einen Error-Branch mit Logging und optionalem Retry.
+11. **DB-Spaltennamen prüfen** — Vor jedem neuen SQL-Query die echten Spaltennamen aus Abschnitt 3 prüfen. Die Tabellen `user_firmendaten` und `user_rechnung_config` haben andere Spalten als man erwarten würde (siehe Gotchas 13b).
+12. **PostgreSQL-Credential** — ALLE Postgres-Nodes in ALLEN Workflows MÜSSEN `ebay_automation` (ID: `4yOALkbLmo3zuewo`) verwenden. Falsche Credential = `relation does not exist`.
+13. **n8n Active Version** — Nach dem Speichern eines Workflows den **Toggle aus/an** schalten, damit die aktive Version aktualisiert wird. Sonst läuft der alte Code.
 
 ---
 
@@ -153,12 +156,6 @@ metadata:
 | `access_token` | eBay Access Token |
 | `updated_at` | Zeitstempel der letzten Aktualisierung |
 
-### Tabelle: `orders` (aktualisiert)
-
-Multi-Artikel-Bestellungen: Eine eBay-Bestellung mit mehreren Artikeln/Varianten erzeugt mehrere Zeilen mit gleicher `order_id` aber unterschiedlicher `ebay_artikel_id`/`sold_sku`.
-
-**UNIQUE INDEX:** `orders_order_item_sku_unique ON (order_id, ebay_artikel_id, COALESCE(sold_sku, ''))` — Kein separater Unique-Index auf `order_id` allein (der alte wurde entfernt).
-
 ### eBay-Menge-Logik (übergreifend)
 
 ```js
@@ -173,48 +170,71 @@ Math.min(lagerbestand, min_lagerbestand)
 |---|---|
 | `id` | Primärschlüssel |
 | `user_id` | Benutzer-Zuordnung |
-| `kaeufer_daten` | Käuferdaten (JSON) |
-| `positionen` | Rechnungspositionen (JSON) — Legacy, neue Positionen in `invoice_items` |
-| `betraege` | Beträge: Netto, MwSt., Brutto |
+| `order_id` | Bestell-ID (eBay oder extern) |
+| `rechnung_typ` | `rechnung` oder `storno` |
+| `storno_von` | FK → invoices.id (bei Storno) |
+| `rechnung_nr` | Rechnungsnummer (z.B. RE-2026-00001) |
+| `kaeufer_name` | Käufername |
+| `kaeufer_username` | eBay-Username |
+| `kaeufer_strasse` | Straße |
+| `kaeufer_plz` | PLZ |
+| `kaeufer_ort` | Ort |
+| `kaeufer_land` | Land |
+| `kaeufer_email` | E-Mail |
+| `artikel_name` | Artikelname (erste Position, Rückwärtskompatibilität) |
+| `artikel_menge` | Menge (erste Position) |
+| `einzelpreis` | Einzelpreis (erste Position) |
+| `rabatt_pct` | Rabatt % (erste Position) |
+| `netto_betrag` | Gesamtnetto |
+| `steuersatz` | MwSt.-Satz |
+| `steuer_betrag` | Gesamtsteuer |
+| `brutto_betrag` | Gesamtbrutto |
+| `kleinunternehmer` | Boolean |
 | `pdf_base64` | PDF als Base64-String |
-| `status` | Rechnungsstatus (erstellt / gesendet / storniert) |
+| `pdf_generiert_am` | Zeitstempel PDF-Generierung |
+| `status` | `erstellt` / `gesendet` / `storniert` |
+| `freitext` | Freitext-Hinweis auf Rechnung |
+| `positionen_migriert` | Boolean — true = Items in `invoice_items` |
+| `source` | Quelle: `ebay` / `csv` / etc. |
+| `external_order_id` | Externe Bestell-ID (CSV-Import) |
+| `shop_name` | Shop-Name (CSV-Import) |
+| `aenderungsgrund` | Grund bei Bearbeitung |
+| `aenderungsdatum` | Zeitstempel Bearbeitung |
+| `bearbeitet_am` | Zeitstempel letzte Bearbeitung |
 
 #### `invoice_items`
 | Spalte | Beschreibung |
 |---|---|
 | `id` | Primärschlüssel |
-| `invoice_id` | FK → invoices.id (ON DELETE CASCADE) |
-| `pos_nr` | Positionsnummer (1, 2, 3...) |
-| `bezeichnung` | Artikelname |
-| `artikel_nr` | SKU / Artikelnummer |
-| `ebay_artikel_id` | eBay Artikel-ID |
+| `invoice_id` | FK → invoices.id |
+| `pos_nr` | Positionsnummer |
+| `bezeichnung` | Artikelbezeichnung |
+| `artikel_nr` | Artikelnummer |
+| `ebay_artikel_id` | eBay-Artikel-ID |
 | `menge` | Menge |
-| `einzelpreis` | Einzelpreis (brutto) |
-| `mwst_satz` | MwSt-Satz (z.B. 19, 7, 0) |
-| `rabatt_pct` | Rabatt in Prozent |
-| `netto_betrag` | Netto pro Position |
-| `steuer_betrag` | Steuer pro Position |
-| `brutto_betrag` | Brutto pro Position |
-| `erstellt_am` | Zeitstempel |
-
-**Rechnungssystem — Multi-Positionen:**
-- `invoices` = Rechnungskopf (Käufer, Gesamtsummen, PDF, Status)
-- `invoice_items` = Rechnungspositionen (1-N Zeilen pro Rechnung)
-- WF-RE-01 akzeptiert `positionen`-Array im Request Body, rückwärtskompatibel mit altem Einzelartikel-Format
-- WF-RE-01 schreibt in beide Tabellen: erst `invoices`, dann `invoice_items`
-- Frontend Bestellungen-Seite sendet `positionen`-Array bei Rechnungserstellung
+| `einzelpreis` | Einzelpreis (Brutto) |
+| `mwst_satz` | MwSt.-Satz der Position |
+| `rabatt_pct` | Rabatt % |
+| `netto_betrag` | Netto der Position |
+| `steuer_betrag` | Steuer der Position |
+| `brutto_betrag` | Brutto der Position |
 
 #### `user_firmendaten`
 | Spalte | Beschreibung |
 |---|---|
 | `user_id` | UNIQUE |
 | `firmenname` | Firmenname |
-| `adresse` | Firmenadresse |
+| `strasse` | Straße |
+| `hausnummer` | Hausnummer |
+| `plz` | PLZ |
+| `ort` | Ort |
 | `ust_idnr` | Umsatzsteuer-IdNr. |
-| `steuersatz` | Steuersatz |
-| `iban` | IBAN |
-| `logo` | Logo (URL oder Base64) |
+| `steuersatz` | Steuersatz (z.B. 19) |
+| `kleinunternehmer` | Boolean — §19 UStG |
+| `bank_iban` | IBAN |
 | `fusszeile` | Rechnungsfußzeile |
+
+> ⚠️ **ACHTUNG:** KEINE Spalte `adresse` (aufgeteilt in `strasse`, `hausnummer`, `plz`, `ort`). KEINE Spalte `iban` (heißt `bank_iban`). KEINE Spalte `logo` (Logo wird in `user_rechnung_vorlage.vorlage_json` gespeichert).
 
 #### `user_smtp_config`
 | Spalte | Beschreibung |
@@ -230,19 +250,30 @@ Math.min(lagerbestand, min_lagerbestand)
 | Spalte | Beschreibung |
 |---|---|
 | `user_id` | UNIQUE |
-| `re_praefix` | Rechnungs-Präfix |
-| `re_trennzeichen` | Rechnungs-Trennzeichen |
-| `re_startnummer` | Startnummer für Rechnungen |
-| `re_stellen` | Anzahl Stellen der Rechnungsnummer |
-| `sr_praefix` | Stornorechnungs-Präfix |
-| `sr_trennzeichen` | Stornorechnungs-Trennzeichen |
-| `sr_startnummer` | Startnummer für Stornos |
-| `sr_stellen` | Anzahl Stellen der Stornonummer |
-| `jahr` | Jahreszahl (für Nummernkreis) |
+| `re_praefix` | Rechnungs-Präfix (z.B. `RE`) |
+| `re_trennzeichen` | Trennzeichen (z.B. `-`) |
+| `re_naechste_nr` | Nächste Rechnungsnummer (wird bei Erstellung +1 hochgezählt) |
+| `re_min_stellen` | Min. Stellen der Nummer (z.B. 5 → 00001) |
+| `re_mit_jahr` | Boolean — Jahr in Nummer aufnehmen |
+| `sr_praefix` | Stornorechnungs-Präfix (z.B. `SR`) |
+| `sr_trennzeichen` | Storno-Trennzeichen |
+| `sr_naechste_nr` | Nächste Stornonummer |
+| `sr_min_stellen` | Min. Stellen Stornonummer |
+| `sr_mit_jahr` | Boolean — Jahr in Stornonummer |
 | `auto_einstellungen` | Automatisierungseinstellungen (JSON) |
+| `auto_rechnung_aktiv` | Boolean — Auto-Rechnung bei Versand |
 | `email_vorlage` | E-Mail-Vorlage |
 | `sprache` | Rechnungssprache |
-| `waehrung` | Währung |
+| `waehrung` | Währung (EUR/USD/GBP/CHF) |
+| `zahlungsziel_tage` | Zahlungsziel in Tagen (Default: 14) |
+
+> ⚠️ **ACHTUNG:** KEINE Spalten `re_startnummer`, `re_stellen`, `sr_startnummer`, `sr_stellen`, `jahr`. Diese heißen `re_naechste_nr`, `re_min_stellen`, `re_mit_jahr`, `sr_naechste_nr`, `sr_min_stellen`, `sr_mit_jahr`.
+
+#### `user_rechnung_vorlage`
+| Spalte | Beschreibung |
+|---|---|
+| `user_id` | UNIQUE |
+| `vorlage_json` | Komplette Rechnungsvorlage als JSON (Logo, Schriftart, Akzentfarbe, Texte, Footer, Hintergrundbilder, Tabellen-Optionen) |
 
 ---
 
@@ -301,14 +332,52 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 
 | ID | Endpoint | Funktion |
 |---|---|---|
-| WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Berechnung → HTML → Gotenberg PDF → DB speichern |
+| WF-RE-01 | POST `/rechnung-erstellen` | Bestelldaten → Multi-Positionen → Vorlage-basiertes HTML → Gotenberg PDF → DB (invoices + invoice_items) |
 | WF-RE-02 | POST `/rechnung-senden` | Rechnung aus DB laden → SMTP → E-Mail mit PDF senden |
-| WF-RE-03 | POST `/rechnungen-laden` | Alle invoices eines Users zurückgeben |
+| WF-RE-03 | POST `/rechnungen-laden` | Alle invoices eines Users zurückgeben (inkl. kaeufer_email, hat_rechnung-Flag) |
 | WF-RE-04 | POST `/rechnung-settings` | Firmendaten + Config + SMTP laden oder speichern (`action: load/save`) |
-| WF-RE-05 | POST `/smtp-testen` | SMTP-Daten → `email.ai-online.cloud/test` → Ergebnis |
+| WF-RE-05 | POST `/rechnung-stornieren` | Stornorechnung erstellen (SR-Nummer aus RE-Nummer abgeleitet) |
 | WF-RE-06 | POST `/rechnung-pdf` | PDF Base64 aus `invoices`-Tabelle abrufen |
+| WF-RE-07 | POST `/rechnung-bearbeiten` | Multi-Positionen bearbeiten, neues PDF, invoice_items UPDATE |
+| WF-RE-08d | POST `/rechnung-auto-senden` | Automatischer Rechnungsversand nach Erstellung |
 
-**Rechnungsnummern-Format:** `RE-{YYYY}-{laufende Nummer 5-stellig}`, z.B. `RE-2026-00001`
+**WF-RE-01 Node-Kette:**
+Webhook → Token vorbereiten → Token prüfen → Auth OK? → Firmendaten + Vorlage laden → Nummer reservieren → Nummer + Berechnung → HTML aus Vorlage → Gotenberg PDF → Invoice speichern → Items speichern → Items INSERT → Nummer hochzählen → Antwort senden
+
+**WF-RE-07 Node-Kette:**
+Webhook → Token vorbereiten → Token + Rechnung prüfen → Auth OK? → Firmendaten laden → Neu berechnen → HTML bauen → Gotenberg PDF → DB aktualisieren → Items aktualisieren → Items INSERT → Antwort senden
+
+> ⚠️ **KRITISCH — Alle Postgres-Nodes** in Rechnungs-Workflows MÜSSEN die Credential `ebay_automation` (ID: `4yOALkbLmo3zuewo`) nutzen. Falsche Credential führt zu `relation "users" does not exist`.
+
+### 4.3b Shop-Import-Workflow
+
+| ID | Endpoint | Funktion |
+|---|---|---|
+| WF-IMPORT-01 | POST `/shop-import-rechnung` | CSV/Shop-Bestellungen → Rechnung erstellen (mit Vorlage!) |
+
+**Node-Kette:**
+Webhook → Orders parsen → Config laden (mit `user_rechnung_vorlage`) → Rechnungsnummer vergeben → HTML bauen (Vorlage!) → Gotenberg PDF (Code-Node) → Für DB vorbereiten → Invoice speichern → Response OK
+
+**Config laden SQL (korrekt):**
+```sql
+SELECT rc.re_praefix, rc.re_trennzeichen, rc.re_min_stellen, rc.re_mit_jahr,
+       rc.auto_einstellungen, rc.email_vorlage, rc.sprache, rc.waehrung,
+       rc.zahlungsziel_tage,
+       f.firmenname, f.strasse, f.hausnummer, f.plz, f.ort,
+       f.ust_idnr, f.steuersatz, f.kleinunternehmer,
+       f.bank_iban, f.fusszeile,
+       urv.vorlage_json
+FROM user_rechnung_config rc
+LEFT JOIN user_firmendaten f ON f.user_id = rc.user_id
+LEFT JOIN user_rechnung_vorlage urv ON urv.user_id = rc.user_id
+WHERE rc.user_id = {{ $json.user_id }} LIMIT 1
+```
+
+**Gotenberg PDF:** Code-Node (manuelles multipart via `https.request`), NICHT HTTP-Request-Node (Binary-Problem).
+
+**Preisbehandlung CSV-Import:** Einzelpreis = Brutto → Workflow rechnet Netto = Brutto / (1 + MwSt/100)
+
+**Rechnungsnummern-Format:** `RE-{YYYY}-{laufende Nummer 5-stellig}`, z.B. `RE-2026-00001` (gesteuert durch `re_naechste_nr`, `re_min_stellen`, `re_mit_jahr`)
 
 ---
 
@@ -321,30 +390,9 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 | POST `/antwort-update` | Antwort aktualisieren |
 | POST `/antwort-senden` | Antwort senden |
 | POST `/ki-antwort` | KI-Antwort generieren (Mistral API) |
-| POST `/ki-ueberarbeiten` | KI-Antwort überarbeiten (mit Verlauf) |
+| POST `/ki-ueberarbeiten` | KI-Antwort überarbeiten |
 | POST `/nachricht-verschieben` | Nachricht in anderen Ordner verschieben |
 | POST `/nachricht-loeschen` | Nachricht löschen |
-| POST `/nachricht-ordner` | Ordner-Aktionen: `action` = `list`, `create`, `delete`, `rename`, `move`, `read` |
-
-**`/nachricht-ordner` Actions:**
-- `list` — Custom-Ordner laden (`user_id`)
-- `create` — Ordner erstellen (`user_id`, `name`, `icon`)
-- `delete` — Ordner löschen (`user_id`, `folder_id`) — Nachrichten → Posteingang
-- `rename` — Ordner umbenennen (`user_id`, `folder_id`, `name`)
-- `move` — Nachricht verschieben (`user_id`, `message_id`, `target`) — target = Ordner-Key oder folder_id
-- `read` — Gelesen-Status setzen (`user_id`, `message_ids[]`, `set_read: bool`) — Bulk-fähig
-
-**Nachrichten-Seite Features (Stand April 2026):**
-- 3-Spalten-Layout: Ordner-Sidebar | Nachrichtenliste | Detail-Ansicht
-- Ordner: Posteingang, Mitglieder, eBay-System, Gesendet, Archiv, Gelöscht + Custom-Ordner
-- Thread-Ansicht mit Buyer/Seller Bubbles
-- eBay-System-Nachrichten + Käufer-Nachrichten mit Bildern werden im iFrame gerendert
-- XML-Entity-Bereinigung (`&#xd;` etc.) via `cleanXmlEntities()`
-- **Antwort-Modal** (statt inline): Käufer-Nachricht readonly + KI-Textarea + Überarbeitungs-Chat + fixierter Footer mit Speichern/Senden
-- **Sticky Reply-Bar** am unteren Rand: "Antworten" + "KI-Antwort" Buttons (lila Gradient)
-- **Multi-Select-Modus**: ☑-Button in Suchleiste, Checkboxen pro Nachricht, Bulk-Aktionsleiste (Gelesen/Verschieben/Löschen)
-- **Rechtsklick auf ☑-Button**: Alle sichtbaren Nachrichten als gelesen/ungelesen markieren
-- Lila/Purple Design-Akzent (#a855f7) für Aktions-Buttons, konsistent mit KI-Features
 
 ---
 
@@ -352,29 +400,9 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 
 | Endpoint | Funktion |
 |---|---|
-| POST `/orders-laden` | Bestellungen laden (Workflow `5FijlDsJEj7TaSU5`) |
+| POST `/orders-laden` | Bestellungen laden |
 | POST `/order-tracking` | Tracking-Informationen speichern |
 | POST `/orders-archivieren` | Bestellungen archivieren |
-
-**Workflow `orders-laden` (`5FijlDsJEj7TaSU5`):**
-- SQL-Query `LIMIT` muss auf 2000 gesetzt sein (nicht 200)
-- Muss nach Änderung gepublished werden (aktive Version ≠ Draft war ein häufiger Fehler)
-
-**Tracking-Sync Workflow `vnk1FceT1WbZ3KiO`:**
-- Pagination: "Orders parsen" Code-Node holt automatisch alle Seiten nach (bis 10 Seiten / 2000 Orders)
-- SKU-Extraktion: Parst `<Variation><SKU>` aus eBay GetOrders XML
-- Deduplizierung: Key = `order_id + ebay_artikel_id + sold_sku` — verschiedene Varianten desselben Produkts werden als separate Zeilen behalten
-- Skip-Schutz: Leere Responses geben `return []` zurück statt Skip-Items
-- INSERT: `ON CONFLICT (order_id, ebay_artikel_id, COALESCE(sold_sku, ''))` für Multi-Artikel-Support
-- CreateTimeFrom: Standard 14 Tage, für Erstimport auf 90 Tage erweiterbar (eBay Maximum)
-
-**Bestellungen-Seite `src/routes/bestellungen/+page.svelte`:**
-- Frontend-Gruppierung: `groupedOrders` derived gruppiert DB-Zeilen per `order_id` zu Bestellungen mit `items`-Array
-- Tabelle: Jeder Artikel wird als eigener Block in der Zeile angezeigt (Bild + Name + SKU), wie bei eBay
-- Detail-Modal: eBay-Style 2-Spalten-Layout (Artikel links mit Stückzahl/Artikelpreis/Artikel insgesamt, Zahlungsübersicht rechts)
-- Pagination: 10/25/50/100 pro Seite auswählbar, Seitennavigation
-- Rechnungserstellung: Sendet `positionen`-Array mit allen Artikeln der gruppierten Bestellung
-- Suche: Durchsucht auch alle Items (Artikelname, SKU, eBay-ID) einer gruppierten Bestellung
 
 ---
 
@@ -397,11 +425,13 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
     │       └── Toast.svelte
     └── routes/
         ├── +layout.svelte              (Auth-Guard, Sidebar-Shell, volle Breite)
-        ├── +page.svelte                (Nachrichten — Startseite ✅ PORTIERT, ~1100 Zeilen)
+        ├── +page.svelte                (Nachrichten — Startseite ✅ PORTIERT, 611 Zeilen)
         ├── login/+page.svelte          (Login mit Schwarzblau-Gradient → #2D43A8)
         ├── produkte/+page.svelte       (✅ PORTIERT, ~1890 Zeilen)
-        ├── bestellungen/+page.svelte   (⏳ Stub — Nächste Priorität)
-        ├── rechnungen/+page.svelte     (⏳ Stub)
+        ├── bestellungen/+page.svelte   (✅ PORTIERT — Multi-Artikel, E-Rechnung, Auto-Rechnung)
+        ├── rechnungen/
+        │   ├── +page.svelte            (✅ PORTIERT — Tabelle, Bearbeiten, Storno, Vorlage-Editor)
+        │   └── import/+page.svelte     (✅ PORTIERT — CSV-Import mit Spalten-Mapping)
         └── einstellungen/
             ├── +page.svelte            (Kacheln-Übersicht ✅)
             ├── firma/+page.svelte      (⏳)
@@ -416,16 +446,17 @@ Webhook Verkauf → Verkauf parsen → Gültig? → Produkt + Token laden → Me
 
 | # | Seite | Status | Besonderheiten |
 |---|---|---|---|
-| 1 | Nachrichten | ✅ PORTIERT | Ordner-Sidebar, Thread-Ansicht, iFrame für HTML/Bild-Nachrichten, Antwort-Modal mit KI + Überarbeiten-Chat, Sticky Reply-Bar (lila), Multi-Select mit Bulk-Aktionen (Verschieben/Löschen/Gelesen), Custom-Ordner (CRUD + Rechtsklick-Umbenennung), ~1100 Zeilen |
+| 1 | Nachrichten | ✅ PORTIERT | Ordner-Sidebar, Thread-Ansicht, KI-Antwort, Überarbeiten-Chat |
 | 2 | Produkte | ✅ PORTIERT | Grid-Cards, Varianten-Modal, Bestand-Update, Import, CSV-Export |
-| 3 | Bestellungen | ✅ PORTIERT | Tabelle mit Multi-Artikel-Gruppierung, Filter-Tabs (Alle/Bezahlt/Versendet/Archiv), Tracking-Modal, eBay-Style Detail-Modal (2-Spalten), Archivierung, Nachricht senden, Auto-Rechnung mit Multi-Positionen, Pagination (10/25/50/100) |
-| 4 | Rechnungen | ⏳ | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Manuell erstellen |
-| 5 | Einstellungen/Firma | ⏳ | Firmendaten-Formular → `/rechnung-settings` (action: save) |
-| 6 | Einstellungen/Nummern | ⏳ | RE/SR Konfiguration mit Live-Vorschau |
-| 7 | Einstellungen/SMTP | ⏳ | SMTP-Formular + Test-Button |
-| 8 | Einstellungen/KI | ⏳ | System-Prompt, Modell-Auswahl, Auto-Send, Wissensdatenbank |
-| 9 | Einstellungen/Kauf-Nachricht | ⏳ | Toggle, Betreff, Vorlage, Platzhalter |
-| 10 | Einstellungen/Bilder | ⏳ | Produkt-Select, Bild-URL, Preview |
+| 3 | Bestellungen | ✅ PORTIERT | Tabelle, Filter-Tabs, Tracking-Modal, Detail-Modal, Archivierung, Auto-Rechnung, E-Rechnung (ZUGFeRD/XRechnung) |
+| 4 | Rechnungen | ✅ PORTIERT | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Bearbeiten-Modal (Multi-Positionen), Vorlage-Editor |
+| 5 | Rechnungen/Import | ✅ PORTIERT | CSV-Import mit Spalten-Mapping, Vorschau, Shop-Import-Workflow |
+| 6 | Einstellungen/Firma | ⏳ | Firmendaten-Formular → `/rechnung-settings` (action: save) |
+| 7 | Einstellungen/Nummern | ⏳ | RE/SR Konfiguration mit Live-Vorschau |
+| 8 | Einstellungen/SMTP | ⏳ | SMTP-Formular + Test-Button |
+| 9 | Einstellungen/KI | ⏳ | System-Prompt, Modell-Auswahl, Auto-Send, Wissensdatenbank |
+| 10 | Einstellungen/Kauf-Nachricht | ⏳ | Toggle, Betreff, Vorlage, Platzhalter |
+| 11 | Einstellungen/Bilder | ⏳ | Produkt-Select, Bild-URL, Preview |
 
 ---
 
@@ -840,8 +871,8 @@ CREATE TABLE message_templates (
 2. **Workflow:** Käuferdaten + Bestelldetails → Rechnungsnummer → Gotenberg PDF → E-Mail
 3. **Endpunkte:** Alle WF-RE-01 bis WF-RE-06 (siehe Abschnitt 4.3)
 
-**Rechnungsnummern-Format:** `{praefix}{trennzeichen}{YYYY}{trennzeichen}{laufende Nummer}`
-Beispiel: `RE-2026-00001`
+**Rechnungsnummern-Format:** `{re_praefix}{re_trennzeichen}{YYYY}{re_trennzeichen}{laufende Nummer}`
+Beispiel: `RE-2026-00001` (wenn `re_mit_jahr = true`, `re_min_stellen = 5`)
 
 ---
 
@@ -982,6 +1013,22 @@ git push origin main
 
 ---
 
+## 13b. Bekannte Rechnungs-Workflow-Gotchas
+
+| # | Problem | Ursache | Lösung |
+|---|---|---|---|
+| 1 | `column f.adresse does not exist` | `user_firmendaten` hat KEINE Spalte `adresse` | Einzelspalten nutzen: `f.strasse, f.hausnummer, f.plz, f.ort` |
+| 2 | `column f.iban does not exist` | Spalte heißt `bank_iban` | `f.bank_iban` verwenden |
+| 3 | `column re_startnummer does not exist` | Alte Spaltennamen | `re_naechste_nr`, `re_min_stellen`, `re_mit_jahr` verwenden |
+| 4 | `relation "users" does not exist` | Falsche PostgreSQL-Credential am Node | Alle Postgres-Nodes auf `ebay_automation` (ID: `4yOALkbLmo3zuewo`) setzen |
+| 5 | `binary file 'html_file' not found` | Gotenberg HTTP-Request-Node erwartet Binary | Code-Node mit `https.request` verwenden (wie WF-RE-01) |
+| 6 | `Kein PDF vorhanden` | `pdf_base64` leer in DB | `$input.first().json.pdf_base64` statt `$input.first().binary?.data` |
+| 7 | Vorlage wird nicht angewendet | `vorlage_json` nicht geladen | LEFT JOIN auf `user_rechnung_vorlage` im Config-Query |
+| 8 | Workflow gespeichert aber alter Code läuft | Draft ≠ Active Version | Nach Speichern: Toggle **aus/an** damit aktive Version aktualisiert wird |
+| 9 | Doppel-MwSt bei CSV-Import | Einzelpreis ist Brutto, Workflow rechnet nochmal MwSt drauf | Netto = Brutto / (1 + MwSt/100) |
+
+---
+
 ## 14. Bekannte eBay API-Fehler
 
 ### Fehler 21920061: „Produktart" als variationSpecifics ungültig
@@ -1037,299 +1084,5 @@ const tiles = [
   { icon: '🖼️', title: 'Produktbilder',   href: '/einstellungen/bilder' },
 ];
 ```
----
 
-## 16. Multi-Shop Rechnungssystem — Erweiterung
-
-### Ziel
-Rechnungserstellung nicht nur für eBay, sondern für **alle gängigen Online-Shops**. Das bestehende Rechnungssystem (Gotenberg + SMTP + `invoices`-Tabelle) wird 1:1 wiederverwendet. Neue Shops = nur neue "Connectoren" (CSV, API-Anbindungen).
-
----
-
-### DB-Erweiterung (einmalig ausführen)
-
-```sql
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'ebay';
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS external_order_id VARCHAR(100);
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shop_name VARCHAR(100);
-```
-
-`source`-Werte: `'ebay'` | `'csv'` | `'woocommerce'` | `'shopify'` | `'shopware'` | `'etsy'` | `'amazon'`
-
----
-
-### Roadmap (Schritt für Schritt)
-
-| Phase | Connector | Status | Priorität |
-|---|---|---|---|
-| **1** | **CSV-Import** (universell) | ⏳ Nächster Schritt | 🔴 Hoch |
-| **2** | **WooCommerce** REST API | ⏳ Geplant | 🔴 Hoch |
-| **3** | **Shopify** Admin API | ⏳ Geplant | 🔴 Hoch |
-| **4** | **Shopware 6** Admin REST API | ⏳ Geplant | 🟡 Mittel |
-| **5** | **Etsy** Open API v3 | ⏳ Geplant | 🟡 Mittel |
-| **6** | **Amazon** SP-API | ⏳ Geplant | 🟠 Aufwändig |
-| **7** | **Billbee / JTL** | ⏳ Geplant | 🟡 Mittel |
-
----
-
-### Phase 1: CSV-Import
-
-#### Dashboard-Seite
-- **Route:** `/rechnungen/import`
-- **Erreichbar** über Button auf `/rechnungen` ("📥 Importieren")
-
-#### Features der Import-Seite
-1. **Shop-Auswahl-Tabs** (vorbereitet für spätere Phasen): CSV | WooCommerce | Shopify | …
-2. **CSV Upload** — Drag & Drop + Datei-Dialog
-3. **Spalten-Mapping** — User wählt welche CSV-Spalte welchem Feld entspricht (flexibel für verschiedene Shop-Exporte)
-4. **Vorschau-Tabelle** — erkannte Bestellungen vor dem Import
-5. **„Rechnungen erstellen"-Button** → sendet an n8n-Workflow `WF-IMPORT-01`
-6. **Fortschrittsanzeige** + Fehlerprotokoll pro Zeile
-
-#### CSV-Standardformat (eigenes Export-Format)
-```
-bestell_id, datum, vorname, nachname, strasse, plz, ort, land,
-email, artikel, menge, einzelpreis, mwst_satz
-```
-
-#### n8n-Workflow: `WF-IMPORT-01`
-- **Endpoint:** POST `/shop-import-rechnung`
-- **Input:** Array von geparsten Bestellungen + `user_id` + `source`
-- **Ablauf:**
-  1. Loop über alle Bestellungen
-  2. Rechnungsnummer vergeben (gleiche Logik wie eBay)
-  3. Gotenberg PDF generieren
-  4. In `invoices`-Tabelle speichern (mit `source`, `external_order_id`, `shop_name`)
-  5. Falls E-Mail vorhanden + `auto_email` aktiv → SMTP senden
-- **Error-Branch:** Fehlerhafte Zeilen loggen, Rest weiterlaufen lassen
-
----
-
-### Phase 2: WooCommerce
-
-#### Authentifizierung
-- **Methode:** HTTP Basic Auth (Consumer Key + Consumer Secret)
-- **Endpunkt:** `{shop_url}/wp-json/wc/v3/orders`
-- **Felder:** `?status=processing&per_page=50&page=1`
-
-#### DB-Tabelle für Shop-Credentials
-```sql
-CREATE TABLE IF NOT EXISTS user_shop_connections (
-  id SERIAL PRIMARY KEY,
-  user_id INT REFERENCES users(id),
-  shop_type VARCHAR(50),        -- 'woocommerce' | 'shopify' | 'shopware' | 'etsy' | 'amazon'
-  shop_name VARCHAR(100),       -- Anzeigename (z.B. "Mein WooCommerce Shop")
-  shop_url VARCHAR(255),        -- Basis-URL des Shops
-  api_key VARCHAR(255),
-  api_secret VARCHAR(255),
-  access_token VARCHAR(500),    -- für OAuth-Shops (Shopify, Etsy)
-  extra_config JSONB,           -- Shop-spezifische Zusatzfelder
-  aktiv BOOLEAN DEFAULT true,
-  erstellt_am TIMESTAMP DEFAULT NOW()
-);
-```
-
-#### n8n-Workflow: `WF-WOO-01`
-- **Endpoint:** POST `/woocommerce-orders-laden`
-- **Ablauf:** Credentials aus DB → WooCommerce API → Orders normalisieren → Rückgabe an Dashboard
-- Normalisierung auf einheitliches Order-Format (gleich wie CSV-Import)
-
----
-
-### Phase 3: Shopify
-
-#### Authentifizierung
-- **Methode:** Admin API Access Token (oder OAuth für Multi-Merchant)
-- **Endpunkt:** `https://{shop}.myshopify.com/admin/api/2024-01/orders.json`
-- **Header:** `X-Shopify-Access-Token: {token}`
-
-#### n8n-Workflow: `WF-SHOPIFY-01`
-- **Endpoint:** POST `/shopify-orders-laden`
-- Gleiche Normalisierung wie WooCommerce
-
----
-
-### Einheitliches Normalisiertes Order-Format
-
-Alle Connectoren (CSV, WooCommerce, Shopify, …) liefern Daten in diesem Format an den Rechnungs-Workflow:
-
-```json
-{
-  "external_order_id": "WOO-1234",
-  "source": "woocommerce",
-  "shop_name": "Mein Shop",
-  "datum": "2026-04-14",
-  "kaeufer": {
-    "vorname": "Max",
-    "nachname": "Mustermann",
-    "strasse": "Musterstr. 1",
-    "plz": "12345",
-    "ort": "Berlin",
-    "land": "DE",
-    "email": "max@example.com"
-  },
-  "positionen": [
-    {
-      "artikel": "Produktname",
-      "menge": 2,
-      "einzelpreis": 19.99,
-      "mwst_satz": 19
-    }
-  ]
-}
-```
-
----
-
-### Dashboard-Erweiterungen (Rechnungen-Seite)
-
-#### Filter-Erweiterung
-```js
-// Bestehend: Alle / Erstellt / Gesendet / Storniert
-// Neu hinzu: Filter nach Source
-const sourceFilter = ['alle', 'ebay', 'csv', 'woocommerce', 'shopify', ...];
-```
-
-#### Einstellungen-Kachel: Shop-Verbindungen
-```js
-// In /einstellungen/+page.svelte tiles-Array ergänzen:
-{ icon: '🛒', title: 'Shop-Verbindungen', href: '/einstellungen/shops' }
-```
-
-#### Neue Einstellungsseite: `/einstellungen/shops`
-- Liste aller verbundenen Shops (Name, Typ, Status, Letzter Import)
-- „Shop hinzufügen"-Button → Modal mit Shop-Typ-Auswahl + Credentials-Formular
-- Test-Verbindung-Button pro Shop
-- Aktivieren / Deaktivieren / Löschen
-
----
-
-### API-Endpunkte (Multi-Shop gesamt)
-
-```js
-// Import
-apiCall('/shop-import-rechnung',    { user_id, source, shop_name, orders: [...] })
-
-// Shop-Verbindungen verwalten
-apiCall('/shop-connections-laden',  { user_id })
-apiCall('/shop-connection-speichern', { user_id, shop_type, shop_name, shop_url, api_key, api_secret })
-apiCall('/shop-connection-testen',  { user_id, connection_id })
-apiCall('/shop-connection-loeschen',{ user_id, connection_id })
-
-// Orders aus Shops laden (für zukünftige Auto-Sync)
-apiCall('/woocommerce-orders-laden', { user_id, connection_id, status?: 'processing' })
-apiCall('/shopify-orders-laden',     { user_id, connection_id, status?: 'unfulfilled' })
-```
-
----
-
-### Entwicklungsreihenfolge (konkret)
-
-**Nächste Schritte:**
-1. `ALTER TABLE invoices` — SQL ausführen (source, external_order_id, shop_name)
-2. n8n-Workflow `WF-IMPORT-01` (`/shop-import-rechnung`) erstellen
-3. SvelteKit-Seite `/rechnungen/import` bauen (CSV-Phase)
-4. Button „📥 Importieren" auf `/rechnungen` ergänzen
-5. `CREATE TABLE user_shop_connections` — SQL ausführen
-6. n8n-Workflow `WF-WOO-01` (`/woocommerce-orders-laden`) erstellen
-7. Einstellungsseite `/einstellungen/shops` bauen
-8. WooCommerce-Tab auf Import-Seite aktivieren
-9. Shopify analog zu WooCommerce
-
----
-
-## 17. Offene Baustellen & bekannte Fehler (Stand 15.04.2026)
-
-### 17.1 WF-IMPORT-01 — Config laden Node: falsche Spaltennamen
-
-**Problem:** Der n8n-Workflow `WF-IMPORT-01 Shop Import Rechnung` verwendet im Node „Config laden" Spaltennamen die nicht mit der echten DB übereinstimmen.
-
-**Fehler die aufgetreten sind:**
-- `column rc.re_stellen does not exist` → wurde per ALTER TABLE behoben
-- `column rc.auto_einstellungen does not exist` → wurde per ALTER TABLE behoben
-- `column f.adresse does not exist` → PostgreSQL schlägt `f.strasse` vor
-
-**Nächster Schritt:**
-1. SQL ausführen um echte Spalten zu sehen:
-```sql
-SELECT column_name FROM information_schema.columns 
-WHERE table_name = 'user_firmendaten' 
-ORDER BY ordinal_position;
-
-SELECT column_name FROM information_schema.columns 
-WHERE table_name = 'user_rechnung_config' 
-ORDER BY ordinal_position;
-```
-2. Im n8n-Workflow `WF-IMPORT-01` den Node **„Config laden"** öffnen
-3. SQL-Query anpassen — `f.adresse` durch den echten Spaltennamen ersetzen
-4. Alle anderen Spalten ebenfalls gegen die echten DB-Spalten prüfen
-
-**Wichtig:** Der bestehende Workflow `WF-RE-01` (`/rechnung-erstellen`) funktioniert bereits korrekt — dessen Config-Query als Referenz nehmen und in `WF-IMPORT-01` übernehmen.
-
----
-
-### 17.2 CSV-Import — Käufer-Mapping Hostinger
-
-**Problem:** Bei Hostinger-CSV hat `Rechnungsempfänger` Vor- und Nachname zusammen (z.B. `Vitali Dubs`). Das Feld wird aktuell komplett in `nachname` gemappt.
-
-**Nächster Schritt:** Im Node „Orders parsen" in `WF-IMPORT-01` den Namen splitten:
-```javascript
-const vollname = order.kaeufer.nachname || '';
-const teile = vollname.trim().split(' ');
-order.kaeufer.vorname = teile.slice(0, -1).join(' ');
-order.kaeufer.nachname = teile[teile.length - 1] || vollname;
-```
-
----
-
-### 17.3 Bereits erledigte SQL-Migrationen
-
-```sql
--- Ausgeführt am 15.04.2026:
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'ebay';
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS external_order_id VARCHAR(100);
-ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shop_name VARCHAR(100);
-
-CREATE TABLE IF NOT EXISTS user_shop_connections (
-  id SERIAL PRIMARY KEY,
-  user_id INT REFERENCES users(id),
-  shop_type VARCHAR(50) NOT NULL,
-  shop_name VARCHAR(100) NOT NULL,
-  shop_url VARCHAR(255),
-  api_key VARCHAR(255),
-  api_secret VARCHAR(255),
-  access_token VARCHAR(500),
-  extra_config JSONB,
-  aktiv BOOLEAN DEFAULT true,
-  erstellt_am TIMESTAMP DEFAULT NOW()
-);
-
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS re_stellen INT DEFAULT 5;
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_stellen INT DEFAULT 5;
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS jahr INT DEFAULT 2026;
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS auto_einstellungen JSONB;
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS email_vorlage TEXT;
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sprache VARCHAR(5) DEFAULT 'de';
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS waehrung VARCHAR(5) DEFAULT 'EUR';
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_praefix VARCHAR(20) DEFAULT 'SR';
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_trennzeichen VARCHAR(5) DEFAULT '-';
-ALTER TABLE user_rechnung_config ADD COLUMN IF NOT EXISTS sr_startnummer INT DEFAULT 1;
-```
-
----
-
-### 17.4 Neue Dateien (seit 15.04.2026)
-
-| Datei | Status |
-|---|---|
-| `src/routes/rechnungen/import/+page.svelte` | ✅ Fertig — CSV-Import mit Auto-Mapping, Hostinger-Preset, Fallback-Werte |
-| `src/routes/einstellungen/shops/+page.svelte` | ✅ Fertig — Shop-Verbindungen verwalten |
-
-### Neue n8n-Workflows
-
-| ID | Endpoint | Status |
-|---|---|---|
-| WF-IMPORT-01 | POST `/shop-import-rechnung` | ⚠️ Config-Query fehlerhaft — siehe 17.1 |
-| WF-SHOPS-01 | POST `/shop-connections-laden` | ✅ Aktiv |
-| WF-SHOPS-02 | POST `/shop-connection-speichern` | ✅ Aktiv |
-| WF-SHOPS-03 | POST `/shop-connection-loeschen` | ✅ Aktiv |   
+Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
