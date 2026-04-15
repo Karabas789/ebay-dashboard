@@ -122,18 +122,16 @@
   onMount(ladeVerbindungen);
 </script>
 
-<div class="page-container">
-
-  <div class="page-hdr">
+<div class="page-hdr">
+  <div class="hdr-left">
+    <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
     <div>
       <div class="page-title">🛒 Shop-Verbindungen</div>
       <div class="page-sub">Verbinde deine Online-Shops für automatische Rechnungserstellung</div>
     </div>
-    <div class="hdr-actions">
-      <a href="/einstellungen" class="btn-ghost">← Zurück</a>
-      <button class="btn-primary" onclick={() => { resetForm(); modalOffen = true; }}>+ Shop hinzufügen</button>
-    </div>
   </div>
+  <button class="btn-primary" onclick={() => { resetForm(); modalOffen = true; }}>+ Shop hinzufügen</button>
+</div>
 
   <!-- Info-Banner -->
   <div class="info-banner">
@@ -397,4 +395,7 @@
   .btn-danger:hover { background:#fee2e2; }
   .btn-danger:disabled { opacity:0.6; cursor:not-allowed; }
   .btn-sm { padding:5px 10px; font-size:0.78rem; }
+  .hdr-left { display:flex; align-items:center; gap:12px; }
+  .btn-back { background:none; border:none; color:var(--primary); font-size:0.85rem; cursor:pointer; padding:0; }
+  .btn-back:hover { text-decoration:underline; }
 </style>
