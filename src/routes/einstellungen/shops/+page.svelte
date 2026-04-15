@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { currentUser, showToast } from '$lib/stores.js';
   import { apiCall } from '$lib/api.js';
+  import { goto } from '$app/navigation';
 
   let verbindungen = $state([]);
   let loading = $state(false);
@@ -203,8 +204,6 @@
       </div>
     </div>
   </div>
-
-</div>
 
 <!-- Modal: Shop hinzufügen -->
 {#if modalOffen}
