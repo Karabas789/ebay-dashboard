@@ -117,11 +117,13 @@
   ];
 </script>
 
-<div class="page-container">
-  <div class="page-hdr">
-    <div class="hdr-left">
-      <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
-      <div>
+<div class="hdr-left">
+  <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
+  <div>
+    <div class="page-title">📧 E-Mail Einstellungen</div>
+    <div class="page-sub">SMTP-Konfiguration für den automatischen und manuellen Rechnungsversand</div>
+  </div>
+</div>
       <div class="page-title">📧 E-Mail Einstellungen</div>
       <div class="page-sub">SMTP-Konfiguration für den automatischen und manuellen Rechnungsversand</div>
     </div>
