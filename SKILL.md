@@ -1,3 +1,4 @@
+[SKILL.md](https://github.com/user-attachments/files/26800584/SKILL.md)
 ---
 name: ebay-dashboard-erstellung
 description: >
@@ -1125,5 +1126,502 @@ const tiles = [
   { icon: '🖼️', title: 'Produktbilder',   href: '/einstellungen/bilder' },
 ];
 ```
+[SKILL_v5_buchhaltung.md](https://github.com/user-attachments/files/26800596/SKILL_v5_buchhaltung.md)
+---
+name: ebay-dashboard-erstellung
+description: >
+  Verwende diesen Skill bei JEDER Anfrage rund um das eBay-Dashboard, SvelteKit-Migration,
+  n8n-Workflows oder die fünf Kernfunktionen: automatische eBay-Nachrichten nach Kauf,
+  Rechnungserstellung, KI-gestützte Angebotserstellung, Auto-Repricing und Buchhaltungsmodul.
+  Trigger-Situationen: „Dashboard bauen", „Dashboard erweitern", „neuen Tab einbauen",
+  „neuen Workflow bauen", „Rechnung erstellen", „Rechnungsvorlage",
+  „eBay Nachricht automatisch senden", „Repricing einrichten", „Preisanpassung",
+  „Angebot mit KI erstellen", „eBay Listing generieren", „Dashboard anpassen",
+  „Dashboard_neu_v8", „SvelteKit portieren", „Svelte 5", „Seite portieren",
+  „Bestellungen verarbeiten", „Lagerbestand synchronisieren",
+  „n8n Webhook erstellen", „Nachrichtenvorlage bearbeiten", „Workflow debuggen",
+  „eBay API Aufruf", „Tab hinzufügen", „Modal bauen", „CSS anpassen",
+  „Deploy", „Docker build", „git push",
+  „Buchhaltung", „Eingangsrechnung", „EÜR", „Einnahmenüberschussrechnung",
+  „UStVA", „Umsatzsteuer-Voranmeldung", „OCR", „Rechnungserkennung",
+  „Quittung hochladen", „Ausgaben erfassen", „Vorsteuer", „Zahllast".
+  Enthält vollständige Referenz zu Technologie-Stack, allen n8n-Workflows,
+  Datenbankschema, Design-System v3, SvelteKit-Patterns und Deploy-Prozess.
+connected: false
+metadata:
+  author: Vitali
+  version: '5.0'
+  based_on: Wissensbasis (Stand 2026-04-16)
+---
+
+# eBay-Dashboard: Vollständiger Entwicklungs-Skill
+
+> **Änderungshistorie v5.0:** Buchhaltungsmodul hinzugefügt (Abschnitte 16–22).
+> Neue Tabellen, 7 neue Workflows (WF-BH-01 bis WF-BH-07), OCR-Service,
+> 4 neue Frontend-Seiten, Sidebar erweitert.
+
+---
+
+## 16. Buchhaltungsmodul — Übersicht
+
+### Zweck
+Erweiterung des Dashboards um eine vollständige Buchhaltungsfunktion:
+- **Eingangsrechnungen** erfassen (Upload + E-Mail-Import + KI-Erkennung)
+- **Einnahmenüberschussrechnung (EÜR)** automatisch aus Ausgangs- und Eingangsrechnungen
+- **UStVA-Vorbereitung** mit ELSTER-Kennzahlen (Kz 81, 86, 66)
+
+### Architektur
+
+```
+Frontend (SvelteKit)          Backend (n8n)               Services
+─────────────────────        ─────────────────           ─────────────────
+/buchhaltung                 WF-BH-06 (EÜR)             PostgreSQL
+/buchhaltung/eingang    →    WF-BH-01 (Analyse)    →    OCR-Service (Docker)
+/buchhaltung/eur             WF-BH-02 (Speichern)       Mistral Small (EU)
+/buchhaltung/ustva           WF-BH-03 (Laden)
+                             WF-BH-04 (Update)
+                             WF-BH-05 (E-Mail-Import)
+                             WF-BH-07 (UStVA)
+```
+
+### DSGVO-Konformität
+- **Keine US-APIs** für Dokumentenanalyse — Mistral (Frankreich, EU-Server) wird verwendet
+- **OCR lokal** auf eigenem Server (Tesseract im Docker-Container)
+- PDFs werden wenn möglich direkt als Text extrahiert (kein API-Call nötig)
+- Bilder/Fotos gehen an OCR-Service (lokal) → nur extrahierter Text an Mistral
+
+---
+
+## 17. Buchhaltungs-Datenbankschema
+
+### Tabelle: `incoming_invoices`
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | SERIAL PK | Primärschlüssel |
+| `user_id` | INT FK→users | Benutzer-Zuordnung |
+| `lieferant` | VARCHAR(255) | Name des Lieferanten |
+| `rechnungsnummer` | VARCHAR(100) | Rechnungsnummer (nullable) |
+| `rechnungsdatum` | DATE | Rechnungsdatum |
+| `faelligkeitsdatum` | DATE | Fälligkeitsdatum (nullable) |
+| `netto_betrag` | DECIMAL(10,2) | Nettobetrag |
+| `mwst_satz` | DECIMAL(5,2) | MwSt-Satz (z.B. 19) |
+| `mwst_betrag` | DECIMAL(10,2) | MwSt-Betrag |
+| `brutto_betrag` | DECIMAL(10,2) | Bruttobetrag |
+| `kategorie` | VARCHAR(100) | Ausgabenkategorie |
+| `notiz` | TEXT | Freitext-Notiz |
+| `datei_base64` | TEXT | Original-Datei als Base64 |
+| `datei_typ` | VARCHAR(20) | pdf, jpg, png etc. |
+| `quelle` | VARCHAR(20) | 'upload' oder 'email' |
+| `status` | VARCHAR(20) | 'entwurf', 'gebucht', 'bezahlt' |
+| `bezahlt_am` | DATE | Bezahldatum (nullable) |
+| `created_at` | TIMESTAMP | Erstellungszeitpunkt |
+
+### Tabelle: `incoming_invoice_items`
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | SERIAL PK | Primärschlüssel |
+| `invoice_id` | INT FK→incoming_invoices | ON DELETE CASCADE |
+| `pos_nr` | INT | Positionsnummer |
+| `bezeichnung` | VARCHAR(500) | Artikelbezeichnung |
+| `menge` | DECIMAL(10,2) | Menge (Default: 1) |
+| `einzelpreis` | DECIMAL(10,2) | Einzelpreis |
+| `mwst_satz` | DECIMAL(5,2) | MwSt-Satz (Default: 19) |
+| `netto_betrag` | DECIMAL(10,2) | Netto der Position |
+| `steuer_betrag` | DECIMAL(10,2) | Steuer der Position |
+| `brutto_betrag` | DECIMAL(10,2) | Brutto der Position |
+
+### Tabelle: `expense_categories`
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | SERIAL PK | |
+| `user_id` | INT FK→users | |
+| `name` | VARCHAR(100) | Kategoriename |
+| `ist_standard` | BOOLEAN | System-Kategorie? |
+
+**Standard-Kategorien:** Wareneinkauf, Büromaterial, Versandkosten, Kfz/Tanken, Telekommunikation, Software/IT, Werbung, Reisekosten, Versicherung, Miete/Pacht, Sonstiges
+
+### Tabelle: `user_imap_config`
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `user_id` | INT UNIQUE FK→users | |
+| `host` | VARCHAR(255) | IMAP-Host |
+| `port` | INT | Default: 993 |
+| `user_name` | VARCHAR(255) | IMAP-Benutzername |
+| `pass` | TEXT | Base64-kodiert (wie SMTP) |
+| `folder` | VARCHAR(100) | Default: 'INBOX' |
+| `filter_betreff` | VARCHAR(255) | Optional: Betreff-Filter |
+| `aktiv` | BOOLEAN | Import aktiv? |
+
+> ⚠️ **ACHTUNG:** `invoices`-Tabelle hat KEINE Spalte `created_at`. Für Datums-Queries auf Ausgangsrechnungen `pdf_generiert_am` verwenden!
+
+---
+
+## 18. Buchhaltungs-Workflows
+
+### 18.1 WF-BH-01: Eingangsrechnung analysieren
+
+- **Workflow-ID:** `SBWFYB7RrzXXHWqg`
+- **Endpoint:** POST `/eingangsrechnung-analysieren`
+- **Status:** ✅ Aktiv
+
+**Ablauf:**
+```
+Webhook → Auth → Base64→Binary → PDF oder Bild?
+  → PDF: Extract from File → Hat Text? 
+    → ja:  Agent (Mistral Small) + Output Parser → Validieren → Response
+    → nein: OCR-Service → Agent → Validieren → Response
+  → Bild: OCR-Service → Agent → Validieren → Response
+```
+
+**Kern-Nodes:**
+- **PDF Text extrahieren:** `n8n-nodes-base.extractFromFile` (operation: pdf) — extrahiert Text direkt aus digitalen PDFs
+- **OCR-Service aufrufen:** HTTP-Request an `http://ocr-service:3200/ocr` — für Bilder und gescannte PDFs
+- **Rechnung analysieren:** `@n8n/n8n-nodes-langchain.agent` mit Structured Output Parser
+- **Mistral Cloud Chat Model:** `mistral-small-latest`, Credential: `B4HMuVL79Y3mHCpK`, temperature: 0.1
+
+**Output Parser JSON-Schema:**
+```json
+{
+  "lieferant": "string",
+  "rechnungsnummer": "string|null",
+  "rechnungsdatum": "string (YYYY-MM-DD)",
+  "faelligkeitsdatum": "string|null",
+  "positionen": [{ "bezeichnung": "string", "menge": "number", "einzelpreis": "number", "mwst_satz": "number" }],
+  "netto_betrag": "number",
+  "mwst_satz": "number",
+  "mwst_betrag": "number",
+  "brutto_betrag": "number",
+  "kategorie": "string (aus erlaubter Liste)",
+  "waehrung": "string",
+  "zahlungsart": "string|null",
+  "iban": "string|null",
+  "bic": "string|null",
+  "lieferant_adresse": "string|null",
+  "lieferant_email": "string|null",
+  "lieferant_ust_id": "string|null",
+  "notizen": "string|null"
+}
+```
+
+**Validierungs-Code-Node:**
+- Plausibilitätschecks: Brutto↔Netto Berechnung wenn ein Wert fehlt
+- Kategorie gegen erlaubte Liste validieren
+- Positionen normalisieren (parseFloat, Defaults)
+- Response enthält `methode`-Feld: `pdf_text_extract`, `ocr_tesseract`, `ocr_pdf_fallback`
+
+### 18.2 WF-BH-02: Eingangsrechnung speichern
+
+- **Endpoint:** POST `/eingangsrechnung-speichern`
+- **Ablauf:** Auth → INSERT `incoming_invoices` → Hat Positionen? → INSERT `incoming_invoice_items`
+- **Body:** `{ user_id, lieferant, rechnungsnummer, rechnungsdatum, faelligkeitsdatum, netto_betrag, mwst_satz, mwst_betrag, brutto_betrag, kategorie, notiz, datei_base64, datei_typ, quelle, positionen[] }`
+
+### 18.3 WF-BH-03: Eingangsrechnungen laden
+
+- **Endpoint:** POST `/eingangsrechnungen-laden`
+- **Body:** `{ user_id, zeitraum_von?, zeitraum_bis?, status_filter?, kategorie_filter? }`
+- **Response:** `{ success, rechnungen[], zusammenfassung: { anzahl, gesamt_netto, gesamt_brutto, gesamt_mwst, kategorien{} } }`
+
+### 18.4 WF-BH-04: Eingangsrechnung Update
+
+- **Endpoint:** POST `/eingangsrechnung-update`
+- **Actions:** `update` (Daten ändern), `status` (Status ändern), `delete` (Löschen mit CASCADE auf Items)
+- **Body:** `{ user_id, invoice_id, action, neuer_status?, bezahlt_am?, lieferant?, ... }`
+
+### 18.5 WF-BH-05: E-Mail-Rechnungsimport
+
+- **Trigger:** Schedule (alle 30 Min)
+- **Ablauf:** IMAP-Configs laden → E-Mails abrufen → PDF-Anhänge finden → WF-BH-01 aufrufen → als Entwurf speichern
+- **Status:** ⚠️ DEAKTIVIERT bis IMAP konfiguriert
+
+### 18.6 WF-BH-06: EÜR generieren
+
+- **Endpoint:** POST `/eur-generieren`
+- **Body:** `{ user_id, jahr, quartal?, monat? }`
+- **Ablauf:**
+  1. Einnahmen aus `invoices` (WHERE `rechnung_typ='rechnung'`, `status!='storniert'`, **`pdf_generiert_am`** im Zeitraum)
+  2. Ausgaben aus `incoming_invoices` (WHERE `status IN ('gebucht','bezahlt')`, `rechnungsdatum` im Zeitraum)
+  3. Firmendaten laden (Kleinunternehmer-Check)
+  4. EÜR berechnen: Gewinn = Einnahmen(Netto) − Ausgaben(Netto), USt-Zahllast = USt − Vorsteuer
+- **Response:** `{ success, eur: { zeitraum, kleinunternehmer, einnahmen{}, ausgaben{pro_kategorie, pro_monat}, ergebnis{gewinn_netto, umsatzsteuer_zahllast} } }`
+
+> ⚠️ **KRITISCH:** `invoices`-Tabelle hat KEINE Spalte `created_at`! Immer `pdf_generiert_am` verwenden für Datums-Queries!
+
+### 18.7 WF-BH-07: UStVA-Daten
+
+- **Endpoint:** POST `/ustva-daten`
+- **Body:** `{ user_id, jahr, monat?, quartal? }`
+- **ELSTER-Kennzahlen:**
+  - Kz 81: Umsätze 19% (Bemessungsgrundlage + USt)
+  - Kz 86: Umsätze 7% (Bemessungsgrundlage + USt)
+  - Kz 66: Vorsteuerbeträge
+  - Zahllast = USt gesamt − Vorsteuer gesamt
+- **Berücksichtigt:** Stornos (mindern USt), Kleinunternehmer-Status (§19 UStG)
+
+> ⚠️ **KRITISCH:** Auch hier `pdf_generiert_am` statt `created_at` für `invoices`-Queries!
+
+---
+
+## 19. OCR-Service
+
+### Architektur
+Eigenständiger Docker-Container mit Tesseract OCR + Poppler (PDF→PNG) + ImageMagick (HEIC/TIFF).
+
+| Parameter | Wert |
+|---|---|
+| **Container-Name** | `ocr-service` |
+| **Image** | `ocr-service:latest` (lokal gebaut) |
+| **Port** | 3200 (nur im Docker-Netzwerk) |
+| **Netzwerk** | `coolify` |
+| **Basis-Image** | `node:20-slim` |
+| **Pakete** | tesseract-ocr, tesseract-ocr-deu, tesseract-ocr-eng, poppler-utils, imagemagick |
+| **Dateipfad** | `/opt/ocr-service/` |
+
+### Endpunkte
+
+| Methode | Pfad | Funktion |
+|---|---|---|
+| GET | `/health` | Health-Check (Tesseract/Poppler-Version) |
+| POST | `/ocr` | Volle OCR: `{ datei_base64, datei_typ }` → `{ success, text, pages, methode }` |
+| POST | `/ocr/preview` | Schnell-OCR nur erste Seite |
+
+### OCR-Logik für PDFs
+1. **Versuch 1:** `pdftotext` — für digitale PDFs mit selektierbarem Text (sofort, kein OCR)
+2. **Versuch 2:** `pdftoppm` → PNG (300 DPI) → `tesseract` pro Seite — für gescannte PDFs
+3. Für HEIC/TIFF/BMP: automatische Konvertierung via ImageMagick vor OCR
+
+### Deploy-Befehle
+```bash
+cd /opt/ocr-service
+docker build -t ocr-service:latest .
+docker run -d --name ocr-service --restart unless-stopped \
+  --network coolify -e PORT=3200 ocr-service:latest
+
+# Test aus n8n-Container:
+docker exec -it $(docker ps --filter "name=n8n" -q) \
+  wget -qO- http://ocr-service:3200/health
+```
+
+### Dateien
+- `server.js` — Express-Server (~130 Zeilen)
+- `package.json` — nur `express` als Dependency
+- `Dockerfile` — node:20-slim + apt-get tesseract/poppler/imagemagick
+
+> ⚠️ **WICHTIG:** Der OCR-Service ist NUR im Docker-Netzwerk erreichbar (`http://ocr-service:3200`), NICHT von außen. Kein Port-Mapping nach Host!
+
+---
+
+## 20. Buchhaltungs-Frontend
+
+### Neue Routen
+
+```
+src/routes/buchhaltung/
+├── +page.svelte              ← Übersicht (KPIs + Kacheln)
+├── eingang/+page.svelte      ← Eingangsrechnungen (Upload, KI-Analyse, Tabelle)
+├── eur/+page.svelte          ← EÜR (Zeitraumauswahl, Einnahmen/Ausgaben, Ergebnis)
+└── ustva/+page.svelte        ← UStVA (ELSTER-Kennzahlen, Zahllast)
+```
+
+### Sidebar-Eintrag
+```js
+const nav = [
+  { path: '/nachrichten',  icon: '📩', label: 'Nachrichten' },
+  { path: '/produkte',     icon: '📦', label: 'Produkte' },
+  { path: '/bestellungen', icon: '🛒', label: 'Bestellungen' },
+  { path: '/rechnungen',   icon: '🧾', label: 'Rechnungen' },
+  { path: '/buchhaltung',  icon: '📊', label: 'Buchhaltung' },  // NEU
+];
+```
+
+### Seite: `/buchhaltung` (Übersicht)
+- Jahres-KPIs: Einnahmen, Ausgaben, Gewinn, USt-Zahllast
+- 3 Kacheln: Eingangsrechnungen, EÜR, UStVA (wie Einstellungen-Grid)
+- API: `/eur-generieren` beim Laden
+
+### Seite: `/buchhaltung/eingang` (Eingangsrechnungen)
+- **Drop-Zone:** Drag & Drop für PDF/JPG/PNG/HEIC/WebP (max 20 MB)
+- **Upload-Flow:** Datei → Base64 → `/eingangsrechnung-analysieren` → editierbares Modal → `/eingangsrechnung-speichern`
+- **Tabelle:** Datum, Lieferant, Re.-Nr., Kategorie, Netto, MwSt, Brutto, Status, Quelle
+- **Filter:** Status-Tabs (Alle/Entwurf/Gebucht/Bezahlt) + Kategorie-Dropdown + Suche
+- **KPI-Leiste:** Belege-Anzahl, Gesamt Netto/MwSt/Brutto
+- **Actions:** Bearbeiten (Modal), Status ändern (📌 Gebucht, ✅ Bezahlt), Löschen
+- **Bearbeiten-Modal:** 2-spaltig, alle Felder editierbar
+
+### Seite: `/buchhaltung/eur` (EÜR)
+- **Zeitraum:** Gesamtjahr / Quartal / Monat mit Dropdown-Auswahl
+- **KPIs:** Einnahmen, Ausgaben, Gewinn, USt-Zahllast
+- **Einnahmen-Tabelle:** Netto + USt + Brutto
+- **Ausgaben-Tabelle:** Nach Kategorie aufgeschlüsselt (Netto, Vorsteuer, Brutto, Belege)
+- **Ergebnis-Card:** Einnahmen − Ausgaben = Gewinn (hervorgehoben mit primary-border)
+
+### Seite: `/buchhaltung/ustva` (UStVA)
+- **Zeitraum:** Monatlich / Quartal
+- **Firma-Info:** Name, USt-IdNr, Zeitraum
+- **ELSTER-Kennzahlen-Tabelle:** Kz 81, Kz 86 (Bemessungsgrundlage + Steuer), Kz 66 (Vorsteuer)
+- **Vorsteuer-Details:** Aufschlüsselung nach MwSt-Satz
+- **Zahllast-KPIs:** USt − Vorsteuer = Zahllast/Erstattung
+- **Kleinunternehmer-Hinweis:** Gelbe Box wenn §19 UStG
+
+### CSS-Pattern für alle Buchhaltungs-Seiten
+```css
+.page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
+```
+- Zurück-Button: `<button class="btn btn-secondary">← Buchhaltung</button>`
+- Drop-Zone: `background: var(--surface); border: 2px dashed var(--border2); border-radius: 12px; padding: 48px 24px;`
+- Form-Grid: `display: grid; grid-template-columns: 1fr 1fr; gap: 12px;`
+
+---
+
+## 21. Buchhaltungs-Gotchas
+
+| # | Problem | Ursache | Lösung |
+|---|---|---|---|
+| 1 | `column "created_at" does not exist` | `invoices`-Tabelle hat keine `created_at`-Spalte | `pdf_generiert_am` verwenden für alle Datums-Queries auf `invoices` |
+| 2 | `Wrong type: '4' is a number but was expecting a string` | IF-Node erwartet String, bekommt Number | **„Convert types where required"** (Loose Type Validation) in allen IF-Nodes aktivieren |
+| 3 | `Invalid JSON in 'Response Body'` | `={ {...} }` ist kein gültiger n8n-Ausdruck für JSON | Statisches JSON ohne `=` Prefix: `{"success": false, "error": "..."}` |
+| 4 | Auth OK? leitet zum falschen Ausgang | `$json.length > 0` prüft Array-Länge, aber Postgres gibt Objekt zurück | Bedingung: `$json.id` → `is not empty` + Loose Type Validation |
+| 5 | `Unexpected end of JSON input` im Frontend | Workflow gibt leere Response statt JSON | Alle Response-Nodes prüfen, statisches JSON verwenden |
+| 6 | `tesseract: not found` im n8n-Container | Tesseract ist auf Host installiert, nicht im n8n-Container | OCR-Service als separater Docker-Container verwenden (`http://ocr-service:3200/ocr`) |
+| 7 | `Rate limit exceeded` bei Mistral/Pixtral | Zu viele API-Calls in kurzer Zeit | Warten (2-3 Min), `mistral-small-latest` statt `pixtral-large-latest` verwenden (günstiger, weniger Rate-Limit-Probleme) |
+| 8 | OCR-Fallback nutzt Code-Node statt HTTP-Request | Alter Workflow importiert (vor OCR-Service-Umbau) | „Tesseract OCR" Code-Node ersetzen durch HTTP-Request an `http://ocr-service:3200/ocr` |
+| 9 | Pixtral Vision funktioniert nicht für Rechnungen | Pixtral Large teuer, Rate-Limits, DSGVO-Bedenken | `mistral-small-latest` als Vision-Modell oder besser: PDF direkt als Text extrahieren (Extract from File Node) |
+
+---
+
+## 22. Mistral-Integration (KI für Buchhaltung)
+
+### Modelle
+| Modell | API-Name | Vision | Empfehlung |
+|---|---|---|---|
+| Mistral Small 3.2 | `mistral-small-latest` | ✅ | **Empfohlen** für Rechnungserkennung |
+| Mistral Medium 3.1 | `mistral-medium-2508` | ✅ | Alternative |
+| Mistral Large 3 | `mistral-large-2512` | ✅ | Overkill für OCR |
+| Pixtral Large | `pixtral-large-latest` | ✅ | Zu teuer, Rate-Limit-Probleme |
+| Ministral 3 (14B/8B/3B) | `ministral-*` | ✅ | Sehr günstig, für einfache Quittungen |
+
+### n8n-Integration
+**Bevorzugtes Pattern:** Agent-Node + Mistral Cloud Chat Model + Structured Output Parser
+```
+Agent (@n8n/n8n-nodes-langchain.agent)
+  ├── ai_languageModel: Mistral Cloud Chat Model (mistral-small-latest)
+  └── ai_outputParser: Structured Output Parser (JSON-Schema)
+```
+
+**Credential:** `mistralCloudApi` ID: `B4HMuVL79Y3mHCpK` (Name: „Mistral Cloud account")
+
+**NICHT verwenden:**
+- HTTP-Request mit `$env.MISTRAL_API_KEY` (Key nicht als Env-Variable vorhanden)
+- Pixtral-large für einfache Rechnungen (zu teuer, Rate-Limits)
+- Native `n8n-nodes-base.mistralAi` Node für Vision (unterstützt keine Bilder)
+
+### System-Prompt für Rechnungsanalyse
+```
+Du bist ein Experte für die Analyse von Rechnungen und Quittungen.
+Extrahiere alle verfügbaren Informationen aus dem bereitgestellten Text.
+
+Regeln:
+- Alle Beträge als Zahlen, nicht als Strings
+- Datum immer im Format YYYY-MM-DD
+- Kategorie: genau EINER von: Wareneinkauf, Büromaterial, Versandkosten,
+  Kfz/Tanken, Telekommunikation, Software/IT, Werbung, Reisekosten,
+  Versicherung, Miete/Pacht, Sonstiges
+- Bei Tankquittungen: Lieferant = Tankstellenname, Kategorie = Kfz/Tanken
+- Berechne fehlende Werte (z.B. Netto aus Brutto wenn MwSt bekannt)
+- Wenn ein Wert nicht erkennbar ist, setze null
+- payment_method: Überweisung, SEPA, PayPal, Kreditkarte, Lastschrift, Bar
+```
+
+---
+
+## Portierungsstatus (aktualisiert)
+
+| # | Seite | Status | Besonderheiten |
+|---|---|---|---|
+| 1 | Nachrichten | ✅ PORTIERT | Ordner-Sidebar, Thread-Ansicht, KI-Antwort, Überarbeiten-Chat |
+| 2 | Produkte | ✅ PORTIERT | Grid-Cards, Varianten-Modal, Bestand-Update, Import, CSV-Export |
+| 3 | Bestellungen | ✅ PORTIERT | Tabelle, Filter-Tabs, Tracking-Modal, Detail-Modal, Archivierung, Auto-Rechnung, E-Rechnung |
+| 4 | Rechnungen | ✅ PORTIERT | Tabelle, Filter, PDF-Download, E-Mail senden, Storno, Bearbeiten-Modal, Vorlage-Editor |
+| 5 | Rechnungen/Import | ✅ PORTIERT | CSV-Import, Spalten-Mapping, Multi-Artikel-Gruppierung, editierbare Vorschau |
+| 6 | **Buchhaltung** | ✅ **NEU** | Übersicht mit Jahres-KPIs + Kacheln |
+| 7 | **Buchhaltung/Eingang** | ✅ **NEU** | Upload (Drag&Drop), KI-Analyse (Mistral Small), editierbares Modal, Tabelle mit Filter/Status |
+| 8 | **Buchhaltung/EÜR** | ✅ **NEU** | Zeitraumauswahl (Jahr/Quartal/Monat), Einnahmen/Ausgaben nach Kategorie, Ergebnis |
+| 9 | **Buchhaltung/UStVA** | ✅ **NEU** | ELSTER-Kennzahlen (Kz 81/86/66), Vorsteuer-Details, Zahllast, Kleinunternehmer-Hinweis |
+| 10 | Einstellungen/Firma | ⏳ | Firmendaten-Formular |
+| 11 | Einstellungen/Nummern | ⏳ | RE/SR Konfiguration |
+| 12 | Einstellungen/SMTP | ⏳ | SMTP-Formular + Test |
+| 13 | Einstellungen/KI | ⏳ | System-Prompt, Modell-Auswahl |
+| 14 | Einstellungen/Kauf-Nachricht | ⏳ | Toggle, Vorlage |
+| 15 | Einstellungen/Bilder | ⏳ | Produkt-Bilder |
+
+---
+
+## SvelteKit-Projektstruktur (aktualisiert)
+
+```
+/opt/ebay-dashboard/
+├── Dockerfile
+├── package.json
+├── svelte.config.js          (adapter-node)
+├── vite.config.js
+└── src/
+    ├── app.html
+    ├── app.css               (Design System v3)
+    ├── lib/
+    │   ├── api.js
+    │   ├── stores.js
+    │   └── components/
+    │       ├── Sidebar.svelte  (inkl. Buchhaltung-Link)
+    │       ├── EbayVerbindenModal.svelte
+    │       └── Toast.svelte
+    └── routes/
+        ├── +layout.svelte
+        ├── +page.svelte                (Nachrichten)
+        ├── login/+page.svelte
+        ├── produkte/+page.svelte
+        ├── bestellungen/+page.svelte
+        ├── rechnungen/
+        │   ├── +page.svelte
+        │   └── import/+page.svelte
+        ├── buchhaltung/                    ← NEU
+        │   ├── +page.svelte               ← Übersicht
+        │   ├── eingang/+page.svelte       ← Eingangsrechnungen
+        │   ├── eur/+page.svelte           ← EÜR
+        │   └── ustva/+page.svelte         ← UStVA
+        └── einstellungen/
+            ├── +page.svelte
+            ├── firma/+page.svelte      (⏳)
+            ├── nummern/+page.svelte    (⏳)
+            ├── smtp/+page.svelte       (⏳)
+            ├── ki/+page.svelte         (⏳)
+            ├── kauf-nachricht/+page.svelte (⏳)
+            └── bilder/+page.svelte     (⏳)
+```
+
+---
+
+## Alle n8n-Workflows (aktualisiert)
+
+### Buchhaltungs-Workflows
+
+| ID | WF-ID | Endpoint | Funktion |
+|---|---|---|---|
+| WF-BH-01 | `SBWFYB7RrzXXHWqg` | POST `/eingangsrechnung-analysieren` | PDF/Bild → Text extrahieren → Mistral Agent → strukturierte Daten |
+| WF-BH-02 | — | POST `/eingangsrechnung-speichern` | Bestätigte Daten → INSERT `incoming_invoices` + `incoming_invoice_items` |
+| WF-BH-03 | — | POST `/eingangsrechnungen-laden` | Alle Eingangsrechnungen + Zusammenfassung mit Filtern |
+| WF-BH-04 | — | POST `/eingangsrechnung-update` | Status ändern, Daten korrigieren, löschen |
+| WF-BH-05 | — | Schedule (30 Min) | IMAP-Abruf → PDF-Anhänge → WF-BH-01 → Entwurf speichern |
+| WF-BH-06 | — | POST `/eur-generieren` | Einnahmen (`invoices`) + Ausgaben (`incoming_invoices`) → EÜR |
+| WF-BH-07 | — | POST `/ustva-daten` | UStVA-Kennzahlen (Kz 81, 86, 66), Stornos, Kleinunternehmer |
+
+### Docker-Services (aktualisiert)
+
+| Service | Container | Port | URL (intern) | URL (extern) |
+|---|---|---|---|---|
+| Dashboard | `ebay-dashboard` | 3000 | — | `ebay.ai-online.cloud` |
+| n8n | `n8n` | 5678 | — | `n8n.ai-online.cloud` |
+| Gotenberg | `gotenberg` | 3000 | — | `gotenberg.ai-online.cloud` |
+| E-Mail-Service | `email-service` | 3100 | — | `email.ai-online.cloud` |
+| **OCR-Service** | `ocr-service` | **3200** | `http://ocr-service:3200` | **Kein externer Zugang** |
+
 
 Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
