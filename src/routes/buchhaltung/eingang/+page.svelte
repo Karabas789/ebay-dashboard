@@ -486,7 +486,7 @@
 {/if}
 
 <style>
-  .page-container { padding: 24px; max-width: 1400px; }
+  .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .drop-zone {
     border: 2px dashed var(--border2);
     border-radius: var(--radius);
