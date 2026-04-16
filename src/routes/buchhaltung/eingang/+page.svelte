@@ -229,7 +229,7 @@
 <div class="page-container">
   <div class="page-header">
     <div>
-      <button class="btn btn-ghost" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
+      <button class="btn btn-secondary" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
       <div class="page-title">📥 Eingangsrechnungen</div>
       <div class="page-subtitle">Rechnungen & Quittungen hochladen, analysieren und verwalten</div>
     </div>
