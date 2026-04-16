@@ -159,6 +159,6 @@
 </div>
 
 <style>
-  .page-container { padding: 24px; max-width: 1000px; }
+  .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .result-card { border: 2px solid var(--primary-border); background: var(--primary-light); }
 </style>
