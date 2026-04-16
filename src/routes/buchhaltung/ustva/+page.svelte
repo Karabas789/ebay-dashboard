@@ -40,7 +40,7 @@
 <div class="page-container">
   <div class="page-header">
     <div>
-      <button class="btn btn-ghost" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
+      <button class="btn btn-secondary" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
       <div class="page-title">📋 UStVA-Vorbereitung</div>
       <div class="page-subtitle">Umsatzsteuer-Voranmeldung — Kennzahlen für ELSTER</div>
     </div>
