@@ -488,9 +488,10 @@
 <style>
   .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .drop-zone {
+    background: var(--surface);
     border: 2px dashed var(--border2);
-    border-radius: var(--radius);
-    padding: 32px;
+    border-radius: 12px;
+    padding: 48px 24px;
     text-align: center;
     margin-bottom: 20px;
     display: flex;
