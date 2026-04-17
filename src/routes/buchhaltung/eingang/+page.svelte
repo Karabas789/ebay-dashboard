@@ -29,8 +29,15 @@
   let analyseDatei = $state(null);
   let analyseDateiTyp = $state('');
 
+  // Status für neue Rechnung (Default: bezahlt, wie User-Annahme)
+  let neuerStatus = $state('bezahlt');
+
+  // Duplikat-Hinweis nach Backend-Response
+  let duplikatHinweis = $state(null);
+
   const kategorien = ['alle','Wareneinkauf','Büromaterial','Versandkosten','Kfz/Tanken','Telekommunikation','Software/IT','Werbung','Reisekosten','Versicherung','Miete/Pacht','Sonstiges'];
   const statusOptionen = ['alle','entwurf','gebucht','bezahlt'];
+  const statusAuswahl = ['entwurf','gebucht','bezahlt'];
 
   let gefiltert = $derived(
     rechnungen.filter(r => {
@@ -43,6 +50,23 @@
       return true;
     })
   );
+
+  // Reaktive Duplikat-Erkennung — sucht in bereits geladenen Rechnungen.
+  // Wird live aktualisiert, sobald User Lieferant/Rechnungsnummer/Datum ändert.
+  let erkanntes_duplikat = $derived.by(() => {
+    if (!analyseResult) return null;
+    const lieferant = (analyseResult.lieferant || '').trim().toLowerCase();
+    const rnr = (analyseResult.rechnungsnummer || '').trim().toLowerCase();
+    const datum = (analyseResult.rechnungsdatum || '').substring(0, 10);
+    if (!lieferant || !datum) return null;
+
+    return rechnungen.find(r => {
+      const rLieferant = (r.lieferant || '').trim().toLowerCase();
+      const rRnr = (r.rechnungsnummer || '').trim().toLowerCase();
+      const rDatum = (r.rechnungsdatum || '').substring(0, 10);
+      return rLieferant === lieferant && rRnr === rnr && rDatum === datum;
+    }) || null;
+  });
 
   let zusammenfassung = $state(null);
 
@@ -80,6 +104,8 @@
     analysing = true;
     analyseError = '';
     analyseResult = null;
+    duplikatHinweis = null;
+    neuerStatus = 'bezahlt';
     analyseDateiTyp = ext;
 
     try {
@@ -92,6 +118,8 @@
       });
       if (res.success) {
         analyseResult = res.daten;
+        // Sicherstellen, dass Rechnungen geladen sind — sonst kann erkanntes_duplikat nichts finden
+        if (rechnungen.length === 0) await loadRechnungen();
         showUploadModal = true;
       } else {
         analyseError = res.error || 'Analyse fehlgeschlagen';
@@ -128,6 +156,8 @@
   async function saveAnalyse() {
     if (!analyseResult) return;
     uploading = true;
+    duplikatHinweis = null;
+    analyseError = '';
     try {
       const res = await apiCall('/eingangsrechnung-speichern', {
         user_id: user?.id,
@@ -144,14 +174,18 @@
         datei_base64: analyseDatei,
         datei_typ: analyseDateiTyp,
         quelle: 'upload',
+        status: neuerStatus,
+        bezahlt_am: neuerStatus === 'bezahlt' ? (analyseResult.rechnungsdatum || new Date().toISOString().split('T')[0]) : null,
         positionen: analyseResult.positionen || []
       });
       if (res.duplicate) {
-        analyseError = `⚠️ Diese Rechnung existiert bereits in der Datenbank (ID: ${res.invoice_id}). Gleicher Lieferant, Rechnungsnummer und Datum.`;
+        const vorhanden = rechnungen.find(r => r.id === res.invoice_id);
+        duplikatHinweis = vorhanden || { id: res.invoice_id, lieferant: analyseResult.lieferant, rechnungsnummer: analyseResult.rechnungsnummer, rechnungsdatum: analyseResult.rechnungsdatum };
       } else if (res.success) {
         showUploadModal = false;
         analyseResult = null;
         analyseDatei = null;
+        duplikatHinweis = null;
         await loadRechnungen();
       } else {
         analyseError = res.error || 'Speichern fehlgeschlagen';
@@ -163,10 +197,10 @@
     }
   }
 
-  async function updateStatus(id, neuerStatus) {
+  async function updateStatus(id, neuerStatusWert) {
     try {
       await apiCall('/eingangsrechnung-update', {
-        user_id: user?.id, invoice_id: id, action: 'status', neuer_status: neuerStatus
+        user_id: user?.id, invoice_id: id, action: 'status', neuer_status: neuerStatusWert
       });
       await loadRechnungen();
     } catch (e) { error = e.message; }
@@ -210,6 +244,13 @@
     } catch (e) { error = e.message; }
   }
 
+  function closeUploadModal() {
+    showUploadModal = false;
+    analyseResult = null;
+    analyseError = '';
+    duplikatHinweis = null;
+  }
+
   function formatDatum(d) {
     if (!d) return '—';
     try { return new Date(d).toLocaleDateString('de-DE'); } catch { return d; }
@@ -223,6 +264,13 @@
     if (s === 'bezahlt') return 'badge-success';
     if (s === 'gebucht') return 'badge-warning';
     return 'badge-info';
+  }
+
+  function statusLabel(s) {
+    if (s === 'entwurf') return '✏️ Entwurf';
+    if (s === 'gebucht') return '📌 Gebucht';
+    if (s === 'bezahlt') return '✅ Bezahlt';
+    return s;
   }
 
   onMount(() => { if (user?.id) loadRechnungen(); });
@@ -272,7 +320,7 @@
     <div class="filter-tabs">
       {#each statusOptionen as s}
         <button class="filter-tab" class:active={statusFilter === s} on:click={() => { statusFilter = s; loadRechnungen(); }}>
-          {s === 'alle' ? '📋 Alle' : s === 'entwurf' ? '✏️ Entwurf' : s === 'gebucht' ? '📌 Gebucht' : '✅ Bezahlt'}
+          {s === 'alle' ? '📋 Alle' : statusLabel(s)}
         </button>
       {/each}
     </div>
@@ -376,14 +424,32 @@
 {#if showUploadModal && analyseResult}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal-overlay" on:click|self={() => showUploadModal = false}>
+  <div class="modal-overlay" on:click|self={closeUploadModal}>
     <div class="modal-box" style="max-width:640px">
       <div class="modal-title">📄 Erkannte Daten prüfen</div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Die KI hat folgende Daten extrahiert. Bitte prüfen und ggf. korrigieren.</p>
 
-      {#if analyseError}
-        <div style="padding:10px 12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;color:#92400e;font-size:13px;margin-bottom:12px">
-          {analyseError}
+      <!-- Duplikat-Warnung: live erkannt aus geladener Liste ODER vom Backend bestätigt -->
+      {#if duplikatHinweis || erkanntes_duplikat}
+        {@const dup = duplikatHinweis || erkanntes_duplikat}
+        <div class="dup-warn">
+          <div style="font-weight:700;font-size:14px;margin-bottom:6px">
+            ⚠️ Diese Rechnung ist bereits gespeichert
+          </div>
+          <div style="font-size:12px;line-height:1.6">
+            <div><strong>Lieferant:</strong> {dup.lieferant}</div>
+            <div><strong>Rechnungsnummer:</strong> {dup.rechnungsnummer || '—'}</div>
+            <div><strong>Datum:</strong> {formatDatum(dup.rechnungsdatum)}</div>
+            {#if dup.brutto_betrag !== undefined}
+              <div><strong>Betrag:</strong> {formatBetrag(dup.brutto_betrag)} €</div>
+            {/if}
+            {#if dup.status}
+              <div><strong>Status:</strong> <span class="badge {statusBadge(dup.status)}" style="font-size:10px">{dup.status}</span></div>
+            {/if}
+            <div style="color:var(--text2);margin-top:8px;font-size:11px">
+              💡 Hat die KI einen Wert falsch erkannt (z.B. die Rechnungsnummer)? Korrigiere ihn unten und speichere erneut.
+            </div>
+          </div>
         </div>
       {/if}
 
@@ -420,11 +486,19 @@
           <label class="label">Brutto</label>
           <input class="input" type="number" step="0.01" bind:value={analyseResult.brutto_betrag} />
         </div>
-        <div class="form-group" style="grid-column:1/-1">
+        <div class="form-group">
           <label class="label">Kategorie</label>
           <select class="input" bind:value={analyseResult.kategorie_vorschlag}>
             {#each kategorien.filter(k => k !== 'alle') as k}
               <option value={k}>{k}</option>
+            {/each}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="label">Status</label>
+          <select class="input" bind:value={neuerStatus}>
+            {#each statusAuswahl as s}
+              <option value={s}>{statusLabel(s)}</option>
             {/each}
           </select>
         </div>
@@ -453,10 +527,24 @@
         </div>
       {/if}
 
+      {#if analyseError}
+        <div class="error-box">⚠️ {analyseError}</div>
+      {/if}
+
       <div class="modal-actions">
-        <button class="btn btn-secondary" on:click={() => { showUploadModal = false; analyseResult = null; analyseError = ''; }}>Abbrechen</button>
-        <button class="btn btn-primary" on:click={saveAnalyse} disabled={uploading}>
-          {uploading ? '⏳ Speichere...' : '✅ Speichern'}
+        <button class="btn btn-secondary" on:click={closeUploadModal}>Abbrechen</button>
+        <button
+          class="btn btn-primary"
+          on:click={saveAnalyse}
+          disabled={uploading}
+        >
+          {#if uploading}
+            ⏳ Speichere...
+          {:else if (duplikatHinweis || erkanntes_duplikat)}
+            ⚠️ Trotzdem speichern
+          {:else}
+            ✅ Speichern
+          {/if}
         </button>
       </div>
     </div>
@@ -515,5 +603,23 @@
   .drop-zone.analysing { border-color: var(--primary); background: var(--primary-light); }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .dup-warn {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-left: 4px solid #d97706;
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: #78350f;
+    margin-bottom: 16px;
+  }
+  .error-box {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #991b1b;
+    font-size: 13px;
+    margin-top: 12px;
+  }
   @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
 </style>
