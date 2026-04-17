@@ -129,38 +129,39 @@
     if (!analyseResult) return;
     uploading = true;
     try {
-  const res = await apiCall('/eingangsrechnung-speichern', {
-    user_id: user?.id,
-    lieferant: analyseResult.lieferant,
-    rechnungsnummer: analyseResult.rechnungsnummer,
-    rechnungsdatum: analyseResult.rechnungsdatum,
-    faelligkeitsdatum: analyseResult.faelligkeitsdatum,
-    netto_betrag: analyseResult.netto_betrag,
-    mwst_satz: analyseResult.mwst_satz,
-    mwst_betrag: analyseResult.mwst_betrag,
-    brutto_betrag: analyseResult.brutto_betrag,
-    kategorie: analyseResult.kategorie_vorschlag,
-    notiz: analyseResult.notizen,
-    datei_base64: analyseDatei,
-    datei_typ: analyseDateiTyp,
-    quelle: 'upload',
-    positionen: analyseResult.positionen || []
-  });
-  if (res.duplicate) {
-    analyseError = `⚠️ Diese Rechnung existiert bereits in der Datenbank (ID: ${res.invoice_id}). Gleicher Lieferant, Rechnungsnummer und Datum.`;
-  } else if (res.success) {
-    showUploadModal = false;
-    analyseResult = null;
-    analyseDatei = null;
-    await loadRechnungen();
-  } else {
-    analyseError = res.error || 'Speichern fehlgeschlagen';
+      const res = await apiCall('/eingangsrechnung-speichern', {
+        user_id: user?.id,
+        lieferant: analyseResult.lieferant,
+        rechnungsnummer: analyseResult.rechnungsnummer,
+        rechnungsdatum: analyseResult.rechnungsdatum,
+        faelligkeitsdatum: analyseResult.faelligkeitsdatum,
+        netto_betrag: analyseResult.netto_betrag,
+        mwst_satz: analyseResult.mwst_satz,
+        mwst_betrag: analyseResult.mwst_betrag,
+        brutto_betrag: analyseResult.brutto_betrag,
+        kategorie: analyseResult.kategorie_vorschlag,
+        notiz: analyseResult.notizen,
+        datei_base64: analyseDatei,
+        datei_typ: analyseDateiTyp,
+        quelle: 'upload',
+        positionen: analyseResult.positionen || []
+      });
+      if (res.duplicate) {
+        analyseError = `⚠️ Diese Rechnung existiert bereits in der Datenbank (ID: ${res.invoice_id}). Gleicher Lieferant, Rechnungsnummer und Datum.`;
+      } else if (res.success) {
+        showUploadModal = false;
+        analyseResult = null;
+        analyseDatei = null;
+        await loadRechnungen();
+      } else {
+        analyseError = res.error || 'Speichern fehlgeschlagen';
+      }
+    } catch (e) {
+      analyseError = e.message;
+    } finally {
+      uploading = false;
+    }
   }
-} catch (e) {
-  analyseError = e.message;
-} finally {
-  uploading = false;
-}
 
   async function updateStatus(id, neuerStatus) {
     try {
@@ -380,6 +381,12 @@
       <div class="modal-title">📄 Erkannte Daten prüfen</div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Die KI hat folgende Daten extrahiert. Bitte prüfen und ggf. korrigieren.</p>
 
+      {#if analyseError}
+        <div style="padding:10px 12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;color:#92400e;font-size:13px;margin-bottom:12px">
+          {analyseError}
+        </div>
+      {/if}
+
       <div class="form-grid">
         <div class="form-group">
           <label class="label">Lieferant</label>
@@ -447,7 +454,7 @@
       {/if}
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" on:click={() => { showUploadModal = false; analyseResult = null; }}>Abbrechen</button>
+        <button class="btn btn-secondary" on:click={() => { showUploadModal = false; analyseResult = null; analyseError = ''; }}>Abbrechen</button>
         <button class="btn btn-primary" on:click={saveAnalyse} disabled={uploading}>
           {uploading ? '⏳ Speichere...' : '✅ Speichern'}
         </button>
