@@ -129,37 +129,38 @@
     if (!analyseResult) return;
     uploading = true;
     try {
-      const res = await apiCall('/eingangsrechnung-speichern', {
-        user_id: user?.id,
-        lieferant: analyseResult.lieferant,
-        rechnungsnummer: analyseResult.rechnungsnummer,
-        rechnungsdatum: analyseResult.rechnungsdatum,
-        faelligkeitsdatum: analyseResult.faelligkeitsdatum,
-        netto_betrag: analyseResult.netto_betrag,
-        mwst_satz: analyseResult.mwst_satz,
-        mwst_betrag: analyseResult.mwst_betrag,
-        brutto_betrag: analyseResult.brutto_betrag,
-        kategorie: analyseResult.kategorie_vorschlag,
-        notiz: analyseResult.notizen,
-        datei_base64: analyseDatei,
-        datei_typ: analyseDateiTyp,
-        quelle: 'upload',
-        positionen: analyseResult.positionen || []
-      });
-      if (res.success) {
-        showUploadModal = false;
-        analyseResult = null;
-        analyseDatei = null;
-        await loadRechnungen();
-      } else {
-        analyseError = res.error || 'Speichern fehlgeschlagen';
-      }
-    } catch (e) {
-      analyseError = e.message;
-    } finally {
-      uploading = false;
-    }
+  const res = await apiCall('/eingangsrechnung-speichern', {
+    user_id: user?.id,
+    lieferant: analyseResult.lieferant,
+    rechnungsnummer: analyseResult.rechnungsnummer,
+    rechnungsdatum: analyseResult.rechnungsdatum,
+    faelligkeitsdatum: analyseResult.faelligkeitsdatum,
+    netto_betrag: analyseResult.netto_betrag,
+    mwst_satz: analyseResult.mwst_satz,
+    mwst_betrag: analyseResult.mwst_betrag,
+    brutto_betrag: analyseResult.brutto_betrag,
+    kategorie: analyseResult.kategorie_vorschlag,
+    notiz: analyseResult.notizen,
+    datei_base64: analyseDatei,
+    datei_typ: analyseDateiTyp,
+    quelle: 'upload',
+    positionen: analyseResult.positionen || []
+  });
+  if (res.duplicate) {
+    analyseError = `⚠️ Diese Rechnung existiert bereits in der Datenbank (ID: ${res.invoice_id}). Gleicher Lieferant, Rechnungsnummer und Datum.`;
+  } else if (res.success) {
+    showUploadModal = false;
+    analyseResult = null;
+    analyseDatei = null;
+    await loadRechnungen();
+  } else {
+    analyseError = res.error || 'Speichern fehlgeschlagen';
   }
+} catch (e) {
+  analyseError = e.message;
+} finally {
+  uploading = false;
+}
 
   async function updateStatus(id, neuerStatus) {
     try {
