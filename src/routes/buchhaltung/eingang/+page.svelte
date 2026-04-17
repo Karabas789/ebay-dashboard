@@ -157,6 +157,26 @@
     duplikatHinweis = null;
     analyseError = '';
     try {
+        // 1. Datei zu S3 hochladen (vor DB-INSERT)
+      let s3_key = null;
+      let datei_groesse = null;
+      if (analyseDatei) {
+        const uploadRes = await apiCall('/s3-upload', {
+          user_id: user?.id,
+          datei_base64: analyseDatei,
+          datei_typ: analyseDateiTyp
+        });
+        if (!uploadRes.success) {
+          analyseError = uploadRes.error || 'S3-Upload fehlgeschlagen';
+          uploading = false;
+          return;
+        }
+        s3_key = uploadRes.s3_key;
+        datei_groesse = uploadRes.groesse;
+      }
+
+      // 2. Rechnung speichern (mit s3_key statt datei_base64)
+
       const res = await apiCall('/eingangsrechnung-speichern', {
         user_id: user?.id,
         lieferant: analyseResult.lieferant,
@@ -169,7 +189,8 @@
         brutto_betrag: analyseResult.brutto_betrag,
         kategorie: analyseResult.kategorie_vorschlag,
         notiz: analyseResult.notizen,
-        datei_base64: analyseDatei,
+        datei_s3_key: s3_key,
+        datei_groesse,
         datei_typ: analyseDateiTyp,
         quelle: 'upload',
         status: neuerStatus,
