@@ -1623,5 +1623,518 @@ Regeln:
 | E-Mail-Service | `email-service` | 3100 | — | `email.ai-online.cloud` |
 | **OCR-Service** | `ocr-service` | **3200** | `http://ocr-service:3200` | **Kein externer Zugang** |
 
+[SKILL_v6_s3_storage.md](https://github.com/user-attachments/files/26842049/SKILL_v6_s3_storage.md)
+
+# eBay-Dashboard SKILL — Erweiterung v6.0
+
+> **Was ist neu in v6.0:**
+> - Object Storage (Contabo S3) für Belege und Rechnungen
+> - Server-Wartung & n8n-Pruning (kritisch wichtig!)
+> - WF-S3-01 Upload-Workflow + WF-S3-02 Download-Workflow (geplant)
+> - Aktualisierte Datenbankspalten (`datei_s3_key`, `datei_groesse`)
+> - Wartungs-Operationen für SQLite/PostgreSQL
+> - Server-Skalierungsplan für Multi-User/SaaS
+
+**Diese Erweiterung wird in `SKILL.md` integriert. Header bleibt wie v5.0, Versionsnummer auf v6.0 hochziehen.**
+
+---
+
+## 23. Server-Infrastruktur & Skalierungsplan
+
+### Aktueller Server (Stand 2026-04-17)
+
+| Parameter | Wert |
+|---|---|
+| **Provider** | Contabo |
+| **Plan** | Cloud VPS 20 SSD (ohne Setup) |
+| **Hostname** | `vmd179408` |
+| **IP** | `31.220.78.203` |
+| **CPU** | 6 vCPU (Intel Broadwell, shared) |
+| **RAM** | 12 GB (+ 9 GB Swap) |
+| **Disk** | 200 GB SSD |
+| **OS** | Ubuntu (Linux 6.8.0-107-generic) |
+| **Preis** | ~9 €/Monat |
+
+### Object Storage (NEU)
+
+| Parameter | Wert |
+|---|---|
+| **Provider** | Contabo Object Storage |
+| **Region** | European Union (eu2) |
+| **Storage Name** | `Object Storage European Union 8849` |
+| **Display Name** | `Belege Ebay Dashboard` |
+| **Größe** | 250 GB |
+| **Preis** | 2,49 €/Monat |
+| **S3 Endpoint** | `https://eu2.contabostorage.com` |
+| **Bucket** | `ebay-dashboard` (privat!) |
+| **Tenant ID** | `f1e820bb8e9e402e98010c436209ce09` |
+| **Access Key** | `70af5ef610934d696d1772a54ffe7348` |
+| **Secret Key** | Im Passwort-Manager des Users (NIE in Chat/Code/Git posten!) |
+
+### Skalierungsplan
+
+| Phase | User-Zahl | Server-Plan | Object Storage | Monatlich |
+|---|---|---|---|---|
+| **Phase 1 — jetzt** | 1-10 | Cloud VPS 20 SSD | 250 GB | ~12 € |
+| **Phase 2 — Wachstum** | 10-30 | Cloud VPS 20 SSD | 1 TB | ~17 € |
+| **Phase 3 — SaaS** | 50-100 | **VDS M** (6 dedicated, 24 GB RAM, 360 GB NVMe) | 2 TB | ~45 € |
+
+**Kalkulation pro User:**
+- ~80 Belege/Monat × 1,5 MB = ~1,4 GB/Jahr
+- 10 Jahre GoBD-Aufbewahrung = ~14 GB pro User langfristig
+- 100 User für 10 Jahre = ~1,4 TB
+
+### Provider-Entscheidungen
+
+- ❌ **Hetzner:** Schlechte Erfahrung mit Buchhaltung (statische IP unbeabsichtigt berechnet)
+- ✅ **Contabo:** Bleibt Hauptprovider — Server + Object Storage im selben Rechenzentrum
+- 🔮 **Alternative für Server-Upgrade:** netcup RS 3000 G11 (~30 €/Monat, dedicated CPU)
+
+---
+
+## 24. n8n-Wartung & Speicherplatz-Optimierung
+
+### Kritisches Wissen: n8n SQLite kann explodieren!
+
+**Problem (passiert am 2026-04-17):** n8n SQLite-Datei war **55,4 GB groß** — verursacht durch ~10.000 Executions, jede mit Base64-Daten in `execution_data`. Dies kommt vor allem von Workflows die Datei-Uploads verarbeiten (`/eingangsrechnung-analysieren` mit 2-3 MB Bildern pro Execution).
+
+### Pruning-Konfiguration (PFLICHT für jede n8n-Installation)
+
+In Coolify beim n8n-Service folgende Environment-Variablen setzen:
+
+```
+EXECUTIONS_DATA_PRUNE=true
+EXECUTIONS_DATA_MAX_AGE=336              # 14 Tage in Stunden
+EXECUTIONS_DATA_PRUNE_MAX_COUNT=5000     # Max behaltene Executions
+```
+
+Nach dem Setzen: n8n-Service neu starten.
+
+### Manuelles Aufräumen einer überfüllten n8n-DB
+
+Wenn Pruning erst spät aktiviert wird oder die DB schon riesig ist:
+
+```bash
+SQLITE_PATH="/var/lib/docker/volumes/x04008o88c4w0cg4gwkskkk8_n8n-data/_data/database.sqlite"
+
+# 1. Diagnose
+ls -lh "$SQLITE_PATH"
+sqlite3 "$SQLITE_PATH" "SELECT COUNT(*) FROM execution_entity;"
+sqlite3 "$SQLITE_PATH" "SELECT COUNT(*) FROM execution_entity WHERE startedAt < datetime('now', '-7 days');"
+
+# 2. n8n stoppen (PFLICHT vor Schreibzugriff!)
+docker stop n8n-x04008o88c4w0cg4gwkskkk8
+
+# 3. Alte Executions löschen — kann bei großen DBs 30-90 Min dauern
+sqlite3 "$SQLITE_PATH" "DELETE FROM execution_data WHERE executionId NOT IN (SELECT id FROM execution_entity ORDER BY id DESC LIMIT 100);"
+sqlite3 "$SQLITE_PATH" "DELETE FROM execution_entity WHERE id NOT IN (SELECT id FROM execution_entity ORDER BY id DESC LIMIT 100);"
+
+# 4. VACUUM INTO (sicherer als VACUUM, braucht weniger temporären Platz)
+sqlite3 "$SQLITE_PATH" "VACUUM INTO '/var/lib/docker/volumes/x04008o88c4w0cg4gwkskkk8_n8n-data/_data/database_new.sqlite';"
+
+# 5. Integrity Check
+sqlite3 /var/lib/docker/volumes/x04008o88c4w0cg4gwkskkk8_n8n-data/_data/database_new.sqlite "PRAGMA integrity_check;"
+sqlite3 /var/lib/docker/volumes/x04008o88c4w0cg4gwkskkk8_n8n-data/_data/database_new.sqlite "SELECT COUNT(*) FROM workflow_entity;"
+
+# 6. Austausch (NUR wenn Integrity OK!)
+mv "$SQLITE_PATH" "$SQLITE_PATH.old-backup"
+mv /var/lib/docker/volumes/x04008o88c4w0cg4gwkskkk8_n8n-data/_data/database_new.sqlite "$SQLITE_PATH"
+chown 1000:1000 "$SQLITE_PATH"
+chmod 644 "$SQLITE_PATH"
+
+# Auch die Journal-Files wegräumen
+mv "$SQLITE_PATH-wal" "$SQLITE_PATH-wal.old" 2>/dev/null
+mv "$SQLITE_PATH-shm" "$SQLITE_PATH-shm.old" 2>/dev/null
+
+# 7. n8n starten
+docker start n8n-x04008o88c4w0cg4gwkskkk8
+docker logs n8n-x04008o88c4w0cg4gwkskkk8 --tail 30 --follow
+
+# 8. Backup nach 2-3 Tagen löschen wenn alles stabil:
+# rm "$SQLITE_PATH.old-backup" "$SQLITE_PATH-wal.old" "$SQLITE_PATH-shm.old"
+```
+
+> ⚠️ **KRITISCH:** Während DELETE/VACUUM IMMER `tmux` oder `screen` verwenden! Wenn die SSH-Session abbricht, kann SQLite inkonsistent werden:
+> ```bash
+> tmux new -s n8n-cleanup
+> # ... lange SQL-Befehle ...
+> # Detach: Ctrl+B, D
+> # Wieder rein: tmux attach -t n8n-cleanup
+> ```
+
+### Erfolgskennzahlen aus diesem Cleanup
+
+- Vorher: **55,4 GB** SQLite, 10.085 Executions, Server-Disk 69% voll
+- Nachher: **226 MB** SQLite, 100 Executions, Server-Disk ~31% voll
+- Einsparung: **~55 GB**, Dauer: ~70 Min (DELETE 62 Min, VACUUM INTO 10 Sek)
+
+---
+
+## 25. S3 Object Storage Integration
+
+### Warum S3 statt Base64 in DB?
+
+**Problem:** `datei_base64`-Spalten in `incoming_invoices` und `invoices` werden bei wachsender Nutzung zum Performance-Killer:
+- 2-3 MB pro Beleg in DB → langsame SELECT-Queries
+- DB-Backups werden riesig
+- n8n-Workflows lesen/schreiben mehrere MB pro Execution
+- Frontend-Listen-Queries laden unnötig große Datenmengen
+
+**Lösung:** Belege im Object Storage, nur `s3_key` in DB.
+
+### Architektur
+
+```
+Frontend (SvelteKit)
+    ↓ Upload (Base64 + Metadata)
+n8n Webhook (/eingangsrechnung-speichern)
+    ↓ HTTP-Request (Subworkflow)
+n8n WF-S3-01 (/s3-upload)
+    ↓ S3-Node (Upload)
+Contabo Object Storage
+    ↓ s3_key zurück
+n8n schreibt s3_key in DB (statt datei_base64)
+```
+
+### S3-Credential in n8n
+
+| Parameter | Wert |
+|---|---|
+| **Credential Name** | `S3 account` (ID: `2DqpVbZtAAGPEQKi`) |
+| **Type** | S3 (NICHT "AWS S3"!) |
+| **S3 API URL** | `https://eu2.contabostorage.com` |
+| **Region** | `eu2` |
+| **Force Path Style** | ✅ AKTIVIEREN (sonst Fehler) |
+
+> ⚠️ **Force Path Style** MUSS aktiviert sein. Contabo nutzt URL-Stil `https://eu2.contabostorage.com/ebay-dashboard/...`, NICHT Subdomain-Stil wie AWS.
+
+### S3-Key-Konvention
+
+```
+user_{user_id}/{YYYY-MM}/{timestamp}_{random8chars}.{ext}
+```
+
+Beispiel: `user_4/2026-04/1776458927171_ehc4nc62.png`
+
+**Vorteile:**
+- Pro-User-Trennung (auch bei Multi-Tenancy sicher)
+- Monatliche Gruppierung für Auflistung/Backups
+- Eindeutige Dateinamen ohne Konflikte
+- Original-Erweiterung bleibt erhalten
+
+### DB-Spalten für S3 (in `incoming_invoices`)
+
+```sql
+ALTER TABLE incoming_invoices 
+  ADD COLUMN IF NOT EXISTS datei_s3_key VARCHAR(500),
+  ADD COLUMN IF NOT EXISTS datei_groesse BIGINT;
+
+CREATE INDEX IF NOT EXISTS idx_incoming_invoices_s3_key 
+  ON incoming_invoices(datei_s3_key) 
+  WHERE datei_s3_key IS NOT NULL;
+```
+
+`datei_base64` und `datei_typ` bleiben vorerst für Übergangs-Phase. Nach kompletter Migration kann `datei_base64` gedroppt werden.
+
+---
+
+## 26. WF-S3-01: Datei-Upload-Workflow
+
+- **Workflow-ID:** `CWmSnc2zPpVG4zb9`
+- **Name:** `WF-S3-01 Datei zu S3 hochladen`
+- **Endpoint:** POST `/s3-upload`
+- **Status:** ⚠️ In Aufbau (mit Bug — siehe unten)
+
+### Architektur
+
+```
+Webhook → Eingabe vorbereiten (Code) → Token prüfen (Postgres) → Auth OK? (IF)
+                                                                      ├─ TRUE → Binary wiederherstellen (Code) → Upload a file (S3) → Antwort senden
+                                                                      └─ FALSE → Auth Fehler
+```
+
+### KRITISCHER BUG: Postgres-Node verwirft Binary-Daten!
+
+**Problem (entdeckt am 2026-04-17):** Wenn ein Code-Node `binary` ausgibt und der nächste Node ist Postgres, gehen die Binary-Daten **komplett verloren**. Der nachfolgende S3-Upload-Node bekommt nur noch JSON, kein Binary.
+
+**Lösung:** Base64 als JSON-Property zwischenspeichern und in einem separaten Code-Node nach Auth wieder als Binary umwandeln:
+
+```javascript
+// "Eingabe vorbereiten" — Base64 als JSON, NICHT als binary
+return [{
+  json: {
+    token, user_id, s3_key, datei_typ, groesse, mime, bucket,
+    base64_zwischenspeicher: body.datei_base64,  // ← als JSON!
+    dateiname
+  }
+  // KEIN binary hier — würde von Postgres verworfen
+}];
+```
+
+```javascript
+// "Binary wiederherstellen" — NACH Postgres + IF, VOR S3-Upload
+const prep = $('Eingabe vorbereiten').first().json;
+const buffer = Buffer.from(prep.base64_zwischenspeicher, 'base64');
+
+return [{
+  json: {
+    s3_key: prep.s3_key, bucket: prep.bucket, mime: prep.mime,
+    groesse: prep.groesse, datei_typ: prep.datei_typ
+  },
+  binary: {
+    data: await this.helpers.prepareBinaryData(buffer, prep.dateiname, prep.mime)
+  }
+}];
+```
+
+### S3-Node Konfiguration (Upload a file)
+
+```
+Resource: File
+Operation: Upload
+Bucket Name: ={{ $json.bucket }}
+File Name: ={{ $json.s3_key }}
+Binary Data: ✅ AKTIVIEREN
+Binary Property: data
+Additional Fields: (LEER LASSEN — kein serversideEncryptionCustomerKey!)
+```
+
+> ⚠️ **HÄUFIGER FEHLER:** `serversideEncryptionCustomerKey` ist KEIN Content-Type-Feld! Wenn dort `image/png` oder ähnliches steht, schlägt der Upload mit Verschlüsselungsfehler fehl. Das Feld leer lassen!
+
+### Test-Curl
+
+```bash
+TOKEN="tk_yb12qn4n61fmnzw2ulo"
+TEST_BASE64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
+curl -X POST "https://n8n.ai-online.cloud/webhook/s3-upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"user_id\":4,\"datei_base64\":\"$TEST_BASE64\",\"datei_typ\":\"png\"}"
+```
+
+**Erwartete Response:**
+```json
+{
+  "success": true,
+  "s3_key": "user_4/2026-04/1776458927171_ehc4nc62.png",
+  "groesse": 68,
+  "datei_typ": "png"
+}
+```
+
+### Verifikation in Bucket (Python)
+
+```bash
+export S3_SECRET="DEIN_SECRET_KEY"
+python3 << 'EOF'
+import boto3, os
+s3 = boto3.client('s3',
+    endpoint_url='https://eu2.contabostorage.com',
+    aws_access_key_id='70af5ef610934d696d1772a54ffe7348',
+    aws_secret_access_key=os.environ['S3_SECRET'],
+    region_name='eu2')
+
+response = s3.list_objects_v2(Bucket='ebay-dashboard')
+for obj in response.get('Contents', []):
+    print(f"  {obj['Key']} ({obj['Size']} bytes)")
+EOF
+unset S3_SECRET
+```
+
+---
+
+## 27. WF-S3-02: Datei-Download-Workflow (geplant)
+
+- **Endpoint:** POST `/s3-download`
+- **Status:** ⏳ Noch nicht gebaut
+
+### Geplante Architektur
+
+```
+Webhook → Auth → DB-Query (s3_key abrufen) → S3 Get Object → Binary als Response
+```
+
+### Geplantes Body-Schema
+
+```json
+{
+  "user_id": 4,
+  "s3_key": "user_4/2026-04/abc.pdf"
+}
+```
+
+### Geplante Response
+
+Binary-Stream mit Content-Type-Header (PDF/Image direkt im Browser anzeigbar)
+
+---
+
+## 28. Migration-Plan für bestehende Belege
+
+### Phase 1: Neue Belege ab sofort über S3 ✅ (in Arbeit)
+WF-BH-02 anpassen: vor INSERT in `incoming_invoices` zuerst Upload zu S3, dann nur `s3_key` speichern.
+
+### Phase 2: WF-S3-02 + Frontend-Anpassung ⏳
+- Download-Workflow bauen
+- Frontend `/buchhaltung/eingang` umstellen: PDF/Image-Anzeige aus S3 statt aus `datei_base64`
+- Frontend `/rechnungen` umstellen: PDF-Anzeige aus S3
+
+### Phase 3: Migration alter Belege ⏳
+Skript das alle bestehenden `datei_base64`-Einträge nach S3 hochlädt und `s3_key` setzt:
+
+```python
+# Pseudo-Code für Migration
+for row in db.query("SELECT id, user_id, datei_base64, datei_typ FROM incoming_invoices WHERE datei_s3_key IS NULL"):
+    s3_key = generate_s3_key(row.user_id, row.datei_typ)
+    upload_to_s3(s3_key, base64.decode(row.datei_base64))
+    db.execute("UPDATE incoming_invoices SET datei_s3_key = ?, datei_groesse = ? WHERE id = ?",
+               s3_key, len(...), row.id)
+```
+
+### Phase 4: Cleanup ⏳
+Nach erfolgreicher Migration und 2-4 Wochen Stabilität:
+
+```sql
+ALTER TABLE incoming_invoices DROP COLUMN datei_base64;
+-- Achtung: Nicht rückgängig machbar! Vorher Backup!
+```
+
+---
+
+## 29. Server-Wartungs-Befehle (Cheat Sheet)
+
+### Speicherplatz-Diagnose
+
+```bash
+# Festplatte
+df -h /
+
+# Top-Verzeichnisse
+du -sh /var/lib/* 2>/dev/null | sort -hr | head -10
+du -sh /opt/* 2>/dev/null | sort -hr | head -10
+
+# Docker
+docker system df -v
+
+# Alle DBs in beiden Postgres-Containern
+docker exec -i coolify-db bash -c 'psql -U $POSTGRES_USER -c "SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database WHERE datistemplate = false ORDER BY pg_database_size(datname) DESC;"'
+docker exec -i ew0s0w40k08wss8c4c8gogw4 bash -c 'psql -U $POSTGRES_USER -c "SELECT datname, pg_size_pretty(pg_database_size(datname)) FROM pg_database WHERE datistemplate = false ORDER BY pg_database_size(datname) DESC;"'
+```
+
+### RAM/CPU
+
+```bash
+free -h
+nproc
+top -bn1 | head -20
+```
+
+### Container-Status
+
+```bash
+docker ps -a
+docker stats --no-stream
+
+# n8n logs
+docker logs n8n-x04008o88c4w0cg4gwkskkk8 --tail 50
+```
+
+### Wichtige Container-Namen (Stand 2026-04-17)
+
+| Container | Zweck |
+|---|---|
+| `ebay-dashboard` | Hauptdashboard (Port 3000 intern) |
+| `n8n-x04008o88c4w0cg4gwkskkk8` | n8n Workflows |
+| `gotenberg-eoscss0wwksc8wokscoo0s84` | PDF-Generierung |
+| `email-service-eoscss0wwksc8wokscoo0s84` | E-Mail-Versand |
+| `ocr-service` | Tesseract OCR |
+| `ew0s0w40k08wss8c4c8gogw4` | **Dashboard-PostgreSQL** (pgvector pg17) |
+| `coolify-db` | Coolify-System-DB (postgres 15-alpine) |
+| `coolify-proxy` | Traefik v3.6.11 |
+
+### Volumes (wichtige)
+
+| Volume | Größe ca. | Inhalt |
+|---|---|---|
+| `x04008o88c4w0cg4gwkskkk8_n8n-data` | 226 MB (nach Cleanup) | n8n SQLite + binaryData |
+| `postgres-data-ew0s0w40k08wss8c4c8gogw4` | 207 MB | Dashboard-DB |
+| `q8kw8sog4g4w8ss84okw48oo_immich-upload` | 22 GB | Immich-Fotos (Test-App) |
+
+---
+
+## 30. AKTUELLER STAND ENDE 2026-04-17
+
+### Fertig ✅
+1. **Eingangsrechnungen-Modal-UX:** breiter (960px), Status-Dropdown, Zurück-auf-Entwurf-Button, Datums-Format-Fix
+2. **n8n-Cleanup:** SQLite von 55 GB → 226 MB (Pruning aktiv: 14 Tage / 5000 Executions)
+3. **Object Storage:** Contabo 250 GB bestellt, Bucket `ebay-dashboard` privat, S3-Tests funktionieren (boto3)
+4. **DB-Spalten:** `datei_s3_key` und `datei_groesse` zu `incoming_invoices` hinzugefügt
+5. **n8n S3-Credential:** angelegt als "S3 account" (ID: `2DqpVbZtAAGPEQKi`)
+
+### In Arbeit ⏳
+6. **WF-S3-01 Upload-Workflow:** Workflow `CWmSnc2zPpVG4zb9` existiert, hat Bug mit Binary-Verlust durch Postgres-Node — Fix-JSON wurde im Chat geliefert (Code-Node "Binary wiederherstellen" zwischen Auth OK und S3-Upload einfügen)
+
+### Nächste Schritte
+1. **WF-S3-01 fixen** (mit Code-Node "Binary wiederherstellen")
+2. **Test bestätigen** (curl + boto3 Bucket-Check)
+3. **WF-BH-02 anpassen** — Belege erst zu S3, dann `s3_key` in DB statt `datei_base64`
+4. **WF-S3-02 bauen** — Download-Endpoint für Frontend
+5. **Frontend `/buchhaltung/eingang` anpassen** — PDF/Image-Anzeige aus S3
+6. **Migration alter Belege** (falls schon welche da sind)
+7. **Server-Cleanup** in 2-3 Tagen: Backup-Datei `database.sqlite.old-55gb` löschen (~56 GB frei)
+
+---
+
+## 31. KRITISCHE LERNPUNKTE / GOTCHAS NEU
+
+| # | Problem | Ursache | Lösung |
+|---|---|---|---|
+| 14 | n8n SQLite explodiert auf 50+ GB | Kein Pruning + Workflows mit Base64-Daten | Pruning aktivieren + manuell DELETE+VACUUM bei Bedarf |
+| 15 | `sqlite3: not found` im n8n-Container | Container hat kein sqlite3 | Auf Host arbeiten via Volume-Pfad: `/var/lib/docker/volumes/x04008o88c4w0cg4gwkskkk8_n8n-data/_data/database.sqlite` |
+| 16 | DELETE auf SQLite dauert 1+ Stunde | NOT IN Subquery + große DB | Geduld, in tmux laufen lassen, IO mit `iostat` überwachen |
+| 17 | VACUUM braucht 2× DB-Größe Disk | SQLite-Default-Verhalten | `VACUUM INTO 'new.sqlite'` statt `VACUUM` — braucht weniger temporären Platz |
+| 18 | Postgres-Node verwirft Binary-Daten | Bekanntes n8n-Verhalten | Base64 in JSON zwischenspeichern, nach Postgres in separatem Code-Node wieder als Binary umwandeln |
+| 19 | S3-Node "binary file 'data' not found" | Force Path Style aus oder Binary-Toggle aus | Im Credential: Force Path Style ✅, im S3-Node: Binary Data ✅ + Property "data" |
+| 20 | S3-Upload "encryption error" | `serversideEncryptionCustomerKey` mit MIME-Type befüllt | Feld LEER lassen — ist kein Content-Type-Feld! |
+| 21 | Contabo S3 funktioniert nicht mit AWS-Style URL | Contabo nutzt Path-Style | `Force Path Style: true` in Credential |
+| 22 | `awscli` nicht auf Ubuntu-Server installierbar | Paket nicht im Repo | `boto3` über `pip install boto3` ODER MinIO-Client `mc` herunterladen |
+| 23 | Secret Key versehentlich in Chat/Git posten | Versehentlich kopiert | SOFORT regenerieren im Contabo-Kundencenter (Schnellzugriff-Icon ↺), neuen Key NUR in Passwort-Manager + n8n-Credential |
+| 24 | Lange SSH-Operation bricht ab | Verbindung gestört | IMMER `tmux new -s NAME` verwenden für lange Befehle |
+
+---
+
+## 32. ARBEITSWEISE / KOMMUNIKATIONS-REGELN (ergänzt)
+
+**Wenn der User einen n8n-Workflow erstellen oder ändern muss:**
+- ✅ **IMMER kompletten Workflow als JSON liefern** zum direkten Import (Strg+A → Strg+V auf leerer Canvas)
+- ❌ NIE Schritt-für-Schritt-Anleitungen mit "klick hier, dann da" — viele UI-Elemente existieren in dieser n8n-Version nicht
+- ✅ Beim Import: User muss nur noch Credentials neu auswählen (gehen beim Import verloren)
+
+**Wenn lange Wartezeiten auf dem Server zu erwarten sind:**
+- ✅ Vorher in tmux/screen schicken
+- ✅ User auffordern, im zweiten SSH-Fenster zu prüfen mit `ps`, `iostat`, `df -h`
+- ✅ Nicht abbrechen wenn Operation aktiv läuft (kann Datenverlust verursachen)
+
+**Wenn Sicherheitsrisiken entstehen (Secret in Chat etc.):**
+- ⚠️ **STOPP-Signal** sofort senden
+- ✅ Konkrete Anleitung wie der User das Risiko mitigiert (Key regenerieren etc.)
+- ✅ Erklären warum es ein Problem ist
+
+**Vor neuem SQL/Workflow:**
+- ✅ Tatsächliche Spaltennamen aus Skill-Doku prüfen (Abschnitt 17 für `incoming_invoices` etc.)
+- ✅ Tatsächliche Container-Namen verwenden (siehe Abschnitt 29)
+- ✅ Tatsächliche DB-Namen verwenden (`ebay_automation` in `ew0s0w40k08wss8c4c8gogw4`)
+
+---
+
+## ÄNDERUNGSHISTORIE
+
+| Version | Datum | Änderung |
+|---|---|---|
+| 4.0 | 2026-04-15 | Initial — eBay-Dashboard-Grundlagen |
+| 5.0 | 2026-04-16 | Buchhaltungsmodul (Abschnitte 16–22) |
+| **6.0** | **2026-04-17** | **Object Storage + Server-Wartung + n8n-Pruning + S3-Workflows (Abschnitte 23–32)** |
+
 
 Alle Unterseiten haben einen `← Zurück`-Button (`goto('/einstellungen')`).
