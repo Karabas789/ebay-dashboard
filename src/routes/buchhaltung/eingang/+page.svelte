@@ -29,7 +29,7 @@
   let analyseDatei = $state(null);
   let analyseDateiTyp = $state('');
 
-  // Status für neue Rechnung (Default: bezahlt, wie User-Annahme)
+  // Status für neue Rechnung (Default: bezahlt)
   let neuerStatus = $state('bezahlt');
 
   // Duplikat-Hinweis nach Backend-Response
@@ -51,8 +51,7 @@
     })
   );
 
-  // Reaktive Duplikat-Erkennung — sucht in bereits geladenen Rechnungen.
-  // Wird live aktualisiert, sobald User Lieferant/Rechnungsnummer/Datum ändert.
+  // Reaktive Duplikat-Erkennung
   let erkanntes_duplikat = $derived.by(() => {
     if (!analyseResult) return null;
     const lieferant = (analyseResult.lieferant || '').trim().toLowerCase();
@@ -118,7 +117,6 @@
       });
       if (res.success) {
         analyseResult = res.daten;
-        // Sicherstellen, dass Rechnungen geladen sind — sonst kann erkanntes_duplikat nichts finden
         if (rechnungen.length === 0) await loadRechnungen();
         showUploadModal = true;
       } else {
@@ -218,12 +216,23 @@
 
   function openEdit(r) {
     editItem = { ...r };
+    // Datum auf YYYY-MM-DD kürzen, damit <input type="date"> sie korrekt darstellt
+    if (editItem.rechnungsdatum) editItem.rechnungsdatum = String(editItem.rechnungsdatum).substring(0, 10);
+    if (editItem.bezahlt_am) editItem.bezahlt_am = String(editItem.bezahlt_am).substring(0, 10);
     showEditModal = true;
   }
 
   async function saveEdit() {
     if (!editItem) return;
     try {
+      // Wenn Status auf "bezahlt" und kein bezahlt_am gesetzt → auf rechnungsdatum setzen
+      let bezahltAm = editItem.bezahlt_am || null;
+      if (editItem.status === 'bezahlt' && !bezahltAm) {
+        bezahltAm = editItem.rechnungsdatum || new Date().toISOString().split('T')[0];
+      }
+      // Wenn Status NICHT bezahlt → bezahlt_am zurücksetzen
+      if (editItem.status !== 'bezahlt') bezahltAm = null;
+
       await apiCall('/eingangsrechnung-update', {
         user_id: user?.id,
         invoice_id: editItem.id,
@@ -236,7 +245,9 @@
         mwst_betrag: editItem.mwst_betrag,
         brutto_betrag: editItem.brutto_betrag,
         kategorie: editItem.kategorie,
-        notiz: editItem.notiz
+        notiz: editItem.notiz,
+        status: editItem.status,
+        bezahlt_am: bezahltAm
       });
       showEditModal = false;
       editItem = null;
@@ -408,6 +419,9 @@
                     {#if r.status !== 'bezahlt'}
                       <button class="btn-icon" title="Als bezahlt markieren" on:click={() => updateStatus(r.id, 'bezahlt')}>✅</button>
                     {/if}
+                    {#if r.status !== 'entwurf'}
+                      <button class="btn-icon" title="Zurück auf Entwurf" on:click={() => updateStatus(r.id, 'entwurf')}>↩️</button>
+                    {/if}
                     <button class="btn-icon" title="Löschen" on:click={() => deleteRechnung(r.id)}>🗑️</button>
                   </div>
                 </td>
@@ -425,11 +439,11 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="modal-overlay" on:click|self={closeUploadModal}>
-    <div class="modal-box" style="max-width:640px">
+    <div class="modal-box modal-large">
       <div class="modal-title">📄 Erkannte Daten prüfen</div>
       <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Die KI hat folgende Daten extrahiert. Bitte prüfen und ggf. korrigieren.</p>
 
-      <!-- Duplikat-Warnung: live erkannt aus geladener Liste ODER vom Backend bestätigt -->
+      <!-- Duplikat-Warnung -->
       {#if duplikatHinweis || erkanntes_duplikat}
         {@const dup = duplikatHinweis || erkanntes_duplikat}
         <div class="dup-warn">
@@ -556,7 +570,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="modal-overlay" on:click|self={() => showEditModal = false}>
-    <div class="modal-box">
+    <div class="modal-box modal-large">
       <div class="modal-title">✏️ Rechnung bearbeiten</div>
       <div class="form-grid">
         <div class="form-group"><label class="label">Lieferant</label><input class="input" bind:value={editItem.lieferant} /></div>
@@ -571,6 +585,18 @@
         <div class="form-group"><label class="label">MwSt %</label><input class="input" type="number" step="0.01" bind:value={editItem.mwst_satz} /></div>
         <div class="form-group"><label class="label">MwSt-Betrag</label><input class="input" type="number" step="0.01" bind:value={editItem.mwst_betrag} /></div>
         <div class="form-group"><label class="label">Brutto</label><input class="input" type="number" step="0.01" bind:value={editItem.brutto_betrag} /></div>
+        <div class="form-group">
+          <label class="label">Status</label>
+          <select class="input" bind:value={editItem.status}>
+            {#each statusAuswahl as s}<option value={s}>{statusLabel(s)}</option>{/each}
+          </select>
+        </div>
+        {#if editItem.status === 'bezahlt'}
+          <div class="form-group">
+            <label class="label">Bezahlt am</label>
+            <input class="input" type="date" bind:value={editItem.bezahlt_am} />
+          </div>
+        {/if}
         <div class="form-group" style="grid-column:1/-1"><label class="label">Notiz</label><textarea class="input" rows="2" bind:value={editItem.notiz}></textarea></div>
       </div>
       <div class="modal-actions">
@@ -601,6 +627,11 @@
   }
   .drop-zone.drag-over { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
   .drop-zone.analysing { border-color: var(--primary); background: var(--primary-light); }
+
+  /* Modal-Größen — wie bei Rechnungen-Modal */
+  .modal-box { width: 100%; max-height: 90vh; overflow-y: auto; }
+  .modal-large { max-width: 960px; }
+
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .form-group { display: flex; flex-direction: column; gap: 4px; }
   .dup-warn {
