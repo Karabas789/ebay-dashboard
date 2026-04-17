@@ -216,6 +216,29 @@
     }
   }
 
+  async function downloadBeleg(s3_key, dateityp) {
+    if (!s3_key) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('https://n8n.ai-online.cloud/webhook/s3-download', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ s3_key })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      // Cleanup nach 1 Min
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      error = 'Download fehlgeschlagen: ' + e.message;
+    }
+  }
+
   async function updateStatus(id, neuerStatusWert) {
     try {
       await apiCall('/eingangsrechnung-update', {
@@ -433,6 +456,9 @@
                 <td style="color:var(--text3);font-size:11px">{r.quelle === 'email' ? '📧' : '📎'} {r.quelle}</td>
                 <td>
                   <div style="display:flex;gap:4px">
+                    {#if r.datei_s3_key}
+                      <button class="btn-icon" title="Beleg anzeigen" on:click={() => downloadBeleg(r.datei_s3_key, r.datei_typ)}>📎</button>
+                    {/if}
                     <button class="btn-icon" title="Bearbeiten" on:click={() => openEdit(r)}>✏️</button>
                     {#if r.status === 'entwurf'}
                       <button class="btn-icon" title="Als gebucht markieren" on:click={() => updateStatus(r.id, 'gebucht')}>📌</button>
