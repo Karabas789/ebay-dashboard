@@ -416,7 +416,7 @@
   <div class="page-header">
     <div>
       <button class="btn btn-secondary" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
-      <div class="page-title">📥 Eingangsrechnungen</div>
+      <div class="page-title">⤴️ 🗂️ 🗃️ Eingangsrechnungen</div>
       <div class="page-subtitle">Rechnungen & Quittungen hochladen, analysieren und verwalten</div>
     </div>
     <div class="header-actions">
@@ -500,7 +500,7 @@
     <div class="bulk-bar">
       <span><strong>{ausgewaehlt.size}</strong> ausgewählt</span>
       <button class="btn btn-primary btn-sm" disabled={zipDownloading} on:click={downloadAusgewaehlteAlsZip}>
-        {#if zipDownloading}⏳ Erstelle ZIP...{:else}📥 ZIP herunterladen{/if}
+        {#if zipDownloading}⏳ Erstelle ZIP...{:else}📁 ZIP herunterladen{/if}
       </button>
       <button class="btn btn-secondary btn-sm" on:click={() => ausgewaehlt = new Set()}>Auswahl aufheben</button>
     </div>
@@ -559,7 +559,7 @@
                 <td>
                   <div style="display:flex;gap:4px">
                     {#if r.datei_s3_key}
-                      <button class="btn-icon" title="Beleg herunterladen" on:click={() => downloadBeleg(r)}>📥</button>
+                      <button class="btn-icon" title="Beleg herunterladen" on:click={() => downloadBeleg(r)}>⬇️</button>
                     {/if}
                     <button class="btn-icon" title="Bearbeiten" on:click={() => openEdit(r)}>✏️</button>
                     {#if r.status === 'entwurf'}
