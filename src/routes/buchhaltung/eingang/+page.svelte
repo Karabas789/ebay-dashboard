@@ -9,6 +9,14 @@
   let unsubUser = currentUser.subscribe(v => user = v);
   onDestroy(() => unsubUser());
 
+  // ═══════════════════════════════════════════════════════
+  // Tab-Switch: rechnungen | posteingang
+  // ═══════════════════════════════════════════════════════
+  let tab = $state('rechnungen');
+
+  // ═══════════════════════════════════════════════════════
+  // RECHNUNGEN (wie bisher)
+  // ═══════════════════════════════════════════════════════
   let rechnungen = $state([]);
   let loading = $state(true);
   let error = $state('');
@@ -16,29 +24,24 @@
   let statusFilter = $state('alle');
   let kategorieFilter = $state('alle');
 
-  // Upload
   let uploading = $state(false);
   let showUploadModal = $state(false);
   let showEditModal = $state(false);
   let editItem = $state(null);
   let dragOver = $state(false);
 
-  // Analyseergebnis
   let analyseResult = $state(null);
   let analysing = $state(false);
   let analyseError = $state('');
   let analyseDatei = $state(null);
   let analyseDateiTyp = $state('');
-
-  // Status für neue Rechnung (Default: bezahlt)
   let neuerStatus = $state('bezahlt');
-
-  // Duplikat-Hinweis nach Backend-Response
   let duplikatHinweis = $state(null);
-
-  // Mehrfach-Auswahl
   let ausgewaehlt = $state(new Set());
   let zipDownloading = $state(false);
+
+  // Für Inbox-Modus: inbox-Record-ID, damit beim Save auch die Mail verschoben werden kann
+  let inboxItemId = $state(null);
 
   const kategorien = ['alle','Wareneinkauf','Büromaterial','Versandkosten','Kfz/Tanken','Telekommunikation','Software/IT','Werbung','Reisekosten','Versicherung','Miete/Pacht','Sonstiges'];
   const statusOptionen = ['alle','entwurf','gebucht','bezahlt'];
@@ -56,7 +59,6 @@
     })
   );
 
-  // Reaktive Duplikat-Erkennung
   let erkanntes_duplikat = $derived.by(() => {
     if (!analyseResult) return null;
     const lieferant = (analyseResult.lieferant || '').trim().toLowerCase();
@@ -111,6 +113,7 @@
     duplikatHinweis = null;
     neuerStatus = 'bezahlt';
     analyseDateiTyp = ext;
+    inboxItemId = null;
 
     try {
       const base64 = await fileToBase64(file);
@@ -162,10 +165,15 @@
     duplikatHinweis = null;
     analyseError = '';
     try {
-        // 1. Datei zu S3 hochladen (vor DB-INSERT)
       let s3_key = null;
       let datei_groesse = null;
-      if (analyseDatei) {
+
+      // Inbox-Modus: Datei liegt bereits in S3, wir nutzen den bestehenden Key
+      if (inboxItemId && analyseResult._inbox_s3_key) {
+        s3_key = analyseResult._inbox_s3_key;
+        datei_groesse = analyseResult._inbox_s3_size;
+      } else if (analyseDatei) {
+        // Upload-Modus: frisch zu S3 hochladen
         const uploadRes = await apiCall('/s3-upload', {
           user_id: user?.id,
           datei_base64: analyseDatei,
@@ -179,8 +187,6 @@
         s3_key = uploadRes.s3_key;
         datei_groesse = uploadRes.groesse;
       }
-
-      // 2. Rechnung speichern (mit s3_key statt datei_base64)
 
       const res = await apiCall('/eingangsrechnung-speichern', {
         user_id: user?.id,
@@ -197,20 +203,37 @@
         datei_s3_key: s3_key,
         datei_groesse,
         datei_typ: analyseDateiTyp,
-        quelle: 'upload',
+        quelle: inboxItemId ? 'email' : 'upload',
         status: neuerStatus,
         bezahlt_am: neuerStatus === 'bezahlt' ? (analyseResult.rechnungsdatum || new Date().toISOString().split('T')[0]) : null,
         positionen: analyseResult.positionen || []
       });
+
       if (res.duplicate) {
         const vorhanden = rechnungen.find(r => r.id === res.invoice_id);
         duplikatHinweis = vorhanden || { id: res.invoice_id, lieferant: analyseResult.lieferant, rechnungsnummer: analyseResult.rechnungsnummer, rechnungsdatum: analyseResult.rechnungsdatum };
       } else if (res.success) {
+        // Wenn Inbox-Modus: Mail verschieben + Inbox-Status updaten
+        if (inboxItemId) {
+          try {
+            await apiCall('/email-inbox-action', {
+              user_id: user?.id,
+              inbox_id: inboxItemId,
+              action: 'freigeben',
+              processed_invoice_id: res.invoice_id || null
+            });
+          } catch (e) {
+            console.warn('Mail-Move fehlgeschlagen:', e.message);
+          }
+        }
+
         showUploadModal = false;
         analyseResult = null;
         analyseDatei = null;
         duplikatHinweis = null;
+        inboxItemId = null;
         await loadRechnungen();
+        if (tab === 'posteingang' || inboxItemId) await loadInbox();
       } else {
         analyseError = res.error || 'Speichern fehlgeschlagen';
       }
@@ -251,13 +274,11 @@
       const blob = new Blob([arrayBuffer], { type: mime });
       const url = URL.createObjectURL(blob);
 
-      // Sprechender Dateiname: lieferant_RE-NR_DATUM.ext
       const lieferant = (rechnung.lieferant || 'Beleg').replace(/[^a-zA-Z0-9äöüÄÖÜß\s\-]/g, '').trim().replace(/\s+/g, '_');
       const rnr = (rechnung.rechnungsnummer || '').replace(/[^a-zA-Z0-9\-]/g, '');
       const datum = (rechnung.rechnungsdatum || '').substring(0, 10);
       const dateiname = [lieferant, rnr, datum].filter(Boolean).join('_') + '.' + ext;
 
-      // Erzwungener Download (nicht Browser-Vorschau)
       const a = document.createElement('a');
       a.href = url;
       a.download = dateiname;
@@ -341,7 +362,6 @@
 
   function openEdit(r) {
     editItem = { ...r };
-    // Datum auf YYYY-MM-DD kürzen, damit <input type="date"> sie korrekt darstellt
     if (editItem.rechnungsdatum) editItem.rechnungsdatum = String(editItem.rechnungsdatum).substring(0, 10);
     if (editItem.bezahlt_am) editItem.bezahlt_am = String(editItem.bezahlt_am).substring(0, 10);
     showEditModal = true;
@@ -350,12 +370,10 @@
   async function saveEdit() {
     if (!editItem) return;
     try {
-      // Wenn Status auf "bezahlt" und kein bezahlt_am gesetzt → auf rechnungsdatum setzen
       let bezahltAm = editItem.bezahlt_am || null;
       if (editItem.status === 'bezahlt' && !bezahltAm) {
         bezahltAm = editItem.rechnungsdatum || new Date().toISOString().split('T')[0];
       }
-      // Wenn Status NICHT bezahlt → bezahlt_am zurücksetzen
       if (editItem.status !== 'bezahlt') bezahltAm = null;
 
       await apiCall('/eingangsrechnung-update', {
@@ -385,11 +403,17 @@
     analyseResult = null;
     analyseError = '';
     duplikatHinweis = null;
+    inboxItemId = null;
   }
 
   function formatDatum(d) {
     if (!d) return '—';
     try { return new Date(d).toLocaleDateString('de-DE'); } catch { return d; }
+  }
+
+  function formatDatumZeit(d) {
+    if (!d) return '—';
+    try { return new Date(d).toLocaleString('de-DE'); } catch { return d; }
   }
 
   function formatBetrag(b) {
@@ -409,190 +433,479 @@
     return s;
   }
 
-  onMount(() => { if (user?.id) loadRechnungen(); });
+  // ═══════════════════════════════════════════════════════
+  // POSTEINGANG (NEU)
+  // ═══════════════════════════════════════════════════════
+  let inboxItems = $state([]);
+  let inboxLoading = $state(false);
+  let inboxError = $state('');
+  let inboxStatusFilter = $state('neu'); // 'neu' | 'gespeichert' | 'verworfen' | 'alle'
+  let verwerfeLaeuft = $state(false);
+
+  let inboxGefiltert = $derived(
+    inboxItems.filter(i => {
+      if (inboxStatusFilter === 'alle') return true;
+      return i.status === inboxStatusFilter;
+    })
+  );
+
+  let inboxCountNeu = $derived(inboxItems.filter(i => i.status === 'neu').length);
+
+  async function loadInbox() {
+    inboxLoading = true;
+    inboxError = '';
+    try {
+      const res = await apiCall('/email-inbox-laden', {
+        user_id: user?.id,
+        status_filter: inboxStatusFilter === 'alle' ? null : inboxStatusFilter
+      });
+      if (res.success) {
+        inboxItems = res.items || [];
+      } else {
+        inboxError = res.error || 'Fehler beim Laden des Posteingangs';
+      }
+    } catch (e) {
+      inboxError = e.message;
+    } finally {
+      inboxLoading = false;
+    }
+  }
+
+  // Inbox-Item öffnen → Prüf-Modal mit KI-Daten vorausgefüllt
+  async function pruefeInboxItem(item) {
+    if (!item.ki_analyse) {
+      inboxError = 'Für diese Mail liegt keine KI-Analyse vor (Fehler: ' + (item.ki_error || 'unbekannt') + ')';
+      return;
+    }
+
+    // Rechnungen laden für Duplikat-Check
+    if (rechnungen.length === 0) await loadRechnungen();
+
+    inboxItemId = item.id;
+    analyseDateiTyp = item.attachment_typ || 'pdf';
+    analyseDatei = null; // bereits in S3
+
+    // KI-Analyse in analyseResult-Format bringen, S3-Key mitgeben
+    analyseResult = {
+      ...item.ki_analyse,
+      _inbox_s3_key: item.attachment_s3_key,
+      _inbox_s3_size: item.attachment_size
+    };
+
+    // Default-Status: Entwurf (User prüft!)
+    neuerStatus = 'entwurf';
+    analyseError = '';
+    duplikatHinweis = null;
+    showUploadModal = true;
+  }
+
+  async function verwerfeInboxItem(item) {
+    if (!confirm('Diese Mail verwerfen?\n\nDie Mail wird in den Ordner "Rechnungen" verschoben und im Posteingang als "verworfen" markiert.\nDie Rechnung wird NICHT in die Buchhaltung übernommen.')) return;
+
+    verwerfeLaeuft = true;
+    try {
+      const res = await apiCall('/email-inbox-action', {
+        user_id: user?.id,
+        inbox_id: item.id,
+        action: 'verwerfen'
+      });
+      if (res.success) {
+        await loadInbox();
+      } else {
+        inboxError = res.error || 'Verwerfen fehlgeschlagen';
+      }
+    } catch (e) {
+      inboxError = e.message;
+    } finally {
+      verwerfeLaeuft = false;
+    }
+  }
+
+  async function downloadInboxPdf(item) {
+    if (!item.attachment_s3_key) return;
+    try {
+      const arrayBuffer = await fetchDatei(item.attachment_s3_key);
+      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = item.attachment_name || 'anhang.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      inboxError = 'Download fehlgeschlagen: ' + e.message;
+    }
+  }
+
+  function inboxStatusBadge(s) {
+    if (s === 'gespeichert') return 'badge-success';
+    if (s === 'verworfen') return 'badge-danger';
+    return 'badge-warning'; // 'neu'
+  }
+
+  function inboxStatusLabel(s) {
+    if (s === 'neu') return '🆕 Neu';
+    if (s === 'gespeichert') return '✅ Gespeichert';
+    if (s === 'verworfen') return '🗑️ Verworfen';
+    return s;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Init
+  // ═══════════════════════════════════════════════════════
+  onMount(async () => {
+    if (user?.id) {
+      await loadRechnungen();
+      await loadInbox(); // Für Badge-Count sofort laden
+    }
+  });
+
+  // Beim Tab-Wechsel auf Posteingang: neu laden
+  $effect(() => {
+    if (tab === 'posteingang' && user?.id) {
+      loadInbox();
+    }
+  });
 </script>
 
 <div class="page-container">
   <div class="page-header">
     <div>
-      <button class="btn btn-secondary" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
+      <button class="btn btn-secondary" onclick={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
       <div class="page-title">🗂️ Eingangsrechnungen</div>
-      <div class="page-subtitle">Rechnungen & Quittungen hochladen, analysieren und verwalten</div>
+      <div class="page-subtitle">Rechnungen & Quittungen hochladen, aus Emails importieren und verwalten</div>
     </div>
-    <div class="header-actions">
-      <label class="btn btn-primary" style="cursor:pointer">
-        📎 Datei hochladen
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.gif,.tiff,.bmp" on:change={onFileSelect} style="display:none" />
-      </label>
-      <button class="btn btn-secondary" on:click={loadRechnungen}>🔄 Aktualisieren</button>
-    </div>
-  </div>
-
-  <!-- Drop Zone -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div
-    class="drop-zone"
-    class:drag-over={dragOver}
-    class:analysing
-    on:dragover|preventDefault={() => dragOver = true}
-    on:dragleave={() => dragOver = false}
-    on:drop={onDrop}
-  >
-    {#if analysing}
-      <span class="spinner"></span>
-      <span>Dokument wird analysiert...</span>
-    {:else if analyseError}
-      <span style="color:var(--danger)">⚠️ {analyseError}</span>
-      <button class="btn btn-sm btn-secondary" style="margin-top:8px" on:click={() => analyseError = ''}>Erneut versuchen</button>
+    {#if tab === 'rechnungen'}
+      <div class="header-actions">
+        <label class="btn btn-primary" style="cursor:pointer">
+          📎 Datei hochladen
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.heic,.webp,.gif,.tiff,.bmp" onchange={onFileSelect} style="display:none" />
+        </label>
+        <button class="btn btn-secondary" onclick={loadRechnungen}>🔄 Aktualisieren</button>
+      </div>
     {:else}
-      <span style="font-size:28px">📄</span>
-      <span>PDF, Bild oder Foto hierher ziehen</span>
-      <span style="font-size:11px;color:var(--text3)">oder oben auf "Datei hochladen" klicken — PDF, JPG, PNG, HEIC, WebP</span>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick={loadInbox}>🔄 Aktualisieren</button>
+      </div>
     {/if}
   </div>
 
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <div class="filter-tabs">
-      {#each statusOptionen as s}
-        <button class="filter-tab" class:active={statusFilter === s} on:click={() => { statusFilter = s; loadRechnungen(); }}>
-          {s === 'alle' ? '📋 Alle' : statusLabel(s)}
-        </button>
-      {/each}
-    </div>
-    <div class="toolbar-right">
-      <select class="input" style="width:180px" bind:value={kategorieFilter} on:change={loadRechnungen}>
-        {#each kategorien as k}
-          <option value={k}>{k === 'alle' ? '🏷️ Alle Kategorien' : k}</option>
-        {/each}
-      </select>
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input class="search-input" placeholder="Suchen..." bind:value={suchbegriff} />
-      </div>
-    </div>
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn" class:active={tab === 'rechnungen'} onclick={() => tab = 'rechnungen'}>
+      📋 Rechnungen
+    </button>
+    <button class="tab-btn" class:active={tab === 'posteingang'} onclick={() => tab = 'posteingang'}>
+      📥 Posteingang
+      {#if inboxCountNeu > 0}
+        <span class="tab-badge">{inboxCountNeu}</span>
+      {/if}
+    </button>
   </div>
 
-  <!-- Zusammenfassung -->
-  {#if zusammenfassung && !loading}
-    <div class="kpi-grid" style="margin-bottom:16px">
-      <div class="kpi-card">
-        <div class="kpi-label">Belege</div>
-        <div class="kpi-val">{zusammenfassung.anzahl}</div>
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: RECHNUNGEN                                   -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {#if tab === 'rechnungen'}
+    <!-- Drop Zone -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="drop-zone"
+      class:drag-over={dragOver}
+      class:analysing
+      ondragover={(e) => { e.preventDefault(); dragOver = true; }}
+      ondragleave={() => dragOver = false}
+      ondrop={onDrop}
+    >
+      {#if analysing}
+        <span class="spinner"></span>
+        <span>Dokument wird analysiert...</span>
+      {:else if analyseError}
+        <span style="color:var(--danger)">⚠️ {analyseError}</span>
+        <button class="btn btn-sm btn-secondary" style="margin-top:8px" onclick={() => analyseError = ''}>Erneut versuchen</button>
+      {:else}
+        <span style="font-size:28px">📄</span>
+        <span>PDF, Bild oder Foto hierher ziehen</span>
+        <span style="font-size:11px;color:var(--text3)">oder oben auf "Datei hochladen" klicken — PDF, JPG, PNG, HEIC, WebP</span>
+      {/if}
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="filter-tabs">
+        {#each statusOptionen as s}
+          <button class="filter-tab" class:active={statusFilter === s} onclick={() => { statusFilter = s; loadRechnungen(); }}>
+            {s === 'alle' ? '📋 Alle' : statusLabel(s)}
+          </button>
+        {/each}
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Gesamt Netto</div>
-        <div class="kpi-val kpi-red">{formatBetrag(zusammenfassung.gesamt_netto)} €</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Gesamt MwSt</div>
-        <div class="kpi-val">{formatBetrag(zusammenfassung.gesamt_mwst)} €</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Gesamt Brutto</div>
-        <div class="kpi-val kpi-red">{formatBetrag(zusammenfassung.gesamt_brutto)} €</div>
+      <div class="toolbar-right">
+        <select class="input" style="width:180px" bind:value={kategorieFilter} onchange={loadRechnungen}>
+          {#each kategorien as k}
+            <option value={k}>{k === 'alle' ? '🏷️ Alle Kategorien' : k}</option>
+          {/each}
+        </select>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" placeholder="Suchen..." bind:value={suchbegriff} />
+        </div>
       </div>
     </div>
+
+    <!-- Zusammenfassung -->
+    {#if zusammenfassung && !loading}
+      <div class="kpi-grid" style="margin-bottom:16px">
+        <div class="kpi-card">
+          <div class="kpi-label">Belege</div>
+          <div class="kpi-val">{zusammenfassung.anzahl}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Gesamt Netto</div>
+          <div class="kpi-val kpi-red">{formatBetrag(zusammenfassung.gesamt_netto)} €</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Gesamt MwSt</div>
+          <div class="kpi-val">{formatBetrag(zusammenfassung.gesamt_mwst)} €</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Gesamt Brutto</div>
+          <div class="kpi-val kpi-red">{formatBetrag(zusammenfassung.gesamt_brutto)} €</div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Sammel-Aktionen -->
+    {#if ausgewaehlt.size > 0}
+      <div class="bulk-bar">
+        <span><strong>{ausgewaehlt.size}</strong> ausgewählt</span>
+        <button class="btn btn-primary btn-sm" disabled={zipDownloading} onclick={downloadAusgewaehlteAlsZip}>
+          {#if zipDownloading}⏳ Erstelle ZIP...{:else}📁 ZIP herunterladen{/if}
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick={() => ausgewaehlt = new Set()}>Auswahl aufheben</button>
+      </div>
+    {/if}
+
+    <!-- Tabelle -->
+    {#if loading}
+      <div class="loading"><span class="spinner"></span> Lade Eingangsrechnungen...</div>
+    {:else if error}
+      <div class="card" style="padding:20px;color:var(--warning)">⚠️ {error}</div>
+    {:else if gefiltert.length === 0}
+      <div class="empty-state">
+        <h3>Keine Eingangsrechnungen</h3>
+        <p>Lade eine Rechnung, Quittung oder ein Foto hoch — die KI extrahiert automatisch alle Daten.</p>
+      </div>
+    {:else}
+      <div class="table-card">
+        <div class="table-scroll">
+          <table class="table">
+            <thead>
+              <tr>
+                <th style="width:32px">
+                  <input type="checkbox"
+                    checked={gefiltert.filter(r => r.datei_s3_key).length > 0 && gefiltert.filter(r => r.datei_s3_key).every(r => ausgewaehlt.has(r.id))}
+                    onchange={toggleSelectAll} />
+                </th>
+                <th>Datum</th>
+                <th>Lieferant</th>
+                <th>Re.-Nr.</th>
+                <th>Kategorie</th>
+                <th style="text-align:right">Netto</th>
+                <th style="text-align:right">MwSt</th>
+                <th style="text-align:right">Brutto</th>
+                <th>Status</th>
+                <th>Quelle</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each gefiltert as r (r.id)}
+                <tr>
+                  <td>
+                    {#if r.datei_s3_key}
+                      <input type="checkbox" checked={ausgewaehlt.has(r.id)} onchange={() => toggleSelect(r.id)} />
+                    {/if}
+                  </td>
+                  <td>{formatDatum(r.rechnungsdatum)}</td>
+                  <td style="font-weight:600">{r.lieferant}</td>
+                  <td style="color:var(--text2)">{r.rechnungsnummer || '—'}</td>
+                  <td><span class="badge badge-info">{r.kategorie}</span></td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums">{formatBetrag(r.netto_betrag)} €</td>
+                  <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--text2)">{formatBetrag(r.mwst_betrag)} €</td>
+                  <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">{formatBetrag(r.brutto_betrag)} €</td>
+                  <td><span class="badge {statusBadge(r.status)}">{r.status}</span></td>
+                  <td style="color:var(--text3);font-size:11px">{r.quelle === 'email' ? '📧' : '⬆️'} {r.quelle}</td>
+                  <td>
+                    <div style="display:flex;gap:4px">
+                      {#if r.datei_s3_key}
+                        <button class="btn-icon" title="Beleg herunterladen" onclick={() => downloadBeleg(r)}>💾</button>
+                      {/if}
+                      <button class="btn-icon" title="Bearbeiten" onclick={() => openEdit(r)}>✏️</button>
+                      {#if r.status === 'entwurf'}
+                        <button class="btn-icon" title="Als gebucht markieren" onclick={() => updateStatus(r.id, 'gebucht')}>📌</button>
+                      {/if}
+                      {#if r.status !== 'bezahlt'}
+                        <button class="btn-icon" title="Als bezahlt markieren" onclick={() => updateStatus(r.id, 'bezahlt')}>✅</button>
+                      {/if}
+                      {#if r.status !== 'entwurf'}
+                        <button class="btn-icon" title="Zurück auf Entwurf" onclick={() => updateStatus(r.id, 'entwurf')}>↩️</button>
+                      {/if}
+                      <button class="btn-icon" title="Löschen" onclick={() => deleteRechnung(r.id)}>🗑️</button>
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {/if}
   {/if}
 
-  <!-- Sammel-Aktionen -->
-  {#if ausgewaehlt.size > 0}
-    <div class="bulk-bar">
-      <span><strong>{ausgewaehlt.size}</strong> ausgewählt</span>
-      <button class="btn btn-primary btn-sm" disabled={zipDownloading} on:click={downloadAusgewaehlteAlsZip}>
-        {#if zipDownloading}⏳ Erstelle ZIP...{:else}📁 ZIP herunterladen{/if}
-      </button>
-      <button class="btn btn-secondary btn-sm" on:click={() => ausgewaehlt = new Set()}>Auswahl aufheben</button>
-    </div>
-  {/if} 
-
-  <!-- Tabelle -->
-  {#if loading}
-    <div class="loading"><span class="spinner"></span> Lade Eingangsrechnungen...</div>
-  {:else if error}
-    <div class="card" style="padding:20px;color:var(--warning)">⚠️ {error}</div>
-  {:else if gefiltert.length === 0}
-    <div class="empty-state">
-      <h3>Keine Eingangsrechnungen</h3>
-      <p>Lade eine Rechnung, Quittung oder ein Foto hoch — die KI extrahiert automatisch alle Daten.</p>
-    </div>
-  {:else}
-    <div class="table-card">
-      <div class="table-scroll">
-        <table class="table">
-          <thead>
-            <tr>
-              <th style="width:32px">
-                <input type="checkbox"
-                  checked={gefiltert.filter(r => r.datei_s3_key).length > 0 && gefiltert.filter(r => r.datei_s3_key).every(r => ausgewaehlt.has(r.id))}
-                  on:change={toggleSelectAll} />
-              </th>
-              <th>Datum</th>
-              <th>Lieferant</th>
-              <th>Re.-Nr.</th>
-              <th>Kategorie</th>
-              <th style="text-align:right">Netto</th>
-              <th style="text-align:right">MwSt</th>
-              <th style="text-align:right">Brutto</th>
-              <th>Status</th>
-              <th>Quelle</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each gefiltert as r (r.id)}
-              <tr>
-                <td>
-                  {#if r.datei_s3_key}
-                    <input type="checkbox" checked={ausgewaehlt.has(r.id)} on:change={() => toggleSelect(r.id)} />
-                  {/if}
-                </td>
-                <td>{formatDatum(r.rechnungsdatum)}</td>
-                <td style="font-weight:600">{r.lieferant}</td>
-                <td style="color:var(--text2)">{r.rechnungsnummer || '—'}</td>
-                <td><span class="badge badge-info">{r.kategorie}</span></td>
-                <td style="text-align:right;font-variant-numeric:tabular-nums">{formatBetrag(r.netto_betrag)} €</td>
-                <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--text2)">{formatBetrag(r.mwst_betrag)} €</td>
-                <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">{formatBetrag(r.brutto_betrag)} €</td>
-                <td><span class="badge {statusBadge(r.status)}">{r.status}</span></td>
-                <td style="color:var(--text3);font-size:11px">{r.quelle === 'email' ? '📧' : '⬆️'} {r.quelle}</td>
-                <td>
-                  <div style="display:flex;gap:4px">
-                    {#if r.datei_s3_key}
-                      <button class="btn-icon" title="Beleg herunterladen" on:click={() => downloadBeleg(r)}>💾</button>
-                    {/if}
-                    <button class="btn-icon" title="Bearbeiten" on:click={() => openEdit(r)}>✏️</button>
-                    {#if r.status === 'entwurf'}
-                      <button class="btn-icon" title="Als gebucht markieren" on:click={() => updateStatus(r.id, 'gebucht')}>📌</button>
-                    {/if}
-                    {#if r.status !== 'bezahlt'}
-                      <button class="btn-icon" title="Als bezahlt markieren" on:click={() => updateStatus(r.id, 'bezahlt')}>✅</button>
-                    {/if}
-                    {#if r.status !== 'entwurf'}
-                      <button class="btn-icon" title="Zurück auf Entwurf" on:click={() => updateStatus(r.id, 'entwurf')}>↩️</button>
-                    {/if}
-                    <button class="btn-icon" title="Löschen" on:click={() => deleteRechnung(r.id)}>🗑️</button>
-                  </div>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: POSTEINGANG                                  -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {#if tab === 'posteingang'}
+    <div class="card card-info">
+      <div class="card-titel">📥 Automatisch importierte Emails</div>
+      <div class="card-sub-info">
+        Hier erscheinen alle Emails mit PDF-Anhang die alle 30 Minuten aus deinem IMAP-Postfach abgeholt werden.
+        Die KI hat die Daten bereits extrahiert — du musst jede Rechnung nur noch prüfen und freigeben oder verwerfen.
+        Erst nach deiner Freigabe wird die Rechnung in die Buchhaltung übernommen und die Mail in den Ordner „Rechnungen" verschoben.
       </div>
     </div>
+
+    <div class="toolbar">
+      <div class="filter-tabs">
+        <button class="filter-tab" class:active={inboxStatusFilter === 'neu'} onclick={() => { inboxStatusFilter = 'neu'; loadInbox(); }}>
+          🆕 Neu {#if inboxCountNeu > 0}<span class="tab-count">{inboxCountNeu}</span>{/if}
+        </button>
+        <button class="filter-tab" class:active={inboxStatusFilter === 'gespeichert'} onclick={() => { inboxStatusFilter = 'gespeichert'; loadInbox(); }}>
+          ✅ Gespeichert
+        </button>
+        <button class="filter-tab" class:active={inboxStatusFilter === 'verworfen'} onclick={() => { inboxStatusFilter = 'verworfen'; loadInbox(); }}>
+          🗑️ Verworfen
+        </button>
+        <button class="filter-tab" class:active={inboxStatusFilter === 'alle'} onclick={() => { inboxStatusFilter = 'alle'; loadInbox(); }}>
+          📋 Alle
+        </button>
+      </div>
+    </div>
+
+    {#if inboxLoading}
+      <div class="loading"><span class="spinner"></span> Lade Posteingang...</div>
+    {:else if inboxError}
+      <div class="card" style="padding:20px;color:var(--warning)">⚠️ {inboxError}</div>
+    {:else if inboxGefiltert.length === 0}
+      <div class="empty-state">
+        <h3>
+          {#if inboxStatusFilter === 'neu'}Keine neuen Emails
+          {:else if inboxStatusFilter === 'gespeichert'}Noch nichts gespeichert
+          {:else if inboxStatusFilter === 'verworfen'}Nichts verworfen
+          {:else}Keine Emails im Posteingang{/if}
+        </h3>
+        <p>
+          {#if inboxStatusFilter === 'neu'}
+            Sobald neue Rechnungen per Email eintreffen, erscheinen sie hier.
+            Unter <a href="/einstellungen/email" style="color:var(--primary)">Einstellungen → E-Mail → Empfang</a> kannst du die IMAP-Konfiguration prüfen.
+          {:else}
+            Wechsle auf „Neu" um ungeprüfte Emails zu sehen.
+          {/if}
+        </p>
+      </div>
+    {:else}
+      <div class="inbox-list">
+        {#each inboxGefiltert as item (item.id)}
+          <div class="inbox-card" class:inbox-card-error={item.ki_status === 'fehler'}>
+            <div class="inbox-card-head">
+              <div class="inbox-head-left">
+                <div class="inbox-subject">{item.subject || '(kein Betreff)'}</div>
+                <div class="inbox-meta">
+                  <span title="Absender">📧 {item.from_name || item.from_email || '—'}</span>
+                  <span title="Empfangen">🕐 {formatDatumZeit(item.received_at)}</span>
+                  <span title="Anhang">📎 {item.attachment_name || 'anhang.pdf'}</span>
+                </div>
+              </div>
+              <div class="inbox-head-right">
+                <span class="badge {inboxStatusBadge(item.status)}">{inboxStatusLabel(item.status)}</span>
+              </div>
+            </div>
+
+            {#if item.ki_status === 'fehler'}
+              <div class="inbox-error-box">
+                ⚠️ KI-Analyse fehlgeschlagen: {item.ki_error || 'unbekannter Fehler'}
+              </div>
+            {:else if item.ki_analyse}
+              <div class="inbox-preview">
+                <div class="preview-row">
+                  <span class="preview-label">Lieferant:</span>
+                  <span class="preview-val">{item.ki_analyse.lieferant || '—'}</span>
+                </div>
+                <div class="preview-row">
+                  <span class="preview-label">Rechnungs-Nr.:</span>
+                  <span class="preview-val">{item.ki_analyse.rechnungsnummer || '—'}</span>
+                </div>
+                <div class="preview-row">
+                  <span class="preview-label">Datum:</span>
+                  <span class="preview-val">{formatDatum(item.ki_analyse.rechnungsdatum)}</span>
+                </div>
+                <div class="preview-row">
+                  <span class="preview-label">Brutto:</span>
+                  <span class="preview-val preview-betrag">{formatBetrag(item.ki_analyse.brutto_betrag)} €</span>
+                </div>
+                <div class="preview-row">
+                  <span class="preview-label">Kategorie:</span>
+                  <span class="preview-val"><span class="badge badge-info" style="font-size:10px">{item.ki_analyse.kategorie_vorschlag || '—'}</span></span>
+                </div>
+              </div>
+            {/if}
+
+            <div class="inbox-actions">
+              {#if item.attachment_s3_key}
+                <button class="btn btn-sm btn-secondary" onclick={() => downloadInboxPdf(item)}>💾 PDF ansehen</button>
+              {/if}
+              {#if item.status === 'neu'}
+                {#if item.ki_analyse}
+                  <button class="btn btn-sm btn-primary" onclick={() => pruefeInboxItem(item)}>🔍 Prüfen & Speichern</button>
+                {/if}
+                <button class="btn btn-sm btn-danger" onclick={() => verwerfeInboxItem(item)} disabled={verwerfeLaeuft}>
+                  {verwerfeLaeuft ? '⏳' : '🗑️'} Verwerfen
+                </button>
+              {:else if item.processed_invoice_id}
+                <button class="btn btn-sm btn-secondary" onclick={() => { tab = 'rechnungen'; setTimeout(() => {
+                  const row = document.querySelector('[data-invoice-id="' + item.processed_invoice_id + '"]');
+                  row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 100); }}>📋 Zur Rechnung</button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
-<!-- Upload-Ergebnis Modal -->
+<!-- ═══════════════════════════════════════════════ -->
+<!-- Upload-Ergebnis Modal (geteilt zwischen Upload + Inbox-Prüfung) -->
+<!-- ═══════════════════════════════════════════════ -->
 {#if showUploadModal && analyseResult}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal-overlay" on:click|self={closeUploadModal}>
+  <div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) closeUploadModal(); }}>
     <div class="modal-box modal-large">
-      <div class="modal-title">📄 Erkannte Daten prüfen</div>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:16px">Die KI hat folgende Daten extrahiert. Bitte prüfen und ggf. korrigieren.</p>
+      <div class="modal-title">
+        {inboxItemId ? '📥 Email-Rechnung prüfen' : '📄 Erkannte Daten prüfen'}
+      </div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:16px">
+        {#if inboxItemId}
+          Die KI hat die Daten aus der Email extrahiert. Prüfe bitte sorgfältig und korrigiere bei Bedarf — nach dem Speichern wird die Mail in den Ordner „Rechnungen" verschoben.
+        {:else}
+          Die KI hat folgende Daten extrahiert. Bitte prüfen und ggf. korrigieren.
+        {/if}
+      </p>
 
-      <!-- Duplikat-Warnung -->
       {#if duplikatHinweis || erkanntes_duplikat}
         {@const dup = duplikatHinweis || erkanntes_duplikat}
         <div class="dup-warn">
@@ -695,16 +1008,18 @@
       {/if}
 
       <div class="modal-actions">
-        <button class="btn btn-secondary" on:click={closeUploadModal}>Abbrechen</button>
+        <button class="btn btn-secondary" onclick={closeUploadModal}>Abbrechen</button>
         <button
           class="btn btn-primary"
-          on:click={saveAnalyse}
+          onclick={saveAnalyse}
           disabled={uploading}
         >
           {#if uploading}
             ⏳ Speichere...
           {:else if (duplikatHinweis || erkanntes_duplikat)}
             ⚠️ Trotzdem speichern
+          {:else if inboxItemId}
+            ✅ Speichern + Mail verschieben
           {:else}
             ✅ Speichern
           {/if}
@@ -718,7 +1033,7 @@
 {#if showEditModal && editItem}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div class="modal-overlay" on:click|self={() => showEditModal = false}>
+  <div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) showEditModal = false; }}>
     <div class="modal-box modal-large">
       <div class="modal-title">✏️ Rechnung bearbeiten</div>
       <div class="form-grid">
@@ -749,8 +1064,8 @@
         <div class="form-group" style="grid-column:1/-1"><label class="label">Notiz</label><textarea class="input" rows="2" bind:value={editItem.notiz}></textarea></div>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" on:click={() => showEditModal = false}>Abbrechen</button>
-        <button class="btn btn-primary" on:click={saveEdit}>💾 Speichern</button>
+        <button class="btn btn-secondary" onclick={() => showEditModal = false}>Abbrechen</button>
+        <button class="btn btn-primary" onclick={saveEdit}>💾 Speichern</button>
       </div>
     </div>
   </div>
@@ -758,6 +1073,22 @@
 
 <style>
   .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+  /* Tabs */
+  .tab-bar { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:16px; }
+  .tab-btn {
+    background:transparent; border:none; border-bottom:2px solid transparent;
+    padding:10px 20px; font-size:0.88rem; color:var(--text2); cursor:pointer;
+    font-weight:500; transition:all 0.15s; display:inline-flex; align-items:center; gap:8px;
+  }
+  .tab-btn:hover { color:var(--text); }
+  .tab-btn.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+  .tab-badge {
+    background:#dc2626; color:#fff; font-size:0.7rem; padding:2px 7px;
+    border-radius:10px; font-weight:700; min-width:20px; text-align:center;
+  }
+  .tab-count { background:var(--surface); color:var(--primary); font-size:0.7rem; padding:1px 6px; border-radius:10px; margin-left:4px; }
+
   .drop-zone {
     background: var(--surface);
     border: 2px dashed var(--border2);
@@ -777,7 +1108,6 @@
   .drop-zone.drag-over { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
   .drop-zone.analysing { border-color: var(--primary); background: var(--primary-light); }
 
-  /* Modal-Größen — wie bei Rechnungen-Modal */
   .modal-box { width: 100%; max-height: 90vh; overflow-y: auto; }
   .modal-large { max-width: 960px; }
 
@@ -812,5 +1142,91 @@
     margin-bottom: 12px;
     font-size: 13px;
   }
-  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+  /* Posteingang */
+  .card-info {
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .card-titel { font-size: 0.9rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .card-sub-info { font-size: 0.82rem; color: var(--text2); line-height: 1.6; }
+
+  .inbox-list { display: flex; flex-direction: column; gap: 12px; }
+  .inbox-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: border-color 0.15s;
+  }
+  .inbox-card:hover { border-color: var(--primary); }
+  .inbox-card-error { border-color: #fca5a5; background: #fef2f2; }
+
+  .inbox-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .inbox-head-left { flex: 1; min-width: 0; }
+  .inbox-subject {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inbox-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 0.75rem;
+    color: var(--text2);
+  }
+  .inbox-head-right { flex-shrink: 0; }
+
+  .inbox-error-box {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.78rem;
+    color: #991b1b;
+  }
+
+  .inbox-preview {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+    font-size: 0.82rem;
+  }
+  .preview-row { display: flex; gap: 8px; align-items: center; }
+  .preview-label { color: var(--text2); font-weight: 500; min-width: 110px; }
+  .preview-val { color: var(--text); font-weight: 500; }
+  .preview-betrag { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .inbox-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .inbox-preview { grid-template-columns: 1fr; }
+  }
 </style>
