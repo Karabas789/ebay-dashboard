@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { apiCall, getToken } from '$lib/api.js';
+  import JSZip from 'jszip';
   import { currentUser } from '$lib/stores.js';
 
   let user;
@@ -34,6 +35,10 @@
 
   // Duplikat-Hinweis nach Backend-Response
   let duplikatHinweis = $state(null);
+
+  // Mehrfach-Auswahl
+  let ausgewaehlt = $state(new Set());
+  let zipDownloading = $state(false);
 
   const kategorien = ['alle','Wareneinkauf','Büromaterial','Versandkosten','Kfz/Tanken','Telekommunikation','Software/IT','Werbung','Reisekosten','Versicherung','Miete/Pacht','Sonstiges'];
   const statusOptionen = ['alle','entwurf','gebucht','bezahlt'];
@@ -216,26 +221,102 @@
     }
   }
 
-  async function downloadBeleg(s3_key, dateityp) {
-    if (!s3_key) return;
+  async function fetchDatei(s3_key) {
+    const token = getToken();
+    const res = await fetch('https://n8n.ai-online.cloud/webhook/s3-download', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ s3_key })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.arrayBuffer();
+  }
+
+  async function downloadBeleg(rechnung) {
+    if (!rechnung.datei_s3_key) return;
     try {
-      const token = getToken();
-      const res = await fetch('https://n8n.ai-online.cloud/webhook/s3-download', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ s3_key })
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const blob = await res.blob();
+      const arrayBuffer = await fetchDatei(rechnung.datei_s3_key);
+      const ext = (rechnung.datei_typ || 'bin').toLowerCase();
+      const mimeMap = {
+        pdf: 'application/pdf',
+        jpg: 'image/jpeg', jpeg: 'image/jpeg',
+        png: 'image/png', heic: 'image/heic',
+        webp: 'image/webp', gif: 'image/gif',
+        tiff: 'image/tiff', bmp: 'image/bmp'
+      };
+      const mime = mimeMap[ext] || 'application/octet-stream';
+      const blob = new Blob([arrayBuffer], { type: mime });
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      // Cleanup nach 1 Min
+
+      // Sprechender Dateiname: lieferant_RE-NR_DATUM.ext
+      const lieferant = (rechnung.lieferant || 'Beleg').replace(/[^a-zA-Z0-9äöüÄÖÜß\s\-]/g, '').trim().replace(/\s+/g, '_');
+      const rnr = (rechnung.rechnungsnummer || '').replace(/[^a-zA-Z0-9\-]/g, '');
+      const datum = (rechnung.rechnungsdatum || '').substring(0, 10);
+      const dateiname = [lieferant, rnr, datum].filter(Boolean).join('_') + '.' + ext;
+
+      // Erzwungener Download (nicht Browser-Vorschau)
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = dateiname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (e) {
       error = 'Download fehlgeschlagen: ' + e.message;
+    }
+  }
+
+  function toggleSelect(id) {
+    const neu = new Set(ausgewaehlt);
+    if (neu.has(id)) neu.delete(id); else neu.add(id);
+    ausgewaehlt = neu;
+  }
+
+  function toggleSelectAll() {
+    const sichtbarMitDatei = gefiltert.filter(r => r.datei_s3_key).map(r => r.id);
+    if (sichtbarMitDatei.every(id => ausgewaehlt.has(id))) {
+      ausgewaehlt = new Set();
+    } else {
+      ausgewaehlt = new Set(sichtbarMitDatei);
+    }
+  }
+
+  async function downloadAusgewaehlteAlsZip() {
+    const ids = [...ausgewaehlt];
+    if (ids.length === 0) return;
+    zipDownloading = true;
+    error = '';
+    try {
+      const zip = new JSZip();
+      for (const id of ids) {
+        const r = rechnungen.find(x => x.id === id);
+        if (!r || !r.datei_s3_key) continue;
+        const arrayBuffer = await fetchDatei(r.datei_s3_key);
+        const ext = (r.datei_typ || 'bin').toLowerCase();
+        const lieferant = (r.lieferant || 'Beleg').replace(/[^a-zA-Z0-9äöüÄÖÜß\s\-]/g, '').trim().replace(/\s+/g, '_');
+        const rnr = (r.rechnungsnummer || '').replace(/[^a-zA-Z0-9\-]/g, '');
+        const datum = (r.rechnungsdatum || '').substring(0, 10);
+        const dateiname = [lieferant, rnr, datum].filter(Boolean).join('_') + '.' + ext;
+        zip.file(dateiname, arrayBuffer);
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'belege_' + new Date().toISOString().substring(0, 10) + '.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      ausgewaehlt = new Set();
+    } catch (e) {
+      error = 'ZIP-Download fehlgeschlagen: ' + e.message;
+    } finally {
+      zipDownloading = false;
     }
   }
 
@@ -414,6 +495,17 @@
     </div>
   {/if}
 
+  <!-- Sammel-Aktionen -->
+  {#if ausgewaehlt.size > 0}
+    <div class="bulk-bar">
+      <span><strong>{ausgewaehlt.size}</strong> ausgewählt</span>
+      <button class="btn btn-primary btn-sm" disabled={zipDownloading} on:click={downloadAusgewaehlteAlsZip}>
+        {#if zipDownloading}⏳ Erstelle ZIP...{:else}📥 ZIP herunterladen{/if}
+      </button>
+      <button class="btn btn-secondary btn-sm" on:click={() => ausgewaehlt = new Set()}>Auswahl aufheben</button>
+    </div>
+  {/if} 
+
   <!-- Tabelle -->
   {#if loading}
     <div class="loading"><span class="spinner"></span> Lade Eingangsrechnungen...</div>
@@ -430,6 +522,11 @@
         <table class="table">
           <thead>
             <tr>
+              <th style="width:32px">
+                <input type="checkbox"
+                  checked={gefiltert.filter(r => r.datei_s3_key).length > 0 && gefiltert.filter(r => r.datei_s3_key).every(r => ausgewaehlt.has(r.id))}
+                  on:change={toggleSelectAll} />
+              </th>
               <th>Datum</th>
               <th>Lieferant</th>
               <th>Re.-Nr.</th>
@@ -445,6 +542,11 @@
           <tbody>
             {#each gefiltert as r (r.id)}
               <tr>
+                <td>
+                  {#if r.datei_s3_key}
+                    <input type="checkbox" checked={ausgewaehlt.has(r.id)} on:change={() => toggleSelect(r.id)} />
+                  {/if}
+                </td>
                 <td>{formatDatum(r.rechnungsdatum)}</td>
                 <td style="font-weight:600">{r.lieferant}</td>
                 <td style="color:var(--text2)">{r.rechnungsnummer || '—'}</td>
@@ -453,11 +555,11 @@
                 <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--text2)">{formatBetrag(r.mwst_betrag)} €</td>
                 <td style="text-align:right;font-weight:600;font-variant-numeric:tabular-nums">{formatBetrag(r.brutto_betrag)} €</td>
                 <td><span class="badge {statusBadge(r.status)}">{r.status}</span></td>
-                <td style="color:var(--text3);font-size:11px">{r.quelle === 'email' ? '📧' : '📎'} {r.quelle}</td>
+                <td style="color:var(--text3);font-size:11px">{r.quelle === 'email' ? '📧' : '⬆️'} {r.quelle}</td>
                 <td>
                   <div style="display:flex;gap:4px">
                     {#if r.datei_s3_key}
-                      <button class="btn-icon" title="Beleg anzeigen" on:click={() => downloadBeleg(r.datei_s3_key, r.datei_typ)}>📎</button>
+                      <button class="btn-icon" title="Beleg herunterladen" on:click={() => downloadBeleg(r)}>📥</button>
                     {/if}
                     <button class="btn-icon" title="Bearbeiten" on:click={() => openEdit(r)}>✏️</button>
                     {#if r.status === 'entwurf'}
@@ -698,6 +800,17 @@
     color: #991b1b;
     font-size: 13px;
     margin-top: 12px;
+  }
+  .bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 13px;
   }
   @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
 </style>
