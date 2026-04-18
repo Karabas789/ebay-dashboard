@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { apiCall } from '$lib/api.js';
+  import { apiCall, getToken } from '$lib/api.js';
   import { currentUser } from '$lib/stores.js';
 
   let user;
@@ -219,7 +219,7 @@
   async function downloadBeleg(s3_key, dateityp) {
     if (!s3_key) return;
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const res = await fetch('https://n8n.ai-online.cloud/webhook/s3-download', {
         method: 'POST',
         headers: {
