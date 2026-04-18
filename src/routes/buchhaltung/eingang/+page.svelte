@@ -416,7 +416,7 @@
   <div class="page-header">
     <div>
       <button class="btn btn-secondary" on:click={() => goto('/buchhaltung')} style="margin-bottom:8px">← Buchhaltung</button>
-      <div class="page-title">⤴️ 🗂️ 🗃️ Eingangsrechnungen</div>
+      <div class="page-title">🗂️ Eingangsrechnungen</div>
       <div class="page-subtitle">Rechnungen & Quittungen hochladen, analysieren und verwalten</div>
     </div>
     <div class="header-actions">
@@ -559,7 +559,7 @@
                 <td>
                   <div style="display:flex;gap:4px">
                     {#if r.datei_s3_key}
-                      <button class="btn-icon" title="Beleg herunterladen" on:click={() => downloadBeleg(r)}>⬇️</button>
+                      <button class="btn-icon" title="Beleg herunterladen" on:click={() => downloadBeleg(r)}>💾</button>
                     {/if}
                     <button class="btn-icon" title="Bearbeiten" on:click={() => openEdit(r)}>✏️</button>
                     {#if r.status === 'entwurf'}
