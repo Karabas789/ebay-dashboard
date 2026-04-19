@@ -657,7 +657,11 @@
         <button class="btn btn-secondary btn-sm" onclick={schliesseVorschau}>✕ Schließen</button>
       </div>
       <div class="vorschau-inhalt">
-        <img src={vorschauUrl} alt="Vorschau" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px" />
+        {#if vorschauTyp === 'pdf'}
+          <iframe src={vorschauUrl} style="width:100%;height:100%;border:none;border-radius:8px" title="PDF"></iframe>
+        {:else}
+          <img src={vorschauUrl} alt="Vorschau" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px" />
+        {/if}
       </div>
     </div>
   </div>
