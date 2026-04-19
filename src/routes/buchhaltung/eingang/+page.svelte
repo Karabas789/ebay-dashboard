@@ -793,7 +793,9 @@
       </div>
       <div class="vorschau-inhalt">
         {#if vorschauTyp === 'pdf'}
-          <iframe src={vorschauUrl} title="PDF Vorschau" style="width:100%;height:100%;border:none;border-radius:8px"></iframe>
+          <object data={vorschauUrl} type="application/pdf" style="width:100%;height:100%;border:none;border-radius:8px">
+          <p style="padding:20px;color:var(--text2)">PDF kann nicht angezeigt werden. <a href={vorschauUrl} target="_blank">Hier öffnen</a></p>
+            </object>
         {:else}
           <img src={vorschauUrl} alt="Vorschau" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px" />
         {/if}
