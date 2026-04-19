@@ -26,6 +26,8 @@
   let variantenProduct = $state(null);
   let variantenInputs = $state({});
   let savingVarianten = $state(false);
+  let variantenOriginal = $state({}); // snapshot beim Öffnen
+  let savingVarianteId = $state(null); // ID der gerade einzeln gespeicherten Variante
 
   // Import Modals
   let showImportModal = $state(false);
@@ -204,15 +206,40 @@
     const p = allProdukte.find(x => x.id === productId);
     if (!p) return;
     variantenProduct = p;
-    variantenInputs = {};
+    const inputs = {};
+    const original = {};
     (p.varianten || []).forEach(v => {
-      variantenInputs[v.id] = {
+      const entry = {
         lager: v.lagerbestand ?? 0,
         ebayMenge: v.min_lagerbestand ?? 3,
         preis: v.preis ? parseFloat(v.preis).toFixed(2) : '0.00'
       };
+      inputs[v.id] = { ...entry };
+      original[v.id] = { ...entry };
     });
+    variantenInputs = inputs;
+    variantenOriginal = original;
     showVariantenModal = true;
+  }
+
+  function hasVariantenChanges() {
+    for (const [id, curr] of Object.entries(variantenInputs)) {
+      const orig = variantenOriginal[id];
+      if (!orig) continue;
+      if (
+        String(curr.lager) !== String(orig.lager) ||
+        String(curr.ebayMenge) !== String(orig.ebayMenge) ||
+        String(curr.preis) !== String(orig.preis)
+      ) return true;
+    }
+    return false;
+  }
+
+  function closeVariantenModal() {
+    if (hasVariantenChanges()) {
+      if (!confirm('Es gibt ungespeicherte Änderungen. Trotzdem schließen?')) return;
+    }
+    showVariantenModal = false;
   }
 
   async function saveAlleVarianten() {
@@ -254,6 +281,40 @@
     } else {
       showToast(`⚠️ ${ok} gespeichert, ${err} Fehler.`, 'error');
       openVariantenModal(variantenProduct.id);
+    }
+  }
+
+  async function saveEinzelneVariante(varianteId) {
+    if (!variantenProduct) return;
+    const v = variantenProduct.varianten?.find(x => x.id === varianteId);
+    if (!v) return;
+    const inputs = variantenInputs[varianteId] || {};
+    savingVarianteId = varianteId;
+    try {
+      const data = await apiCall('/variante-bestand-update', {
+        id: varianteId,
+        lagerbestand: parseInt(inputs.lager) || 0,
+        preis: parseFloat(inputs.preis) || 0,
+        ebay_menge: parseInt(inputs.ebayMenge) || 0
+      });
+      if (data.success && data.variante?.id) {
+        v.lagerbestand = parseInt(inputs.lager) || 0;
+        v.preis = parseFloat(inputs.preis) || 0;
+        v.min_lagerbestand = parseInt(inputs.ebayMenge) || 0;
+        variantenOriginal[varianteId] = {
+          lager: parseInt(inputs.lager) || 0,
+          ebayMenge: parseInt(inputs.ebayMenge) || 0,
+          preis: parseFloat(inputs.preis).toFixed(2)
+        };
+        variantenInputs[varianteId].preis = parseFloat(inputs.preis).toFixed(2);
+        showToast('✅ Variante gespeichert', 'success');
+      } else {
+        showToast('⚠️ Fehler beim Speichern', 'error');
+      }
+    } catch (e) {
+      showToast('Verbindungsfehler', 'error');
+    } finally {
+      savingVarianteId = null;
     }
   }
 
@@ -785,7 +846,7 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- PRODUCT MODAL -->
 {#if showProductModal}
-<div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) showProductModal = false; }}>
+<div class="modal-overlay">
   <div class="modal">
     <div class="modal-title">{editProduct ? 'Produkt bearbeiten' : 'Neues Produkt'}</div>
     <div class="modal-grid">
@@ -860,7 +921,7 @@
           <div class="varianten-hint">💡 eBay-Menge = wie viel auf eBay angezeigt wird (nicht echter Lagerbestand)</div>
         </div>
       </div>
-      <button class="btn-close-subtle" onclick={() => showVariantenModal = false}>✕ Schließen</button>
+      <button class="btn-close-subtle" onclick={closeVariantenModal}>✕ Schließen</button>
     </div>
 
     <div class="varianten-list">
@@ -900,13 +961,25 @@
                 <input type="number" bind:value={variantenInputs[v.id].preis} min="0" step="0.01" />
               </div>
             </div>
+            {@const isChanged = variantenOriginal[v.id] && (
+              String(variantenInputs[v.id].lager) !== String(variantenOriginal[v.id].lager) ||
+              String(variantenInputs[v.id].ebayMenge) !== String(variantenOriginal[v.id].ebayMenge) ||
+              String(variantenInputs[v.id].preis) !== String(variantenOriginal[v.id].preis)
+            )}
+            <div class="variante-save-row">
+              {#if isChanged}
+                <button class="btn-variante-einzeln" onclick={() => saveEinzelneVariante(v.id)} disabled={savingVarianteId === v.id}>
+                  {savingVarianteId === v.id ? '⏳' : '💾'} Speichern
+                </button>
+              {/if}
+            </div>
           </div>
         </div>
       {/each}
     </div>
 
     <div class="varianten-modal-footer">
-      <button class="btn btn-cancel" onclick={() => showVariantenModal = false}>Schließen</button>
+      <button class="btn btn-cancel" onclick={closeVariantenModal}>Schließen</button>
       <button class="btn btn-varianten-save" onclick={saveAlleVarianten} disabled={savingVarianten}>
         {savingVarianten ? '⏳ Speichere...' : '💾 Alle speichern'}
       </button>
