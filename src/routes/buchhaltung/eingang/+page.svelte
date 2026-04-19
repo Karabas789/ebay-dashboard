@@ -203,12 +203,13 @@
     const arrayBuffer = await fetchDatei(rechnung.datei_s3_key);
     const ext = (rechnung.datei_typ || 'pdf').toLowerCase();
     const mime = getMime(ext);
-    const dataUrl = toDataUrl(arrayBuffer, mime);
+    const blob = new Blob([arrayBuffer], { type: mime });
+    const blobUrl = URL.createObjectURL(blob);
     if (ext === 'pdf') {
-      newTab.location.href = dataUrl;
+      newTab.location.href = blobUrl;
     } else {
       newTab.close();
-      vorschauUrl = dataUrl; vorschauTyp = ext; vorschauName = rechnung.lieferant || 'Beleg';
+      vorschauUrl = blobUrl; vorschauTyp = ext; vorschauName = rechnung.lieferant || 'Beleg';
       showVorschauModal = true;
     }
   } catch (e) { if (newTab) newTab.close(); error = 'Vorschau fehlgeschlagen: ' + e.message; }
@@ -223,14 +224,15 @@
       const arrayBuffer = await fetchDatei(item.attachment_s3_key);
       const ext = (item.attachment_typ || 'pdf').toLowerCase();
       const mime = getMime(ext);
-      const dataUrl = toDataUrl(arrayBuffer, mime);
-      if (ext === 'pdf') {
-        newTab.location.href = dataUrl;
-      } else {
-        newTab.close();
-        vorschauUrl = dataUrl; vorschauTyp = ext; vorschauName = item.attachment_name || 'Anhang';
-        showVorschauModal = true;
-      }
+      const blob = new Blob([arrayBuffer], { type: mime });
+    const blobUrl = URL.createObjectURL(blob);
+    if (ext === 'pdf') {
+      newTab.location.href = blobUrl;
+    } else {
+      newTab.close();
+      vorschauUrl = blobUrl; vorschauTyp = ext; vorschauName = rechnung.lieferant || 'Beleg';
+      showVorschauModal = true;
+    }
     } catch (e) { if (newTab) newTab.close(); inboxError = 'Vorschau fehlgeschlagen: ' + e.message; }
     finally { vorschauLaeuft = false; }
   }
