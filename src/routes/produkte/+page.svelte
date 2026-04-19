@@ -908,7 +908,7 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <!-- VARIANTEN MODAL -->
 {#if showVariantenModal && variantenProduct}
-<div class="modal-overlay" onclick={(e) => { if (e.target === e.currentTarget) showVariantenModal = false; }}>
+<div class="modal-overlay">
   <div class="modal modal-wide">
     <div class="varianten-modal-header">
       <div class="varianten-modal-info">
@@ -2055,4 +2055,23 @@
   .btn-abgleich:hover {
     background: rgba(8,145,178,0.08) !important;
   }
+  .variante-save-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+    min-height: 28px;
+  }
+  .btn-variante-einzeln {
+    background: #22c55e;
+    border: none;
+    border-radius: 7px;
+    padding: 6px 14px;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-variante-einzeln:hover { background: #16a34a; }
+  .btn-variante-einzeln:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
