@@ -961,13 +961,12 @@
                 <input type="number" bind:value={variantenInputs[v.id].preis} min="0" step="0.01" />
               </div>
             </div>
-            {@const isChanged = variantenOriginal[v.id] && (
-              String(variantenInputs[v.id].lager) !== String(variantenOriginal[v.id].lager) ||
-              String(variantenInputs[v.id].ebayMenge) !== String(variantenOriginal[v.id].ebayMenge) ||
-              String(variantenInputs[v.id].preis) !== String(variantenOriginal[v.id].preis)
-            )}
             <div class="variante-save-row">
-              {#if isChanged}
+              {#if variantenOriginal[v.id] && (
+                String(variantenInputs[v.id].lager) !== String(variantenOriginal[v.id].lager) ||
+                String(variantenInputs[v.id].ebayMenge) !== String(variantenOriginal[v.id].ebayMenge) ||
+                String(variantenInputs[v.id].preis) !== String(variantenOriginal[v.id].preis)
+              )}
                 <button class="btn-variante-einzeln" onclick={() => saveEinzelneVariante(v.id)} disabled={savingVarianteId === v.id}>
                   {savingVarianteId === v.id ? '⏳' : '💾'} Speichern
                 </button>
