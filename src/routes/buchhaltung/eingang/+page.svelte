@@ -525,11 +525,14 @@
     if (!item.attachment_s3_key) return;
     try {
       const arrayBuffer = await fetchDatei(item.attachment_s3_key);
-      const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+      const ext = (item.attachment_typ || 'pdf').toLowerCase();
+      const mimeMap = { pdf:'application/pdf', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', heic:'image/heic', webp:'image/webp' };
+      const mime = mimeMap[ext] || 'application/octet-stream';
+      const blob = new Blob([arrayBuffer], { type: mime });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = item.attachment_name || 'anhang.pdf';
+      a.download = item.attachment_name || ('anhang.' + ext);
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
