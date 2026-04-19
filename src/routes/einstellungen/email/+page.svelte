@@ -7,10 +7,10 @@
   // ═══════════════════════════════════════════════════════
   // Tab-Switch
   // ═══════════════════════════════════════════════════════
-  let tab = $state('versand'); // 'versand' | 'empfang'
+  let tab = $state('versand'); // 'versand' | 'empfang' | 'kauf'
 
   // ═══════════════════════════════════════════════════════
-  // VERSAND (bisherige Seite)
+  // VERSAND (SMTP)
   // ═══════════════════════════════════════════════════════
   let speichertLaeuft = $state(false);
   let testLaeuft = $state(false);
@@ -124,14 +124,14 @@
   ];
 
   // ═══════════════════════════════════════════════════════
-  // EMPFANG (IMAP — neu)
+  // EMPFANG (IMAP)
   // ═══════════════════════════════════════════════════════
   let imapLaeuft = $state(false);
   let imapSpeichertLaeuft = $state(false);
   let imapTestLaeuft = $state(false);
   let imapLoeschenLaeuft = $state(false);
   let imapPasswortZeigen = $state(false);
-  let imapTestStatus = $state(null);  // null | 'success' | 'error'
+  let imapTestStatus = $state(null);
   let imapTestNachricht = $state('');
   let imapTestFolders = $state([]);
 
@@ -204,7 +204,7 @@
       await apiCall('imap-config', { user_id: $currentUser.id, action: 'save', ...imap });
       showToast('✅ IMAP-Einstellungen gespeichert');
       imapConfigExistiert = true;
-      imap.pass = ''; // Passwort nie im Frontend halten
+      imap.pass = '';
     } catch(e) {
       showToast('Fehler: ' + e.message);
     } finally {
@@ -281,12 +281,106 @@
   }
 
   // ═══════════════════════════════════════════════════════
+  // KAUF-NACHRICHT (eBay-Nachricht nach Kauf)
+  // ═══════════════════════════════════════════════════════
+  let kaufLaeuft = $state(false);
+  let kaufSpeichertLaeuft = $state(false);
+  let kaufVorlageRef = $state(null);
+
+  let kauf = $state({
+    kauf_nachricht_aktiv: false,
+    kauf_nachricht_betreff: 'Danke für deinen Kauf!',
+    kauf_nachricht_vorlage: 'Hallo {{buyer}},\n\nvielen Dank für deinen Kauf von "{{artikel}}" (Bestellung {{order_id}}).\n\nWir versenden die Ware schnellstmöglich.\n\nViele Grüße'
+  });
+
+  const kaufPlatzhalter = [
+    { key: '{{buyer}}',    beschreibung: 'eBay-Username des Käufers' },
+    { key: '{{artikel}}',  beschreibung: 'Artikelname' },
+    { key: '{{menge}}',    beschreibung: 'Verkaufte Menge' },
+    { key: '{{preis}}',    beschreibung: 'Stückpreis mit €-Zeichen' },
+    { key: '{{order_id}}', beschreibung: 'eBay-Bestell-ID' }
+  ];
+
+  function kaufPlatzhalterEinfuegen(key) {
+    const ta = kaufVorlageRef;
+    if (!ta) {
+      kauf.kauf_nachricht_vorlage = (kauf.kauf_nachricht_vorlage || '') + key;
+      return;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const val = kauf.kauf_nachricht_vorlage || '';
+    kauf.kauf_nachricht_vorlage = val.slice(0, start) + key + val.slice(end);
+    setTimeout(() => {
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + key.length;
+    }, 0);
+  }
+
+  function kaufVorschauText() {
+    let t = kauf.kauf_nachricht_vorlage || '';
+    return t
+      .replace(/{{buyer}}/gi, 'max_mustermann')
+      .replace(/{{artikel}}/gi, 'Windows 11 Pro Produktschlüssel')
+      .replace(/{{menge}}/gi, '1')
+      .replace(/{{preis}}/gi, '19,99 €')
+      .replace(/{{order_id}}/gi, '12-34567-89012');
+  }
+
+  function kaufVorschauBetreff() {
+    return (kauf.kauf_nachricht_betreff || '')
+      .replace(/{{buyer}}/gi, 'max_mustermann')
+      .replace(/{{artikel}}/gi, 'Windows 11 Pro Produktschlüssel')
+      .replace(/{{order_id}}/gi, '12-34567-89012');
+  }
+
+  async function ladeKaufConfig() {
+    if (!$currentUser) return;
+    kaufLaeuft = true;
+    try {
+      const data = await apiCall('kauf-nachricht-config', { action: 'load', user_id: $currentUser.id });
+      if (data?.config) {
+        kauf = {
+          kauf_nachricht_aktiv:   data.config.kauf_nachricht_aktiv   ?? false,
+          kauf_nachricht_betreff: data.config.kauf_nachricht_betreff || kauf.kauf_nachricht_betreff,
+          kauf_nachricht_vorlage: data.config.kauf_nachricht_vorlage || kauf.kauf_nachricht_vorlage
+        };
+      }
+    } catch(e) {
+      console.warn('Kauf-Nachricht-Config nicht geladen:', e?.message || e);
+    } finally {
+      kaufLaeuft = false;
+    }
+  }
+
+  async function kaufSpeichern() {
+    if (!kauf.kauf_nachricht_betreff?.trim()) { showToast('Bitte Betreff eingeben.'); return; }
+    if (!kauf.kauf_nachricht_vorlage?.trim()) { showToast('Bitte Nachrichten-Text eingeben.'); return; }
+    kaufSpeichertLaeuft = true;
+    try {
+      await apiCall('kauf-nachricht-config', {
+        action: 'save',
+        user_id: $currentUser.id,
+        kauf_nachricht_aktiv:   kauf.kauf_nachricht_aktiv,
+        kauf_nachricht_betreff: kauf.kauf_nachricht_betreff,
+        kauf_nachricht_vorlage: kauf.kauf_nachricht_vorlage
+      });
+      showToast('✅ Kauf-Nachricht gespeichert');
+    } catch(e) {
+      showToast('Fehler: ' + e.message);
+    } finally {
+      kaufSpeichertLaeuft = false;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
   // Init
   // ═══════════════════════════════════════════════════════
   onMount(async () => {
     testEmail = $currentUser?.email || '';
     await ladeVersandConfig();
     await ladeImapConfig();
+    await ladeKaufConfig();
   });
 </script>
 
@@ -296,16 +390,20 @@
       <button class="btn-back" onclick={() => goto('/einstellungen')}>← Zurück</button>
       <div>
         <div class="page-title">📧 E-Mail</div>
-        <div class="page-sub">Rechnungen versenden (SMTP) und empfangen (IMAP)</div>
+        <div class="page-sub">Rechnungen versenden (SMTP), empfangen (IMAP) und eBay-Nachrichten nach Kauf</div>
       </div>
     </div>
     {#if tab === 'versand'}
       <button class="btn-primary" onclick={speichern} disabled={speichertLaeuft}>
         {speichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
       </button>
-    {:else}
+    {:else if tab === 'empfang'}
       <button class="btn-primary" onclick={imapSpeichern} disabled={imapSpeichertLaeuft}>
         {imapSpeichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
+      </button>
+    {:else}
+      <button class="btn-primary" onclick={kaufSpeichern} disabled={kaufSpeichertLaeuft}>
+        {kaufSpeichertLaeuft ? '⏳ Speichert…' : '💾 Speichern'}
       </button>
     {/if}
   </div>
@@ -318,6 +416,12 @@
     <button class="tab-btn" class:active={tab === 'empfang'} onclick={() => tab = 'empfang'}>
       📥 Empfang (IMAP)
       {#if imap.aktiv}
+        <span class="tab-badge">aktiv</span>
+      {/if}
+    </button>
+    <button class="tab-btn" class:active={tab === 'kauf'} onclick={() => tab = 'kauf'}>
+      💬 Kauf-Nachricht (eBay)
+      {#if kauf.kauf_nachricht_aktiv}
         <span class="tab-badge">aktiv</span>
       {/if}
     </button>
@@ -641,6 +745,100 @@
       </div>
     {/if}
   {/if}
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- TAB: KAUF-NACHRICHT (eBay)                       -->
+  <!-- ═══════════════════════════════════════════════ -->
+  {#if tab === 'kauf'}
+    {#if kaufLaeuft}
+      <div class="config-laedt">⏳ Einstellungen werden geladen…</div>
+    {/if}
+
+    <div class="card card-info">
+      <div class="card-titel">💬 Wie funktioniert die Kauf-Nachricht?</div>
+      <ul class="info-liste" style="margin:0;padding-left:18px">
+        <li>Sobald ein Käufer einen Artikel kauft, sendet das System automatisch eine Nachricht <strong>über das eBay-Postfach</strong> an den Käufer</li>
+        <li>Die Nachricht wird direkt aus eBay heraus zugestellt — <strong>nicht per E-Mail</strong></li>
+        <li>Platzhalter wie <code>{'{{buyer}}'}</code> oder <code>{'{{artikel}}'}</code> werden automatisch durch echte Werte ersetzt</li>
+        <li>Der Versand erfolgt im selben Workflow wie die Lagerreduzierung — keine zusätzliche Einrichtung nötig</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-titel">🤖 Automatischer Versand</div>
+      <div class="auto-row">
+        <div>
+          <div class="auto-titel">Nach jedem Kauf automatisch Nachricht senden</div>
+          <div class="auto-sub">
+            Wenn aktiviert, wird nach jedem Verkauf die unten konfigurierte Nachricht an den Käufer gesendet.
+            Der Versand passiert sofort nach der Lagerreduzierung.
+          </div>
+        </div>
+        <button class="toggle-btn {kauf.kauf_nachricht_aktiv ? 'toggle-an' : 'toggle-aus'}"
+          onclick={() => kauf.kauf_nachricht_aktiv = !kauf.kauf_nachricht_aktiv}>
+          <span class="toggle-thumb"></span>
+        </button>
+      </div>
+      {#if kauf.kauf_nachricht_aktiv}
+        <div class="auto-aktiv-hinweis">✅ Auto-Versand aktiv — jede neue Bestellung bekommt eine Nachricht</div>
+      {:else}
+        <div class="auto-inaktiv-hinweis">⏸ Auto-Versand inaktiv — Käufer erhalten keine automatische Nachricht</div>
+      {/if}
+    </div>
+
+    <div class="card">
+      <div class="card-titel">📝 Nachrichten-Vorlage</div>
+      <div class="card-sub">Vorlage für Betreff und Text. Klick auf einen Platzhalter um ihn an der Cursor-Position einzufügen.</div>
+      <div class="variablen-hinweis">
+        <span class="var-titel">Platzhalter:</span>
+        {#each kaufPlatzhalter as v}
+          <button class="var-chip" onclick={() => kaufPlatzhalterEinfuegen(v.key)} title={v.beschreibung}>
+            {v.key}
+          </button>
+        {/each}
+      </div>
+      <div class="form-grid">
+        <div class="form-group form-span2">
+          <label>Betreff *</label>
+          <input bind:value={kauf.kauf_nachricht_betreff} placeholder="Danke für deinen Kauf!" />
+          <span class="hinweis-klein">Wird als eBay-Nachrichten-Betreff verwendet</span>
+        </div>
+        <div class="form-group form-span2">
+          <label>Nachrichten-Text *</label>
+          <textarea bind:this={kaufVorlageRef} bind:value={kauf.kauf_nachricht_vorlage} rows="10"
+            placeholder="Hallo {{buyer}}, ..."></textarea>
+          <span class="hinweis-klein">Zeilenumbrüche werden übernommen. Keine HTML-Kenntnisse nötig.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-titel">👁 Vorschau</div>
+      <div class="card-sub">So sieht der Käufer deine Nachricht (mit Beispieldaten).</div>
+      <div class="vorschau-box">
+        <div class="vorschau-meta">
+          <span class="vorschau-label">An:</span>
+          <span class="vorschau-val">max_mustermann (eBay-Postfach)</span>
+        </div>
+        <div class="vorschau-meta">
+          <span class="vorschau-label">Betreff:</span>
+          <span class="vorschau-val"><strong>{kaufVorschauBetreff()}</strong></span>
+        </div>
+        <div class="vorschau-trenner"></div>
+        <div class="vorschau-body">{kaufVorschauText()}</div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <div class="info-titel">💡 Hinweise</div>
+      <ul class="info-liste">
+        <li>Die Nachricht wird über die <strong>eBay Trading API</strong> gesendet (<code>AddMemberMessageAAQToPartner</code>) — erscheint beim Käufer im eBay-Postfach</li>
+        <li>Jeder gesendete Versand wird in der Tabelle <code>kauf_nachrichten</code> protokolliert</li>
+        <li>Die Vorlage gilt für <strong>alle</strong> Artikel — keine artikelspezifischen Vorlagen</li>
+        <li>Beispielwerte in der Vorschau: <code>{'{{buyer}}'}</code> = max_mustermann, <code>{'{{preis}}'}</code> = 19,99 €</li>
+      </ul>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -729,11 +927,25 @@
   .status-val { font-size:0.85rem; color:var(--text); font-weight:500; }
   .status-error { font-size:0.78rem; color:#991b1b; background:#fef2f2; padding:8px 12px; border-radius:6px; border:1px solid #fecaca; margin-top:4px; line-height:1.5; }
 
+  .vorschau-box {
+    background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; display:flex; flex-direction:column; gap:6px;
+  }
+  .vorschau-meta { display:flex; gap:10px; font-size:0.82rem; }
+  .vorschau-label { color:var(--text2); font-weight:600; min-width:60px; }
+  .vorschau-val { color:var(--text); }
+  .vorschau-trenner { height:1px; background:var(--border); margin:8px 0; }
+  .vorschau-body {
+    white-space:pre-wrap; font-size:0.85rem; color:var(--text); line-height:1.6;
+    font-family:inherit;
+  }
+
   .info-box { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:16px 20px; }
   .info-titel { font-size:0.82rem; font-weight:700; color:var(--text); margin-bottom:10px; }
   .info-liste { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px; }
   .info-liste li { font-size:0.8rem; color:var(--text2); line-height:1.5; }
   .info-liste a { color:var(--primary); }
+  .info-liste code { background:var(--surface); padding:1px 5px; border-radius:4px; font-size:0.78rem; color:var(--primary); border:1px solid var(--border); }
 
   .btn-primary { background:var(--primary); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-size:0.84rem; cursor:pointer; }
   .btn-primary:hover:not(:disabled) { filter:brightness(1.08); }
