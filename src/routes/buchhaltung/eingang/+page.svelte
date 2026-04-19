@@ -196,40 +196,44 @@
 
   // Vorschau: PDFs → neuer Tab, Bilder → Modal
   async function vorschauBeleg(rechnung) {
-    if (!rechnung.datei_s3_key) return;
-    vorschauLaeuft = true;
-    try {
-      const arrayBuffer = await fetchDatei(rechnung.datei_s3_key);
-      const ext = (rechnung.datei_typ || 'pdf').toLowerCase();
-      const mime = getMime(ext);
-      const dataUrl = toDataUrl(arrayBuffer, mime);
-      if (ext === 'pdf') {
-        window.open(dataUrl, '_blank');
-      } else {
-        vorschauUrl = dataUrl; vorschauTyp = ext; vorschauName = rechnung.lieferant || 'Beleg';
-        showVorschauModal = true;
-      }
-    } catch (e) { error = 'Vorschau fehlgeschlagen: ' + e.message; }
-    finally { vorschauLaeuft = false; }
-  }
+  if (!rechnung.datei_s3_key) return;
+  const newTab = window.open('', '_blank');
+  vorschauLaeuft = true;
+  try {
+    const arrayBuffer = await fetchDatei(rechnung.datei_s3_key);
+    const ext = (rechnung.datei_typ || 'pdf').toLowerCase();
+    const mime = getMime(ext);
+    const dataUrl = toDataUrl(arrayBuffer, mime);
+    if (ext === 'pdf') {
+      newTab.location.href = dataUrl;
+    } else {
+      newTab.close();
+      vorschauUrl = dataUrl; vorschauTyp = ext; vorschauName = rechnung.lieferant || 'Beleg';
+      showVorschauModal = true;
+    }
+  } catch (e) { if (newTab) newTab.close(); error = 'Vorschau fehlgeschlagen: ' + e.message; }
+  finally { vorschauLaeuft = false; }
+}
 
-  async function vorschauInbox(item) {
-    if (!item.attachment_s3_key) return;
-    vorschauLaeuft = true;
-    try {
-      const arrayBuffer = await fetchDatei(item.attachment_s3_key);
-      const ext = (item.attachment_typ || 'pdf').toLowerCase();
-      const mime = getMime(ext);
-      const dataUrl = toDataUrl(arrayBuffer, mime);
-      if (ext === 'pdf') {
-        window.open(dataUrl, '_blank');
-      } else {
-        vorschauUrl = dataUrl; vorschauTyp = ext; vorschauName = item.attachment_name || 'Anhang';
-        showVorschauModal = true;
-      }
-    } catch (e) { inboxError = 'Vorschau fehlgeschlagen: ' + e.message; }
-    finally { vorschauLaeuft = false; }
-  }
+  async function vorschauBeleg(rechnung) {
+  if (!rechnung.datei_s3_key) return;
+  const newTab = window.open('', '_blank');
+  vorschauLaeuft = true;
+  try {
+    const arrayBuffer = await fetchDatei(rechnung.datei_s3_key);
+    const ext = (rechnung.datei_typ || 'pdf').toLowerCase();
+    const mime = getMime(ext);
+    const dataUrl = toDataUrl(arrayBuffer, mime);
+    if (ext === 'pdf') {
+      newTab.location.href = dataUrl;
+    } else {
+      newTab.close();
+      vorschauUrl = dataUrl; vorschauTyp = ext; vorschauName = rechnung.lieferant || 'Beleg';
+      showVorschauModal = true;
+    }
+  } catch (e) { if (newTab) newTab.close(); error = 'Vorschau fehlgeschlagen: ' + e.message; }
+  finally { vorschauLaeuft = false; }
+}
 
   function schliesseVorschau() { vorschauUrl = ''; showVorschauModal = false; }
 
