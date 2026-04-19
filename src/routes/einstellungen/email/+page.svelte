@@ -806,7 +806,7 @@
         <div class="form-group form-span2">
           <label>Nachrichten-Text *</label>
           <textarea bind:this={kaufVorlageRef} bind:value={kauf.kauf_nachricht_vorlage} rows="10"
-            placeholder="Hallo {{buyer}}, ..."></textarea>
+            placeholder={'Hallo {{buyer}}, ...'}></textarea>
           <span class="hinweis-klein">Zeilenumbrüche werden übernommen. Keine HTML-Kenntnisse nötig.</span>
         </div>
       </div>
