@@ -209,8 +209,8 @@
       const arrayBuffer = await fetchDatei(rechnung.datei_s3_key);
       const ext = (rechnung.datei_typ || 'bin').toLowerCase();
       const mime = getMime(ext);
-      const blob = new Blob([arrayBuffer], { type: mime });
-      vorschauUrl = URL.createObjectURL(blob);
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      vorschauUrl = `data:${mime};base64,${base64}`;
       vorschauTyp = ext;
       vorschauName = rechnung.lieferant || 'Beleg';
       showVorschauModal = true;
@@ -226,8 +226,8 @@
       const arrayBuffer = await fetchDatei(item.attachment_s3_key);
       const ext = (item.attachment_typ || 'pdf').toLowerCase();
       const mime = getMime(ext);
-      const blob = new Blob([arrayBuffer], { type: mime });
-      vorschauUrl = URL.createObjectURL(blob);
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      vorschauUrl = `data:${mime};base64,${base64}`;
       vorschauTyp = ext;
       vorschauName = item.attachment_name || 'Anhang';
       showVorschauModal = true;
@@ -236,9 +236,8 @@
   }
 
   function schliesseVorschau() {
-    if (vorschauUrl) URL.revokeObjectURL(vorschauUrl);
     vorschauUrl = ''; showVorschauModal = false;
-  }
+ }
 
   // Download (für Rechnungen-Tab)
   async function downloadBeleg(rechnung) {
@@ -793,9 +792,7 @@
       </div>
       <div class="vorschau-inhalt">
         {#if vorschauTyp === 'pdf'}
-          <object data={vorschauUrl} type="application/pdf" style="width:100%;height:100%;border:none;border-radius:8px">
-          <p style="padding:20px;color:var(--text2)">PDF kann nicht angezeigt werden. <a href={vorschauUrl} target="_blank">Hier öffnen</a></p>
-            </object>
+          <iframe src={vorschauUrl} title="PDF Vorschau" style="width:100%;height:100%;border:none;border-radius:8px"></iframe>
         {:else}
           <img src={vorschauUrl} alt="Vorschau" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px" />
         {/if}
