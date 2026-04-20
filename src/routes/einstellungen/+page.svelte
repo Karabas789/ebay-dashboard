@@ -8,6 +8,7 @@
     { icon: '💬', title: 'Kauf-Nachricht',       desc: 'Automatische Nachricht nach eBay-Kauf',    href: '/einstellungen/kauf-nachricht' },
     { icon: '🖼️', title: 'Produktbilder',       desc: 'Bilder-URLs für Produkte verwalten',       href: '/einstellungen/bilder' },
     { icon: '🛒', title: 'Shop-Verbindungen',    desc: 'WooCommerce, Shopify und weitere Shops',   href: '/einstellungen/shops' },
+    { icon: '🔐', title: '2-Faktor-Auth',        desc: 'Login mit E-Mail-Code absichern',          href: '/einstellungen/sicherheit' },
   ];
 </script>
 
