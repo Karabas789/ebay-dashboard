@@ -21,13 +21,13 @@ function setAuth(token, user) {
 function clearAuth() {
   localStorage.removeItem('dashboard_token');
   localStorage.removeItem('dashboard_user');
+  localStorage.removeItem('dashboard_device_token');
 }
 
 async function apiCall(path, body = {}, method = 'POST') {
   const token = getToken();
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
 
-  // NEU: Bei GET → body als Query-String anhängen
   let url = API + '/' + cleanPath;
   if (method === 'GET' && body && Object.keys(body).length > 0) {
     url += '?' + new URLSearchParams(body).toString();
@@ -59,13 +59,32 @@ async function apiCall(path, body = {}, method = 'POST') {
   return data;
 }
 
-async function login(email, password) {
+async function login(email, password, deviceToken = null) {
+  const body = { email, password };
+  if (deviceToken) body.device_token = deviceToken;
   const res = await fetch(API + '/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password })
+    body: JSON.stringify(body)
   });
   return res.json();
 }
 
-export { API, getToken, getUser, setAuth, clearAuth, apiCall, login };
+async function verify2FA(userId, code, rememberDevice = false) {
+  const res = await fetch(API + '/2fa-verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId, code, remember_device: rememberDevice })
+  });
+  return res.json();
+}
+
+async function get2FAStatus() {
+  return apiCall('2fa-settings', { action: 'status' });
+}
+
+async function set2FA(enabled) {
+  return apiCall('2fa-settings', { action: enabled ? 'enable' : 'disable' });
+}
+
+export { API, getToken, getUser, setAuth, clearAuth, apiCall, login, verify2FA, get2FAStatus, set2FA };
