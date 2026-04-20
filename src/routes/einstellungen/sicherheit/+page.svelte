@@ -108,31 +108,34 @@
   .twofa-desc { font-size: 13px; color: #737373; line-height: 1.6; }
 
   /* Toggle Switch */
-  .toggle {
-    position: relative;
-    width: 52px;
-    height: 28px;
-    background: #d1d5db;
-    border: none;
-    border-radius: 14px;
-    cursor: pointer;
-    transition: background 0.2s;
-    flex-shrink: 0;
-  }
-  .toggle.active { background: #3777CF; }
-  .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
-  .toggle-knob {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 22px;
-    height: 22px;
-    background: white;
-    border-radius: 50%;
-    transition: transform 0.2s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  }
-  .toggle.active .toggle-knob { transform: translateX(24px); }
+      /* Neu */
+.toggle {
+  position: relative;
+  width: 56px;
+  height: 30px;
+  background: #d1d5db;
+  border: none;
+  border-radius: 15px;
+  cursor: pointer;
+  transition: background 0.25s;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
+  box-sizing: border-box;
+}
+.toggle.active { background: #3777CF; }
+.toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+.toggle-knob {
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.25s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+  flex-shrink: 0;
+}
+.toggle.active .toggle-knob { transform: translateX(26px); }
 
   .status-badge {
     display: inline-block;
