@@ -734,3 +734,29 @@ sqlite3 "$SQLITE_PATH" "VACUUM INTO '/tmp/database_new.sqlite';"
 | 5.0 | 2026-04-16 | Buchhaltungsmodul (WF-BH-01 bis WF-BH-07, OCR, Frontend) |
 | 6.0 | 2026-04-17 | Object Storage (Contabo S3), Server-Wartung, n8n-Pruning |
 | **7.0** | **2026-04-19** | **E-Mail-Import komplett: email_inbox-Tabelle, WF-BH-INBOX-HELPER/ACTION, WF-BH-05 aktiv, Frontend Posteingang-Tab, PDF-Vorschau-Fixes, Deploy-Gotchas** |
+
+## Passwort-Reset (implementiert 2026-04-20)
+
+### Frontend
+- /passwort-vergessen/+page.svelte — E-Mail eingeben, sendet Reset-Link
+- /reset-password/+page.svelte — Token aus URL, neues Passwort setzen
+- /login/+page.svelte — "Passwort vergessen?" Link unter Passwort-Feld
+- +layout.svelte — isLoginPage enthält jetzt auch /passwort-vergessen und /reset-password
+
+### n8n Workflows
+- WF: "Passwort Reset Anfordern" (ID: EXCJoKc2v9O6PA46)
+  Endpoint: POST /passwort-reset-anfordern
+  Ablauf: E-Mail prüfen → User suchen → Token (crypto 32 bytes hex) generieren →
+          reset_token + reset_token_expires (1h) in users speichern → E-Mail senden
+- WF: "Passwort Reset Bestätigen" (ID: SoX1TPJNOfUppjBJ)
+  Endpoint: POST /passwort-reset-bestaetigen
+  Ablauf: Token + Passwort prüfen → reset_token in DB validieren (expires > NOW()) →
+          crypt($password, gen_salt('bf')) → reset_token + reset_token_expires = NULL
+
+### DB
+- Tabelle users: reset_token (VARCHAR), reset_token_expires (TIMESTAMP) — bereits vorhanden
+- Passwörter: PostgreSQL crypt() + gen_salt('bf')
+
+### SMTP
+- Credential: "SMTP account 2" (ID: QQE2G03YAEMX9RRT)
+- fromEmail muss mit dem SMTP-User übereinstimmen (service@ai-online.cloud)
