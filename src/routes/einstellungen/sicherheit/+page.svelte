@@ -109,6 +109,7 @@
 
   /* Toggle Switch */
       /* Neu */
+    /* Toggle Switch */
 .toggle {
   position: relative;
   width: 56px;
@@ -119,23 +120,23 @@
   cursor: pointer;
   transition: background 0.25s;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 3px;
+  padding: 0;
   box-sizing: border-box;
 }
 .toggle.active { background: #3777CF; }
 .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 .toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
   width: 24px;
   height: 24px;
   background: white;
   border-radius: 50%;
-  transition: transform 0.25s;
+  transition: left 0.25s;
   box-shadow: 0 2px 4px rgba(0,0,0,0.25);
-  flex-shrink: 0;
 }
-.toggle.active .toggle-knob { transform: translateX(26px); }
+.toggle.active .toggle-knob { left: 29px; }
 
   .status-badge {
     display: inline-block;
