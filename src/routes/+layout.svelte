@@ -12,7 +12,7 @@
   let isLoginPage = false;
   let collapsed = false;
 
-  $: isLoginPage = $page.url.pathname === '/login';
+  $: isLoginPage = ['/login', '/passwort-vergessen', '/reset-password'].includes($page.url.pathname);
 
   // Seiten die ihren eigenen Scroll-Container haben (kein overflow-y:auto auf main-content)
   $: noPageScroll = $page.url.pathname === '//einstellungen/rechnungsvorlage';
