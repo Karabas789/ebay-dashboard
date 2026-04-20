@@ -51,7 +51,10 @@
     </div>
 
     <div class="field">
-      <label class="label" for="password">Passwort</label>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <label class="label" for="password" style="margin-bottom:0">Passwort</label>
+        <a href="/passwort-vergessen" style="font-size:12px;color:#3777CF;text-decoration:none">Passwort vergessen?</a>
+      </div>
       <input class="input" type="password" id="password" bind:value={password} placeholder="••••••••" autocomplete="current-password" />
     </div>
 
@@ -83,4 +86,14 @@
   .login-btn { width: 100%; justify-content: center; padding: 13px; font-size: 15px; margin-top: 8px; }
   .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
   .error { color: #ef4444; font-size: 13px; margin-top: -4px; margin-bottom: 8px; }
+  .label { display: block; font-size: 13px; font-weight: 600; color: #404040; margin-bottom: 6px; }
+  .input {
+    width: 100%; padding: 11px 14px; border: 1.5px solid #e5e5e5; border-radius: 10px;
+    font-size: 14px; outline: none; box-sizing: border-box; font-family: inherit;
+    transition: border-color 0.2s;
+  }
+  .input:focus { border-color: #3777CF; }
+  .btn { border: none; border-radius: 10px; padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .btn-primary { background: #3777CF; color: white; }
+  .btn-primary:hover { background: #2d6ab8; }
 </style>
