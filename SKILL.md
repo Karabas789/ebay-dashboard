@@ -760,3 +760,271 @@ sqlite3 "$SQLITE_PATH" "VACUUM INTO '/tmp/database_new.sqlite';"
 ### SMTP
 - Credential: "SMTP account 2" (ID: QQE2G03YAEMX9RRT)
 - fromEmail muss mit dem SMTP-User übereinstimmen (service@ai-online.cloud)
+
+# Skill-Ergänzung: Multi-Gerät-Auth + 2FA
+
+---
+
+## 1. Multi-Gerät-Auth via `user_sessions`
+
+### Problem
+`users.access_token` speichert nur einen Token — neuer Login überschreibt alten.
+
+### Lösung: Tabelle `user_sessions`
+```sql
+CREATE TABLE user_sessions (
+  id          SERIAL PRIMARY KEY,
+  user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token       VARCHAR(255) NOT NULL UNIQUE,
+  device_info TEXT,
+  created_at  TIMESTAMP DEFAULT NOW(),
+  last_used   TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_user_sessions_token   ON user_sessions(token);
+CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
+```
+
+### Token-Migration (einmalig)
+```sql
+INSERT INTO user_sessions (user_id, token, device_info, created_at, last_used)
+SELECT id, access_token, 'migrated', NOW(), NOW()
+FROM users WHERE access_token IS NOT NULL
+ON CONFLICT (token) DO NOTHING;
+```
+
+### Auth-Query in allen Workflows
+```sql
+-- Alt:
+SELECT id FROM users WHERE access_token = $1 LIMIT 1
+
+-- Neu:
+SELECT user_id AS id FROM user_sessions WHERE token = $1 LIMIT 1
+```
+
+### Alle Query-Varianten die vorkamen
+| Alt | Neu |
+|-----|-----|
+| `SELECT id FROM users WHERE access_token = '{{ $json.clean_token }}' LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE token = '{{ $json.clean_token }}' LIMIT 1` |
+| `SELECT id AS user_id FROM users WHERE access_token = '{{ $json.clean_token }}' LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE token = '{{ $json.clean_token }}' LIMIT 1` |
+| `SELECT id FROM users WHERE access_token = '{{ $json.token }}' LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE token = '{{ $json.token }}' LIMIT 1` |
+| `SELECT id FROM users WHERE access_token = $1 LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE token = $1 LIMIT 1` |
+| `SELECT id FROM users WHERE id = $1 AND access_token = $2 LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE user_id = $1 AND token = $2 LIMIT 1` |
+| `id as user_id FROM users WHERE access_token = '{{ $json.token }}'` (Kleinbuchstabe!) | `user_id AS id FROM user_sessions WHERE token = '{{ $json.token }}'` |
+| `SELECT id FROM users WHERE access_token = '{{ $json.headers.authorization.replace("Bearer ", "") }}' LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE token = '{{ $json.headers.authorization.replace("Bearer ", "") }}' LIMIT 1` |
+| `SELECT id FROM users WHERE access_token = '{{ $input.first().json.headers.authorization.replace(/^bearer /i,"").trim() }}' LIMIT 1` | `SELECT user_id AS id FROM user_sessions WHERE token = '{{ $input.first().json.headers.authorization.replace(/^bearer /i,"").trim() }}' LIMIT 1` |
+| `WHERE u.access_token = $1 ORDER BY t.updated_at DESC LIMIT 1` (JOIN-Variante) | `JOIN user_sessions _us ON _us.token = $1 AND _us.user_id = u.id WHERE 1=1 ORDER BY t.updated_at DESC LIMIT 1` |
+
+> **Achtung bei `queryReplacement`:** Wenn Query von 2 auf 1 Parameter reduziert wird, auch `queryReplacement` anpassen:
+> `={{ [$json.user_id, $json.token] }}` → `={{ [$json.token] }}`
+
+---
+
+## 2. n8n SQLite-Patch-Strategie
+
+n8n speichert die aktive WF-Version in **`workflow_history`** (Spalte `nodes`, nach `versionId`), NICHT nur in `workflow_entity.nodes`. Ein Patch muss **beide** Tabellen treffen, danach `publish_workflow`.
+
+### Patch-Skript Vorlage
+```bash
+cat > /tmp/patchX.js << 'EOF'
+const sqlite3 = require('/usr/local/lib/node_modules/n8n/node_modules/sqlite3');
+const db = new sqlite3.Database('/home/node/.n8n/database.sqlite');
+
+const patches = [
+  ["OLD_QUERY_1", "NEW_QUERY_1"],
+  ["OLD_QUERY_2", "NEW_QUERY_2"],
+];
+
+function applyPatches(text) {
+  let changed = false;
+  for (const [old, neu] of patches) {
+    if (text && text.includes(old)) { text = text.split(old).join(neu); changed = true; }
+  }
+  return { text, changed };
+}
+
+function patchTable(table, idCol, wfCol, cb) {
+  const q = wfCol
+    ? `SELECT ${idCol}, nodes FROM ${table} WHERE ${wfCol} IN (?,?,?) AND nodes LIKE '%SEARCH_TERM%'`
+    : `SELECT ${idCol}, nodes FROM ${table} WHERE nodes LIKE '%SEARCH_TERM%'`;
+  db.all(q, [], (err, rows) => {
+    if (err) { console.error(err); cb(0); return; }
+    console.log(`${table}: ${rows.length}`);
+    const updates = [];
+    for (const row of rows) {
+      const { text, changed } = applyPatches(row.nodes);
+      if (changed) updates.push([text, row[idCol]]);
+    }
+    if (!updates.length) { cb(0); return; }
+    let done = 0;
+    for (const [text, id] of updates) {
+      db.run(`UPDATE ${table} SET nodes=? WHERE ${idCol}=?`, [text, id], () => {
+        console.log('  ->', id);
+        if (++done === updates.length) cb(done);
+      });
+    }
+  });
+}
+
+patchTable('workflow_entity', 'id', null, (n1) => {
+  patchTable('workflow_history', 'versionId', 'workflowId', (n2) => {
+    console.log('Fertig:', n1 + n2);
+    db.close();
+  });
+});
+EOF
+
+docker cp /tmp/patchX.js n8n-x04008o88c4w0cg4gwkskkk8:/tmp/patchX.js
+docker exec n8n-x04008o88c4w0cg4gwkskkk8 node /tmp/patchX.js
+# Danach: n8n:publish_workflow für alle betroffenen Workflows
+```
+
+### Prüf-Skript: Noch verbleibende alte Queries finden
+```bash
+docker exec n8n-x04008o88c4w0cg4gwkskkk8 node -e "
+const sqlite3 = require('/usr/local/lib/node_modules/n8n/node_modules/sqlite3');
+const db = new sqlite3.Database('/home/node/.n8n/database.sqlite');
+db.all(\"SELECT id, name FROM workflow_entity WHERE nodes LIKE '%users WHERE access_token%' AND active = 1\", [], (e, r) => {
+  console.log('Noch alt:', r.length, r.map(x=>x.name));
+  db.close();
+});
+"
+```
+
+---
+
+## 3. 2-Faktor-Authentifizierung (2FA)
+
+### Neue DB-Tabellen
+```sql
+ALTER TABLE users ADD COLUMN IF NOT EXISTS two_fa_enabled BOOLEAN DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS two_fa_codes (
+  id         SERIAL PRIMARY KEY,
+  user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code       VARCHAR(6) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used       BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS trusted_devices (
+  id           SERIAL PRIMARY KEY,
+  user_id      INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  device_token VARCHAR(64) NOT NULL UNIQUE,
+  device_info  TEXT,
+  expires_at   TIMESTAMP NOT NULL,
+  created_at   TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_2fa_codes_user        ON two_fa_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_token ON trusted_devices(device_token);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_user  ON trusted_devices(user_id);
+```
+
+### n8n Workflows
+
+| WF-ID | Name | Webhook | Funktion |
+|---|---|---|---|
+| `CyVkNHgAuyeq5221` | Dashboard API - Login | POST `/login` | Prüft 2FA: sendet Code per E-Mail oder gibt direkt Token zurück |
+| `Qy8pDYhL8xNAIXK0` | 2FA Code verifizieren | POST `/2fa-verify` | Code prüfen, Session erstellen, optional Gerät merken (30 Tage) |
+| `X6DLR71NdRxOZInN` | 2FA Einstellungen | POST `/2fa-settings` | Actions: `enable`, `disable`, `status` |
+
+### Login-Flow
+
+```
+POST /login  { email, password, device_token? }
+  ↓ Passwort korrekt + 2FA aktiv + Gerät unbekannt
+  → { success: true, requires_2fa: true, user_id }
+
+POST /2fa-verify  { user_id, code, remember_device: true/false }
+  ↓ Code korrekt
+  → { success: true, token, device_token?, user: {...} }
+  device_token wird 30 Tage in localStorage gespeichert
+```
+
+```
+POST /login  { email, password, device_token }
+  ↓ Gerät bekannt (device_token in trusted_devices + nicht abgelaufen)
+  → { success: true, token, user: {...} }  ← direkt, kein 2FA-Step
+```
+
+```
+POST /login  { email, password }
+  ↓ 2FA nicht aktiv
+  → { success: true, token, user: {...} }  ← direkt
+```
+
+### 2FA-Settings Actions
+```js
+POST /2fa-settings  { action: 'status' }   // → { success, two_fa_enabled }
+POST /2fa-settings  { action: 'enable' }   // setzt two_fa_enabled = true
+POST /2fa-settings  { action: 'disable' }  // setzt two_fa_enabled = false + löscht trusted_devices
+```
+
+### Frontend-Änderungen
+
+**`src/lib/api.js`** — neue/geänderte Funktionen:
+```js
+// login mit optionalem device_token
+async function login(email, password, deviceToken = null)
+
+// 2FA Code verifizieren
+async function verify2FA(userId, code, rememberDevice = false)
+
+// 2FA Status laden
+async function get2FAStatus()
+
+// 2FA ein/ausschalten
+async function set2FA(enabled)
+
+// clearAuth löscht jetzt auch dashboard_device_token
+function clearAuth()
+```
+
+**localStorage Keys:**
+| Key | Inhalt |
+|-----|--------|
+| `dashboard_token` | Session-Token |
+| `dashboard_user` | User-Objekt (JSON) |
+| `dashboard_device_token` | Vertrauenswürdiges Gerät (30 Tage) |
+
+**`src/routes/login/+page.svelte`** — 2-Step Login:
+- Step 1: E-Mail + Passwort → wenn `requires_2fa: true` → Step 2
+- Step 2: 6-stelliger Code + Checkbox "Dieses Gerät 30 Tage merken"
+- Bei bekanntem `device_token` im localStorage → wird automatisch mitgeschickt → kein 2FA-Step
+
+**`src/routes/einstellungen/sicherheit/+page.svelte`** — Toggle:
+- Lädt Status via `get2FAStatus()` beim Mount
+- Schaltet via `set2FA(!enabled)` beim Klick
+
+### Toggle-CSS — bekanntes Problem
+`position: absolute` mit fixen Pixel-Werten für den Knob funktioniert nicht zuverlässig (weißer Kreis sichtbar). Korrekte Implementierung:
+
+```css
+/* Toggle-Container: flexbox statt position:relative */
+.toggle {
+  display: flex;
+  align-items: center;
+  padding: 0 3px;
+  width: 56px;
+  height: 30px;
+  background: #d1d5db;
+  border-radius: 15px;
+  cursor: pointer;
+  transition: background 0.25s;
+  box-sizing: border-box;
+}
+.toggle.active { background: #3777CF; }
+
+/* Knob: kein position:absolute */
+.toggle-knob {
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.25s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+  flex-shrink: 0;
+}
+.toggle.active .toggle-knob { transform: translateX(26px); }
+```
