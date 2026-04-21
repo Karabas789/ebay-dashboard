@@ -73,8 +73,11 @@
     try {
       const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sessionEmail, password: sessionPassword }) });
       const data = await res.json();
-      if (data.success) { setAuth(data.token, data.user); currentUser.set(data.user); sessionExpired.set(false); showSessionModal = false; window.location.reload(); }
-      else { sessionError = data.message || 'Anmeldung fehlgeschlagen.'; }
+      if (data.success && data.token) {
+        setAuth(data.token, data.user); currentUser.set(data.user); sessionExpired.set(false); showSessionModal = false; window.location.reload();
+      } else if (data.success && data.requires_2fa) {
+        sessionExpired.set(false); showSessionModal = false; clearAuth(); goto('/login');
+      } else { sessionError = data.message || 'Anmeldung fehlgeschlagen.'; }
     } catch (e) { sessionError = 'Verbindungsfehler.'; }
     finally { sessionLoading = false; }
   }
