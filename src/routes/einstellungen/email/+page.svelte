@@ -31,6 +31,7 @@
 
   // Default-HTML-Vorlage für neue User
   const defaultHtmlVorlage = '<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p><p>Rechnungsbetrag: {{brutto_betrag}} EUR</p><p>Vielen Dank für Ihren Einkauf!</p><p>Mit freundlichen Grüßen<br>{{firmenname}}</p>';
+
   const signaturHtml = '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd;font-family:Arial,sans-serif;font-size:13px;color:#333;line-height:1.4">' +
     '<strong>Import &amp; Produkte Vertrieb</strong><br>' +
     'Inh. Oxana Dubs<br>' +
@@ -41,7 +42,7 @@
     '📧 <a href="mailto:ov-shop@mail.de" style="color:#333">ov-shop@mail.de</a><br>' +
     '<img src="https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/bildschirmfoto-2024-10-23-um-20.44.12-KsnpbGM6T6pk07Fh.png" width="120" height="50" style="max-width:100%;height:auto;display:block;margin-top:8px" alt="OV-Software Logo">' +
     '</div>';
-   
+
   let testEmail = $state('');
   let passwortZeigen = $state(false);
   let testStatus = $state(null);
@@ -73,60 +74,6 @@
   // ═══════════════════════════════════════════════════════
   // Starter-Templates
   // ═══════════════════════════════════════════════════════
-  
-    ERSETZE:
-  const starterTemplates = [
-    {
-      name: 'Schlicht',
-      icon: '📄',
-      beschreibung: 'Einfach und klar — nur Text, keine Dekoration',
-      html: '<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p><p>Rechnungsbetrag: <strong>{{brutto_betrag}} EUR</strong></p><p>Vielen Dank für Ihren Einkauf!</p><p>Mit freundlichen Grüßen<br>{{firmenname}}</p>'
-    },
-    {
-      name: 'Modern',
-      icon: '✨',
-      beschreibung: 'Farbige Akzente, professionelles Layout',
-      html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
-        '<div style="background:#1d4ed8;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0">' +
-        '<strong style="font-size:18px">{{firmenname}}</strong></div>' +
-        '<div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">' +
-        '<p style="margin:0 0 16px">Sehr geehrte(r) {{kaeufer_name}},</p>' +
-        '<p style="margin:0 0 16px">anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}}.</p>' +
-        '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:16px;margin:16px 0;text-align:center">' +
-        '<div style="color:#64748b;font-size:13px">Rechnungsbetrag</div>' +
-        '<div style="font-size:24px;font-weight:700;color:#1d4ed8;margin-top:4px">{{brutto_betrag}} EUR</div></div>' +
-        '<p style="margin:0 0 16px">Vielen Dank für Ihren Einkauf!</p>' +
-        '<p style="margin:0;color:#64748b">Mit freundlichen Grüßen<br>{{firmenname}}</p>' +
-        '</div></div>'
-    },
-    {
-      name: 'Mit Logo-Bereich',
-      icon: '🖼️',
-      beschreibung: 'Platz für Firmenname als Header, professionell',
-      html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
-        '<div style="text-align:center;padding:24px 0;border-bottom:2px solid #1d4ed8">' +
-        '<strong style="font-size:22px;color:#1d4ed8">{{firmenname}}</strong></div>' +
-        '<div style="padding:24px 0">' +
-        '<p>Sehr geehrte(r) {{kaeufer_name}},</p>' +
-        '<p>anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}} als PDF-Anhang.</p>' +
-        '<table style="width:100%;border-collapse:collapse;margin:20px 0"><tr>' +
-        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;font-weight:700">Rechnungsbetrag:</td>' +
-        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;text-align:right;font-weight:700;color:#1d4ed8">{{brutto_betrag}} EUR</td>' +
-        '</tr></table>' +
-        '<p>Vielen Dank für Ihren Einkauf!</p>' +
-        '<p style="color:#666">Mit freundlichen Grüßen<br>{{firmenname}}</p>' +
-        '</div></div>'
-    },
-    {
-      name: 'Minimalistisch',
-      icon: '〰️',
-      beschreibung: 'Reduziert auf das Wesentliche',
-      html: '<p>Hallo {{kaeufer_name}},</p>' +
-        '<p>Ihre Rechnung {{rechnung_nr}} ({{brutto_betrag}} EUR) finden Sie im Anhang.</p>' +
-        '<p>Danke & Grüße<br>{{firmenname}}</p>'
-    }
-  ];
-DURCH:
   const starterTemplates = [
     {
       name: 'Schlicht',
@@ -1280,7 +1227,7 @@ DURCH:
 
   .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 24px; display:flex; flex-direction:column; gap:14px; margin-bottom:16px; }
   .card-titel { font-size:0.9rem; font-weight:700; color:var(--text); }
-  .card-sub { font-size:0.8rem; color:var(--text2); margin-top:o; }
+  .card-sub { font-size:0.8rem; color:var(--text2); margin-top:0; }
   .card-test { border-color:var(--primary); }
   .card-info { background:var(--primary-light); border-color:var(--primary); }
   .card-status { background:var(--surface2); }
