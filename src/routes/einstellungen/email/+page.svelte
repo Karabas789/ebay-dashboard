@@ -31,7 +31,17 @@
 
   // Default-HTML-Vorlage für neue User
   const defaultHtmlVorlage = '<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p><p>Rechnungsbetrag: {{brutto_betrag}} EUR</p><p>Vielen Dank für Ihren Einkauf!</p><p>Mit freundlichen Grüßen<br>{{firmenname}}</p>';
-
+  const signaturHtml = '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #ddd;font-family:Arial,sans-serif;font-size:13px;color:#333;line-height:1.4">' +
+    '<strong>Import &amp; Produkte Vertrieb</strong><br>' +
+    'Inh. Oxana Dubs<br>' +
+    'Auf der Schläfe 1<br>' +
+    '57078 Siegen<br>' +
+    'USt-ID: DE815720228<br>' +
+    '📞 +49 271 50149974<br>' +
+    '📧 <a href="mailto:ov-shop@mail.de" style="color:#333">ov-shop@mail.de</a><br>' +
+    '<img src="https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/bildschirmfoto-2024-10-23-um-20.44.12-KsnpbGM6T6pk07Fh.png" width="120" height="50" style="max-width:100%;height:auto;display:block;margin-top:8px" alt="OV-Software Logo">' +
+    '</div>';
+   
   let testEmail = $state('');
   let passwortZeigen = $state(false);
   let testStatus = $state(null);
@@ -63,6 +73,8 @@
   // ═══════════════════════════════════════════════════════
   // Starter-Templates
   // ═══════════════════════════════════════════════════════
+  
+    ERSETZE:
   const starterTemplates = [
     {
       name: 'Schlicht',
@@ -112,6 +124,60 @@
       html: '<p>Hallo {{kaeufer_name}},</p>' +
         '<p>Ihre Rechnung {{rechnung_nr}} ({{brutto_betrag}} EUR) finden Sie im Anhang.</p>' +
         '<p>Danke & Grüße<br>{{firmenname}}</p>'
+    }
+  ];
+DURCH:
+  const starterTemplates = [
+    {
+      name: 'Schlicht',
+      icon: '📄',
+      beschreibung: 'Einfach und klar mit Signatur',
+      html: '<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p><p>Rechnungsbetrag: <strong>{{brutto_betrag}} EUR</strong></p><p>Vielen Dank für Ihren Einkauf!</p><p>Beste Grüße</p>' + signaturHtml
+    },
+    {
+      name: 'Modern',
+      icon: '✨',
+      beschreibung: 'Farbige Akzente, professionell mit Signatur',
+      html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
+        '<div style="background:#1d4ed8;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0">' +
+        '<strong style="font-size:18px">{{firmenname}}</strong></div>' +
+        '<div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">' +
+        '<p style="margin:0 0 16px">Sehr geehrte(r) {{kaeufer_name}},</p>' +
+        '<p style="margin:0 0 16px">anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}}.</p>' +
+        '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:16px;margin:16px 0;text-align:center">' +
+        '<div style="color:#64748b;font-size:13px">Rechnungsbetrag</div>' +
+        '<div style="font-size:24px;font-weight:700;color:#1d4ed8;margin-top:4px">{{brutto_betrag}} EUR</div></div>' +
+        '<p style="margin:0 0 16px">Vielen Dank für Ihren Einkauf!</p>' +
+        '<p style="margin:0;color:#64748b">Beste Grüße</p>' +
+        signaturHtml +
+        '</div></div>'
+    },
+    {
+      name: 'Mit Logo-Bereich',
+      icon: '🖼️',
+      beschreibung: 'Firmenname als Header mit Signatur',
+      html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
+        '<div style="text-align:center;padding:24px 0;border-bottom:2px solid #1d4ed8">' +
+        '<strong style="font-size:22px;color:#1d4ed8">{{firmenname}}</strong></div>' +
+        '<div style="padding:24px 0">' +
+        '<p>Sehr geehrte(r) {{kaeufer_name}},</p>' +
+        '<p>anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}} als PDF-Anhang.</p>' +
+        '<table style="width:100%;border-collapse:collapse;margin:20px 0"><tr>' +
+        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;font-weight:700">Rechnungsbetrag:</td>' +
+        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;text-align:right;font-weight:700;color:#1d4ed8">{{brutto_betrag}} EUR</td>' +
+        '</tr></table>' +
+        '<p>Vielen Dank für Ihren Einkauf!</p>' +
+        '<p style="color:#666">Beste Grüße</p>' +
+        signaturHtml +
+        '</div></div>'
+    },
+    {
+      name: 'Minimalistisch',
+      icon: '〰️',
+      beschreibung: 'Kurz und knapp mit Signatur',
+      html: '<p>Hallo {{kaeufer_name}},</p>' +
+        '<p>Ihre Rechnung {{rechnung_nr}} ({{brutto_betrag}} EUR) finden Sie im Anhang.</p>' +
+        '<p>Danke & Grüße</p>' + signaturHtml
     }
   ];
 
@@ -563,10 +629,15 @@
     try {
       const data = await apiCall('kauf-nachricht-config', { action: 'load', user_id: $currentUser.id });
       if (data?.config) {
+        let vorlageText = data.config.kauf_nachricht_vorlage || kauf.kauf_nachricht_vorlage;
+        // Literal \n aus DB zu echten Zeilenumbrüchen
+        if (vorlageText && vorlageText.includes('\\n')) {
+          vorlageText = vorlageText.replace(/\\n/g, '\n');
+        }
         kauf = {
           kauf_nachricht_aktiv:   data.config.kauf_nachricht_aktiv   ?? false,
           kauf_nachricht_betreff: data.config.kauf_nachricht_betreff || kauf.kauf_nachricht_betreff,
-          kauf_nachricht_vorlage: data.config.kauf_nachricht_vorlage || kauf.kauf_nachricht_vorlage
+          kauf_nachricht_vorlage: vorlageText
         };
       }
     } catch(e) {
@@ -794,11 +865,11 @@
         <!-- Quellcode-Editor -->
         <div class="form-group">
           <div class="editor-toolbar">
-            <button class="tb-btn tb-btn-active" onclick={wechsleQuellcode} title="Zurück zum Editor">
-              ✏️ Visuell
+            <button class="btn-primary btn-sm" onclick={wechsleQuellcode} title="Zurück zum visuellen Editor" style="font-size:0.8rem;padding:5px 14px;border-radius:6px">
+              ✏️ Zurück zum Editor
             </button>
             <span class="tb-sep"></span>
-            <span class="tb-label">HTML-Quellcode</span>
+            <span class="tb-label">📄 HTML-Quellcode-Modus</span>
           </div>
           <textarea class="quellcode-textarea" bind:value={quellcodeText} rows="14"
             placeholder="HTML-Code hier eingeben..."></textarea>
@@ -832,6 +903,7 @@
             <button class="tb-btn" onclick={() => linkDialogOffen = !linkDialogOffen} title="Link einfügen">🔗</button>
             <button class="tb-btn" onclick={() => bildDialogOffen = !bildDialogOffen} title="Bild einfügen">🖼️</button>
             <button class="tb-btn" onclick={() => editorBefehl('insertHorizontalRule')} title="Trennlinie">―</button>
+            <button class="tb-btn" onclick={() => { editorEl?.focus(); document.execCommand('insertHTML', false, signaturHtml); editorInhaltSync(); }} title="Signatur / Impressum einfügen" style="width:auto;padding:0 8px;font-size:0.72rem">📇 Signatur</button>
             <span class="tb-sep"></span>
             <button class="tb-btn" onclick={wechsleQuellcode} title="HTML-Quellcode bearbeiten">&lt;/&gt;</button>
           </div>
@@ -1208,7 +1280,7 @@
 
   .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px 24px; display:flex; flex-direction:column; gap:14px; margin-bottom:16px; }
   .card-titel { font-size:0.9rem; font-weight:700; color:var(--text); }
-  .card-sub { font-size:0.8rem; color:var(--text2); margin-top:-8px; }
+  .card-sub { font-size:0.8rem; color:var(--text2); margin-top:o; }
   .card-test { border-color:var(--primary); }
   .card-info { background:var(--primary-light); border-color:var(--primary); }
   .card-status { background:var(--surface2); }
