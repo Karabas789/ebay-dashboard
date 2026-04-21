@@ -17,6 +17,9 @@
   let sessionPassword = '';
   let sessionError = '';
   let sessionLoading = false;
+  let sessionStep = 'login'; // 'login' | '2fa'
+  let session2faCode = '';
+  let session2faUserId = null;
   let unsubSession = sessionExpired.subscribe(v => {
     if (v && !showSessionModal) {
       sessionEmail = user?.email || '';
@@ -67,19 +70,46 @@
     showEbayModal = true;
   }
   function handleEbayConfirm() { showEbayModal = false; window.open(ebayOAuthUrl, '_blank', 'width=600,height=700'); }
-  function openSessionModal() { sessionEmail = user?.email || ''; sessionPassword = ''; sessionError = ''; showSessionModal = true; }
+  function openSessionModal() {
+  sessionEmail = user?.email || '';
+  sessionPassword = '';
+  session2faCode = '';
+  sessionStep = 'login';
+  sessionError = '';
+  showSessionModal = true;
+  }
   async function doSessionRenew() {
+  sessionError = ''; sessionLoading = true;
+  try {
+    const deviceToken = typeof localStorage !== 'undefined' ? localStorage.getItem('dashboard_device_token') : null;
+    const body = { email: sessionEmail, password: sessionPassword };
+    if (deviceToken) body.device_token = deviceToken;
+    const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (data.success && data.token) {
+      finishRenew(data.token, data.user);
+    } else if (data.success && data.requires_2fa) {
+      session2faUserId = data.user_id; session2faCode = ''; sessionStep = '2fa';
+    } else { sessionError = data.message || 'Anmeldung fehlgeschlagen.'; }
+  } catch (e) { sessionError = 'Verbindungsfehler.'; }
+  finally { sessionLoading = false; }
+ }
+
+ async function doSession2FA() {
+    if (!session2faCode || session2faCode.length !== 6) { sessionError = 'Bitte 6-stelligen Code eingeben.'; return; }
     sessionError = ''; sessionLoading = true;
     try {
-      const res = await fetch(API + '/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sessionEmail, password: sessionPassword }) });
+      const res = await fetch(API + '/2fa-verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: session2faUserId, code: session2faCode, remember_device: false }) });
       const data = await res.json();
-      if (data.success && data.token) {
-        setAuth(data.token, data.user); currentUser.set(data.user); sessionExpired.set(false); showSessionModal = false; window.location.reload();
-      } else if (data.success && data.requires_2fa) {
-        sessionExpired.set(false); showSessionModal = false; clearAuth(); goto('/login');
-      } else { sessionError = data.message || 'Anmeldung fehlgeschlagen.'; }
+      if (data.success && data.token) { finishRenew(data.token, data.user); }
+      else { sessionError = data.message || 'Ungültiger Code.'; }
     } catch (e) { sessionError = 'Verbindungsfehler.'; }
     finally { sessionLoading = false; }
+  }
+
+  function finishRenew(token, userData) {
+    const u = { ...userData, plan: userData?.plan || 'starter' };
+    setAuth(token, u); currentUser.set(u); sessionExpired.set(false); showSessionModal = false; window.location.reload();
   }
   onMount(() => { const saved = localStorage.getItem('sidebar_collapsed'); if (saved === 'true') sidebarCollapsed.set(true); });
 
@@ -152,27 +182,32 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="session-overlay" on:click|self={() => { if (!$sessionExpired) showSessionModal = false; }}>
     <div class="session-modal">
-      <div class="session-title">🔄 Session erneuern</div>
-      {#if $sessionExpired}
-        <div class="session-banner">⚠️ Deine Session ist abgelaufen. Bitte melde dich erneut an.</div>
-      {:else}
-        <p class="session-desc">Melde dich erneut an, um fortzufahren.</p>
-      {/if}
-      <div class="session-field">
-        <label>E-Mail</label>
-        <input type="email" bind:value={sessionEmail} placeholder="name@shop.de" />
-      </div>
-      <div class="session-field">
-        <label>Passwort</label>
-        <input type="password" bind:value={sessionPassword} placeholder="••••••••" on:keydown={(e) => { if (e.key === 'Enter') doSessionRenew(); }} />
-      </div>
-      {#if sessionError}<div class="session-error">{sessionError}</div>{/if}
-      <div class="session-actions">
-        {#if !$sessionExpired}
-          <button class="session-btn-cancel" on:click={() => showSessionModal = false}>Abbrechen</button>
+      {#if sessionStep === 'login'}
+        <div class="session-title">🔄 Session erneuern</div>
+        {#if $sessionExpired}
+          <div class="session-banner">⚠️ Deine Session ist abgelaufen. Bitte melde dich erneut an.</div>
+        {:else}
+          <p class="session-desc">Melde dich erneut an, um fortzufahren.</p>
         {/if}
-        <button class="session-btn-ok" on:click={doSessionRenew} disabled={sessionLoading}>{sessionLoading ? '⏳ Anmelden...' : '✓ Anmelden'}</button>
-      </div>
+        <div class="session-field"><label>E-Mail</label><input type="email" bind:value={sessionEmail} /></div>
+        <div class="session-field"><label>Passwort</label><input type="password" bind:value={sessionPassword} on:keydown={(e) => { if (e.key === 'Enter') doSessionRenew(); }} /></div>
+        {#if sessionError}<div class="session-error">{sessionError}</div>{/if}
+        <div class="session-actions">
+          {#if !$sessionExpired}<button class="session-btn-cancel" on:click={() => showSessionModal = false}>Abbrechen</button>{/if}
+          <button class="session-btn-ok" on:click={doSessionRenew} disabled={sessionLoading}>{sessionLoading ? '⏳ ...' : '✓ Anmelden'}</button>
+        </div>
+      {:else}
+        <div class="session-title">🔐 2-Faktor-Code</div>
+        <p class="session-desc">Ein Code wurde an deine E-Mail gesendet.</p>
+        <div class="session-field"><label>6-stelliger Code</label>
+          <input type="text" bind:value={session2faCode} placeholder="123456" maxlength="6" inputmode="numeric" style="font-size:22px;letter-spacing:8px;text-align:center;font-weight:700;" on:keydown={(e) => { if (e.key === 'Enter') doSession2FA(); }} />
+        </div>
+        {#if sessionError}<div class="session-error">{sessionError}</div>{/if}
+        <div class="session-actions">
+          <button class="session-btn-cancel" on:click={() => { sessionStep = 'login'; sessionError = ''; }}>← Zurück</button>
+          <button class="session-btn-ok" on:click={doSession2FA} disabled={sessionLoading}>{sessionLoading ? '⏳ ...' : '✓ Bestätigen'}</button>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
