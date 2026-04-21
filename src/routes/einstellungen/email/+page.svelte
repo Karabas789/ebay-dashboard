@@ -61,6 +61,7 @@
   let linkUrl = $state('');
   let bildUrl = $state('');
   let templateAuswahlOffen = $state(false);
+  let bausteineOffen = $state(false);
 
   const textFarben = [
     '#000000', '#333333', '#666666', '#999999',
@@ -70,6 +71,60 @@
     '#d97706', '#f59e0b', '#fbbf24', '#fde68a',
     '#9333ea', '#a855f7', '#c084fc', '#d8b4fe',
   ];
+
+  // ═══════════════════════════════════════════════════════
+  // Bausteine (fertige HTML-Blöcke zum Einfügen)
+  // ═══════════════════════════════════════════════════════
+  const bausteine = [
+    {
+      name: 'Farbige Kopfleiste',
+      icon: '🟦',
+      beschreibung: 'Blauer Header-Balken mit Firmenname',
+      html: '<div style="background:#1d4ed8;color:#ffffff;padding:16px 24px;border-radius:8px 8px 0 0;font-family:Arial,sans-serif;margin-bottom:0"><strong style="font-size:18px">{{firmenname}}</strong></div>'
+    },
+    {
+      name: 'Betrag-Box',
+      icon: '💰',
+      beschreibung: 'Hervorgehobener Rechnungsbetrag',
+      html: '<div style="background:#ffffff;border:2px solid #1d4ed8;border-radius:8px;padding:16px;margin:16px 0;text-align:center;font-family:Arial,sans-serif"><div style="color:#64748b;font-size:13px;margin-bottom:4px">Rechnungsbetrag</div><div style="font-size:26px;font-weight:700;color:#1d4ed8">{{brutto_betrag}} EUR</div></div>'
+    },
+    {
+      name: 'Info-Box',
+      icon: '📋',
+      beschreibung: 'Grauer Kasten für Hinweistexte',
+      html: '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin:12px 0;font-size:13px;color:#475569;line-height:1.6;font-family:Arial,sans-serif">💡 <strong>Hinweis:</strong> Hier können Sie einen wichtigen Hinweis einfügen.</div>'
+    },
+    {
+      name: 'Button',
+      icon: '🔘',
+      beschreibung: 'Farbiger Aktions-Button mit Link',
+      html: '<div style="text-align:center;margin:20px 0"><a href="https://example.com" style="display:inline-block;background:#1d4ed8;color:#ffffff;padding:12px 28px;border-radius:6px;font-weight:700;font-size:14px;text-decoration:none;font-family:Arial,sans-serif">Rechnung ansehen</a></div>'
+    },
+    {
+      name: 'Farbige Trennlinie',
+      icon: '➖',
+      beschreibung: 'Blaue Trennlinie statt grauer Linie',
+      html: '<hr style="border:none;border-top:2px solid #1d4ed8;margin:20px 0">'
+    },
+    {
+      name: 'Signatur / Impressum',
+      icon: '📇',
+      beschreibung: 'Firmenadresse, Kontakt & Logo',
+      html: signaturHtml
+    }
+  ];
+
+  function bausteinEinfuegen(baustein) {
+    if (quellcodeMode) {
+      quellcodeText += baustein.html;
+    } else {
+      editorEl?.focus();
+      document.execCommand('insertHTML', false, baustein.html);
+      editorInhaltSync();
+    }
+    bausteineOffen = false;
+    showToast('✅ ' + baustein.name + ' eingefügt');
+  }
 
   // ═══════════════════════════════════════════════════════
   // Starter-Templates
@@ -88,7 +143,7 @@
       html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
         '<div style="background:#1d4ed8;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0">' +
         '<strong style="font-size:18px">{{firmenname}}</strong></div>' +
-        '<div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">' +
+        '<div style="padding:24px;background:#ffffff;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">' +
         '<p style="margin:0 0 16px">Sehr geehrte(r) {{kaeufer_name}},</p>' +
         '<p style="margin:0 0 16px">anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}}.</p>' +
         '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:16px;margin:16px 0;text-align:center">' +
@@ -110,8 +165,8 @@
         '<p>Sehr geehrte(r) {{kaeufer_name}},</p>' +
         '<p>anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}} als PDF-Anhang.</p>' +
         '<table style="width:100%;border-collapse:collapse;margin:20px 0"><tr>' +
-        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;font-weight:700">Rechnungsbetrag:</td>' +
-        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;text-align:right;font-weight:700;color:#1d4ed8">{{brutto_betrag}} EUR</td>' +
+        '<td style="padding:12px;background:#ffffff;border:1px solid #bfdbfe;font-weight:700">Rechnungsbetrag:</td>' +
+        '<td style="padding:12px;background:#ffffff;border:1px solid #bfdbfe;text-align:right;font-weight:700;color:#1d4ed8">{{brutto_betrag}} EUR</td>' +
         '</tr></table>' +
         '<p>Vielen Dank für Ihren Einkauf!</p>' +
         '<p style="color:#666">Beste Grüße</p>' +
@@ -850,7 +905,25 @@
             <button class="tb-btn" onclick={() => linkDialogOffen = !linkDialogOffen} title="Link einfügen">🔗</button>
             <button class="tb-btn" onclick={() => bildDialogOffen = !bildDialogOffen} title="Bild einfügen">🖼️</button>
             <button class="tb-btn" onclick={() => editorBefehl('insertHorizontalRule')} title="Trennlinie">―</button>
-            <button class="tb-btn" onclick={() => { editorEl?.focus(); document.execCommand('insertHTML', false, signaturHtml); editorInhaltSync(); }} title="Signatur / Impressum einfügen" style="width:auto;padding:0 8px;font-size:0.72rem">📇 Signatur</button>
+            <span class="tb-sep"></span>
+            <div class="tb-dropdown-wrap">
+              <button class="tb-btn" onclick={() => { bausteineOffen = !bausteineOffen; farbauswahlOffen = false; }} title="Bausteine einfügen" style="width:auto;padding:0 10px;font-size:0.75rem;font-weight:600">
+                🧩 Bausteine
+              </button>
+              {#if bausteineOffen}
+                <div class="tb-dropdown bausteine-dropdown">
+                  {#each bausteine as b}
+                    <button class="baustein-btn" onclick={() => bausteinEinfuegen(b)}>
+                      <span class="baustein-icon">{b.icon}</span>
+                      <span class="baustein-info">
+                        <span class="baustein-name">{b.name}</span>
+                        <span class="baustein-desc">{b.beschreibung}</span>
+                      </span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
             <span class="tb-sep"></span>
             <button class="tb-btn" onclick={wechsleQuellcode} title="HTML-Quellcode bearbeiten">&lt;/&gt;</button>
           </div>
@@ -1298,6 +1371,21 @@
   .farb-dropdown { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; width:140px; }
   .farb-btn { width:28px; height:28px; border:2px solid transparent; border-radius:5px; cursor:pointer; transition:all 0.1s; }
   .farb-btn:hover { border-color:var(--text); transform:scale(1.15); }
+
+  .bausteine-dropdown {
+    display:flex; flex-direction:column; gap:2px; width:280px; padding:6px;
+    right:0; left:auto;
+  }
+  .baustein-btn {
+    display:flex; align-items:center; gap:10px; padding:8px 10px;
+    background:transparent; border:1px solid transparent; border-radius:6px;
+    cursor:pointer; text-align:left; transition:all 0.12s; width:100%;
+  }
+  .baustein-btn:hover { background:var(--surface2); border-color:var(--border); }
+  .baustein-icon { font-size:1.2rem; flex-shrink:0; width:28px; text-align:center; }
+  .baustein-info { display:flex; flex-direction:column; gap:1px; min-width:0; }
+  .baustein-name { font-size:0.8rem; font-weight:600; color:var(--text); }
+  .baustein-desc { font-size:0.68rem; color:var(--text2); line-height:1.3; }
 
   .editor-area {
     min-height:220px; max-height:500px; overflow-y:auto;
