@@ -563,8 +563,13 @@
     await ladeKaufConfig();
   });
 
-  // Selected block helper
-  let selectedBlock = $derived(blocks.find(b => b.id === selectedBlockId) || null);
+  // Selected block helper — Funktion statt $derived für stabilen Zugriff
+  function getSelectedBlock() {
+    if (!selectedBlockId) return null;
+    return blocks.find(b => b.id === selectedBlockId) || null;
+  }
+  // Reactive derived
+  let selectedBlock = $derived(getSelectedBlock());
 </script>
 
 <div class="page-container">
@@ -695,7 +700,7 @@
       {:else if htmlCodeOffen}
         <!-- HTML CODE -->
         <div class="form-group">
-          <textarea class="html-code-area" rows="18" readonly value={generateFullHtml()}></textarea>
+          <textarea class="html-code-area" rows="18" readonly>{generateFullHtml()}</textarea>
           <button class="btn-ghost btn-sm" style="align-self:flex-start;margin-top:6px" onclick={() => { navigator.clipboard.writeText(generateFullHtml()); showToast('HTML kopiert!'); }}>📋 HTML kopieren</button>
         </div>
       {:else}
@@ -732,8 +737,7 @@
                 {:else}
                   {#each blocks as block, i (block.id)}
                     <div class="canvas-block" class:selected={selectedBlockId === block.id}>
-                      <!-- svelte-ignore a11y_click_events_have_key_events -->
-                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
                       <div class="canvas-block-inner" onclick={() => selectBlock(block.id)}>
                         <div class="block-actions">
                           {#if i > 0}<button class="ba-btn" onclick={(e) => { e.stopPropagation(); moveBlock(block.id, -1); }} title="Nach oben">↑</button>{/if}
@@ -840,7 +844,7 @@
               {:else if selectedBlock.type === 'text'}
                 <div class="props-section">
                   <div class="ps-title">HTML-Inhalt</div>
-                  <textarea rows="10" value={selectedBlock.content} oninput={(e) => updateBlock(selectedBlock.id, 'content', e.target.value)}></textarea>
+                  <textarea rows="10" oninput={(e) => updateBlock(selectedBlock.id, 'content', e.target.value)}>{selectedBlock.content}</textarea>
                   <span class="prop-hint">HTML: &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;br&gt;, &lt;a&gt;</span>
                 </div>
 
@@ -857,7 +861,7 @@
                 </div>
                 <div class="props-section">
                   <div class="ps-title">Inhalt</div>
-                  <textarea rows="5" value={selectedBlock.content} oninput={(e) => updateBlock(selectedBlock.id, 'content', e.target.value)}></textarea>
+                  <textarea rows="5" oninput={(e) => updateBlock(selectedBlock.id, 'content', e.target.value)}>{selectedBlock.content}</textarea>
                 </div>
 
               <!-- AMOUNT PROPS -->
@@ -921,7 +925,7 @@
                 <div class="props-section">
                   <div class="ps-title">Firmendaten</div>
                   <div class="prop-row"><label>Firmenname</label><input value={selectedBlock.name} oninput={(e) => updateBlock(selectedBlock.id, 'name', e.target.value)} /></div>
-                  <div class="prop-row"><label>Details</label><textarea rows="4" value={selectedBlock.details} oninput={(e) => updateBlock(selectedBlock.id, 'details', e.target.value)}></textarea></div>
+                  <div class="prop-row"><label>Details</label><textarea rows="4" oninput={(e) => updateBlock(selectedBlock.id, 'details', e.target.value)}>{selectedBlock.details}</textarea></div>
                   <div class="prop-row"><label>Telefon</label><input value={selectedBlock.phone || ''} oninput={(e) => updateBlock(selectedBlock.id, 'phone', e.target.value)} /></div>
                   <div class="prop-row"><label>E-Mail</label><input value={selectedBlock.email || ''} oninput={(e) => updateBlock(selectedBlock.id, 'email', e.target.value)} /></div>
                 </div>
@@ -930,8 +934,8 @@
               {:else if selectedBlock.type === 'columns'}
                 <div class="props-section">
                   <div class="ps-title">Spalten</div>
-                  <div class="prop-row"><label>Links</label><textarea rows="3" value={selectedBlock.left} oninput={(e) => updateBlock(selectedBlock.id, 'left', e.target.value)}></textarea></div>
-                  <div class="prop-row"><label>Rechts</label><textarea rows="3" value={selectedBlock.right} oninput={(e) => updateBlock(selectedBlock.id, 'right', e.target.value)}></textarea></div>
+                  <div class="prop-row"><label>Links</label><textarea rows="3" oninput={(e) => updateBlock(selectedBlock.id, 'left', e.target.value)}>{selectedBlock.left}</textarea></div>
+                  <div class="prop-row"><label>Rechts</label><textarea rows="3" oninput={(e) => updateBlock(selectedBlock.id, 'right', e.target.value)}>{selectedBlock.right}</textarea></div>
                 </div>
               {/if}
             {:else}
@@ -1131,8 +1135,7 @@
 <!-- TEMPLATE MODAL                                    -->
 <!-- ═══════════════════════════════════════════════ -->
 {#if templateModalOffen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="modal-overlay" onclick={() => templateModalOffen = false}>
     <div class="modal-box" style="max-width:680px" onclick={(e) => e.stopPropagation()}>
       <div class="modal-title">🎨 Vorlage wählen</div>
