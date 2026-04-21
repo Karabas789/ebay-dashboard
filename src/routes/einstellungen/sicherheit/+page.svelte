@@ -61,12 +61,12 @@
         </div>
       </div>
       <button
-        class="toggle {enabled ? 'active' : ''}"
+        class="toggle-btn {enabled ? 'toggle-an' : 'toggle-aus'}"
         on:click={toggle}
         disabled={saving}
         title={enabled ? '2FA deaktivieren' : '2FA aktivieren'}
       >
-        <span class="toggle-knob"></span>
+        <span class="toggle-thumb"></span>
       </button>
     </div>
 
@@ -107,36 +107,14 @@
   .twofa-title { font-size: 16px; font-weight: 700; color: #171717; margin-bottom: 6px; }
   .twofa-desc { font-size: 13px; color: #737373; line-height: 1.6; }
 
-  /* Toggle Switch */
-      /* Neu */
-    /* Toggle Switch */
-.toggle {
-  position: relative;
-  width: 56px;
-  height: 30px;
-  background: #d1d5db;
-  border: none;
-  border-radius: 15px;
-  cursor: pointer;
-  transition: background 0.25s;
-  flex-shrink: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-.toggle.active { background: #3777CF; }
-.toggle:disabled { opacity: 0.5; cursor: not-allowed; }
-.toggle-knob {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 24px;
-  height: 24px;
-  background: white;
-  border-radius: 50%;
-  transition: left 0.25s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
-}
-.toggle.active .toggle-knob { left: 29px; }
+   /* Toggle Switch — identisch mit Email-Seite */
+  .toggle-btn { position:relative; width:44px; height:24px; border:none; border-radius:99px; cursor:pointer; transition:background 0.2s; padding:0; flex-shrink:0; }
+  .toggle-an { background:var(--primary, #2563eb); }
+  .toggle-aus { background:#d1d5db; }
+  .toggle-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .toggle-thumb { position:absolute; top:3px; width:18px; height:18px; background:#fff; border-radius:50%; transition:left 0.2s; box-shadow:0 1px 3px rgba(0,0,0,0.2); }
+  .toggle-an .toggle-thumb { left:23px; }
+  .toggle-aus .toggle-thumb { left:3px; }
 
   .status-badge {
     display: inline-block;
