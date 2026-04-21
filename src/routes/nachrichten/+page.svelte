@@ -65,10 +65,21 @@
   ];
 
   onMount(() => {
-    deletedIds = JSON.parse(sessionStorage.getItem('deleted_ids') || '[]');
+  deletedIds = JSON.parse(sessionStorage.getItem('deleted_ids') || '[]');
+  // Warte bis user geladen ist
+  if (user?.id) {
     loadNachrichten();
     loadCustomFolders();
-  });
+  } else {
+    const unsub = currentUser.subscribe(u => {
+      if (u?.id) {
+        unsub();
+        loadNachrichten();
+        loadCustomFolders();
+      }
+    });
+  }
+});
 
   async function loadNachrichten() {
     loading = true;
