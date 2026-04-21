@@ -25,14 +25,95 @@
     absender_name: '',
     absender_email: '',
     betreff_vorlage: 'Ihre Rechnung {{rechnung_nr}}',
-    text_vorlage: 'Sehr geehrte(r) {{kaeufer_name}},\n\nanbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.\n\nRechnungsbetrag: {{brutto_betrag}} EUR\n\nVielen Dank für Ihren Einkauf!\n\nMit freundlichen Grüßen',
+    text_vorlage: '',
     auto_versand: false,
   });
+
+  // Default-HTML-Vorlage für neue User
+  const defaultHtmlVorlage = '<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p><p>Rechnungsbetrag: {{brutto_betrag}} EUR</p><p>Vielen Dank für Ihren Einkauf!</p><p>Mit freundlichen Grüßen<br>{{firmenname}}</p>';
 
   let testEmail = $state('');
   let passwortZeigen = $state(false);
   let testStatus = $state(null);
   let testNachricht = $state('');
+
+  // ═══════════════════════════════════════════════════════
+  // WYSIWYG Editor State
+  // ═══════════════════════════════════════════════════════
+  let editorEl = $state(null);
+  let quellcodeMode = $state(false);
+  let quellcodeText = $state('');
+  let vorschauOffen = $state(false);
+  let farbauswahlOffen = $state(false);
+  let linkDialogOffen = $state(false);
+  let bildDialogOffen = $state(false);
+  let linkUrl = $state('');
+  let bildUrl = $state('');
+  let templateAuswahlOffen = $state(false);
+
+  const textFarben = [
+    '#000000', '#333333', '#666666', '#999999',
+    '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa',
+    '#dc2626', '#ef4444', '#f87171', '#fca5a5',
+    '#16a34a', '#22c55e', '#4ade80', '#86efac',
+    '#d97706', '#f59e0b', '#fbbf24', '#fde68a',
+    '#9333ea', '#a855f7', '#c084fc', '#d8b4fe',
+  ];
+
+  // ═══════════════════════════════════════════════════════
+  // Starter-Templates
+  // ═══════════════════════════════════════════════════════
+  const starterTemplates = [
+    {
+      name: 'Schlicht',
+      icon: '📄',
+      beschreibung: 'Einfach und klar — nur Text, keine Dekoration',
+      html: '<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p><p>Rechnungsbetrag: <strong>{{brutto_betrag}} EUR</strong></p><p>Vielen Dank für Ihren Einkauf!</p><p>Mit freundlichen Grüßen<br>{{firmenname}}</p>'
+    },
+    {
+      name: 'Modern',
+      icon: '✨',
+      beschreibung: 'Farbige Akzente, professionelles Layout',
+      html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
+        '<div style="background:#1d4ed8;color:#ffffff;padding:20px 24px;border-radius:8px 8px 0 0">' +
+        '<strong style="font-size:18px">{{firmenname}}</strong></div>' +
+        '<div style="padding:24px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px">' +
+        '<p style="margin:0 0 16px">Sehr geehrte(r) {{kaeufer_name}},</p>' +
+        '<p style="margin:0 0 16px">anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}}.</p>' +
+        '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:6px;padding:16px;margin:16px 0;text-align:center">' +
+        '<div style="color:#64748b;font-size:13px">Rechnungsbetrag</div>' +
+        '<div style="font-size:24px;font-weight:700;color:#1d4ed8;margin-top:4px">{{brutto_betrag}} EUR</div></div>' +
+        '<p style="margin:0 0 16px">Vielen Dank für Ihren Einkauf!</p>' +
+        '<p style="margin:0;color:#64748b">Mit freundlichen Grüßen<br>{{firmenname}}</p>' +
+        '</div></div>'
+    },
+    {
+      name: 'Mit Logo-Bereich',
+      icon: '🖼️',
+      beschreibung: 'Platz für Firmenname als Header, professionell',
+      html: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">' +
+        '<div style="text-align:center;padding:24px 0;border-bottom:2px solid #1d4ed8">' +
+        '<strong style="font-size:22px;color:#1d4ed8">{{firmenname}}</strong></div>' +
+        '<div style="padding:24px 0">' +
+        '<p>Sehr geehrte(r) {{kaeufer_name}},</p>' +
+        '<p>anbei erhalten Sie Ihre Rechnung <strong>{{rechnung_nr}}</strong> vom {{datum}} als PDF-Anhang.</p>' +
+        '<table style="width:100%;border-collapse:collapse;margin:20px 0"><tr>' +
+        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;font-weight:700">Rechnungsbetrag:</td>' +
+        '<td style="padding:12px;background:#f0f9ff;border:1px solid #bfdbfe;text-align:right;font-weight:700;color:#1d4ed8">{{brutto_betrag}} EUR</td>' +
+        '</tr></table>' +
+        '<p>Vielen Dank für Ihren Einkauf!</p>' +
+        '<p style="color:#666">Mit freundlichen Grüßen<br>{{firmenname}}</p>' +
+        '</div></div>'
+    },
+    {
+      name: 'Minimalistisch',
+      icon: '〰️',
+      beschreibung: 'Reduziert auf das Wesentliche',
+      html: '<p>Hallo {{kaeufer_name}},</p>' +
+        '<p>Ihre Rechnung {{rechnung_nr}} ({{brutto_betrag}} EUR) finden Sie im Anhang.</p>' +
+        '<p>Danke & Grüße<br>{{firmenname}}</p>'
+    }
+  ];
 
   const anbieterVorlagen = [
     { name: 'Hostinger', host: 'smtp.hostinger.com', port: 465, secure: true, hinweis: 'E-Mail-Passwort aus Hostinger hPanel' },
@@ -51,12 +132,107 @@
     showToast('Anbieter gewählt: ' + anbieter.name + ' — ' + anbieter.hinweis);
   }
 
+  // ═══════════════════════════════════════════════════════
+  // Plaintext-Erkennung & Konvertierung
+  // ═══════════════════════════════════════════════════════
+  function istHtml(text) {
+    return /<[a-z][^>]*>/i.test(text || '');
+  }
+
+  function plaintextZuHtml(text) {
+    if (!text) return '';
+    // Einfache Konvertierung: \n → <br>, doppelte \n → </p><p>
+    return '<p>' + text.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Editor-Befehle
+  // ═══════════════════════════════════════════════════════
+  function editorBefehl(cmd, value) {
+    editorEl?.focus();
+    document.execCommand(cmd, false, value || null);
+    editorInhaltSync();
+  }
+
+  function editorInhaltSync() {
+    if (editorEl) {
+      cfg.text_vorlage = editorEl.innerHTML;
+    }
+  }
+
+  function setzeTextFarbe(farbe) {
+    editorBefehl('foreColor', farbe);
+    farbauswahlOffen = false;
+  }
+
+  function linkEinfuegen() {
+    if (!linkUrl.trim()) return;
+    let url = linkUrl.trim();
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    editorBefehl('createLink', url);
+    linkUrl = '';
+    linkDialogOffen = false;
+  }
+
+  function bildEinfuegen() {
+    if (!bildUrl.trim()) return;
+    editorBefehl('insertImage', bildUrl.trim());
+    bildUrl = '';
+    bildDialogOffen = false;
+  }
+
+  function platzhalterEinfuegen(key) {
+    if (quellcodeMode) {
+      quellcodeText += key;
+      return;
+    }
+    editorEl?.focus();
+    // insertHTML statt insertText damit es im contenteditable bleibt
+    document.execCommand('insertHTML', false, '<span>' + key + '</span>');
+    editorInhaltSync();
+  }
+
+  function wechsleQuellcode() {
+    if (quellcodeMode) {
+      // Quellcode → Editor
+      cfg.text_vorlage = quellcodeText;
+      if (editorEl) editorEl.innerHTML = quellcodeText;
+      quellcodeMode = false;
+    } else {
+      // Editor → Quellcode
+      quellcodeText = cfg.text_vorlage;
+      quellcodeMode = true;
+    }
+  }
+
+  function templateAnwenden(tpl) {
+    cfg.text_vorlage = tpl.html;
+    if (editorEl) editorEl.innerHTML = tpl.html;
+    templateAuswahlOffen = false;
+    showToast('Template „' + tpl.name + '" angewendet');
+  }
+
+  function vorschauHtml() {
+    let h = cfg.text_vorlage || '';
+    h = h.replace(/\{\{rechnung_nr\}\}/g, 'RE-2026-00042')
+         .replace(/\{\{kaeufer_name\}\}/g, 'Max Mustermann')
+         .replace(/\{\{datum\}\}/g, '21.04.2026')
+         .replace(/\{\{brutto_betrag\}\}/g, '49,99')
+         .replace(/\{\{firmenname\}\}/g, 'Import & Produkte Vertrieb');
+    return h;
+  }
+
   async function ladeVersandConfig() {
     if (!$currentUser) return;
     configLaeuft = true;
     try {
       const data = await apiCall('email-config-laden', { user_id: $currentUser.id });
       if (data?.config) {
+        let vorlage = data.config.text_vorlage || '';
+        // Plaintext-Erkennung: kein < → konvertieren
+        if (vorlage && !istHtml(vorlage)) {
+          vorlage = plaintextZuHtml(vorlage);
+        }
         cfg = {
           smtp_host:       data.config.smtp_host       || '',
           smtp_port:       data.config.smtp_port       || 587,
@@ -66,9 +242,13 @@
           absender_name:   data.config.absender_name   || '',
           absender_email:  data.config.absender_email  || '',
           betreff_vorlage: data.config.betreff_vorlage || cfg.betreff_vorlage,
-          text_vorlage:    data.config.text_vorlage    || cfg.text_vorlage,
+          text_vorlage:    vorlage || defaultHtmlVorlage,
           auto_versand:    data.config.auto_versand    || false,
         };
+        // Editor befüllen nach Laden
+        setTimeout(() => {
+          if (editorEl) editorEl.innerHTML = cfg.text_vorlage;
+        }, 50);
       }
     } catch(e) {
       console.warn('Email-Config nicht geladen:', e?.message || e);
@@ -119,6 +299,10 @@
   async function speichern() {
     if (!cfg.smtp_host || !cfg.smtp_user) {
       showToast('Bitte SMTP-Host und Benutzername ausfüllen.'); return;
+    }
+    // Quellcode-Mode: übernehmen
+    if (quellcodeMode) {
+      cfg.text_vorlage = quellcodeText;
     }
     speichertLaeuft = true;
     try {
@@ -544,29 +728,143 @@
       </div>
     </div>
 
+    <!-- ═══════════════════════════════════════════════ -->
+    <!-- WYSIWYG E-Mail-Editor                            -->
+    <!-- ═══════════════════════════════════════════════ -->
     <div class="card">
-      <div class="card-titel">📝 E-Mail Vorlage</div>
-      <div class="card-sub">Vorlage für Betreff und Text beim Rechnungsversand. Variablen werden automatisch ersetzt.</div>
+      <div class="card-titel-row">
+        <div>
+          <div class="card-titel">📝 E-Mail Vorlage</div>
+          <div class="card-sub">HTML-Vorlage für den Rechnungsversand. Variablen werden automatisch ersetzt.</div>
+        </div>
+        <div class="editor-actions">
+          <button class="btn-ghost btn-sm" onclick={() => templateAuswahlOffen = !templateAuswahlOffen}>
+            🎨 Templates
+          </button>
+          <button class="btn-ghost btn-sm" onclick={() => vorschauOffen = !vorschauOffen}>
+            {vorschauOffen ? '✏️ Editor' : '👁 Vorschau'}
+          </button>
+        </div>
+      </div>
+
+      <!-- Template-Auswahl -->
+      {#if templateAuswahlOffen}
+        <div class="template-grid">
+          {#each starterTemplates as tpl}
+            <button class="template-card" onclick={() => templateAnwenden(tpl)}>
+              <span class="template-icon">{tpl.icon}</span>
+              <span class="template-name">{tpl.name}</span>
+              <span class="template-desc">{tpl.beschreibung}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Platzhalter-Chips -->
       <div class="variablen-hinweis">
         <span class="var-titel">Variablen:</span>
         {#each variablen as v}
-          <button class="var-chip"
-            onclick={() => { navigator.clipboard?.writeText(v.key); showToast(v.key + ' kopiert'); }}
-            title={v.beschreibung}>
+          <button class="var-chip" onclick={() => platzhalterEinfuegen(v.key)} title={v.beschreibung}>
             {v.key}
           </button>
         {/each}
       </div>
-      <div class="form-grid">
-        <div class="form-group form-span2">
-          <label>Betreff</label>
-          <input bind:value={cfg.betreff_vorlage} placeholder={'Ihre Rechnung {{rechnung_nr}}'} />
-        </div>
-        <div class="form-group form-span2">
-          <label>E-Mail Text</label>
-          <textarea bind:value={cfg.text_vorlage} rows="8" placeholder="E-Mail-Text..."></textarea>
-        </div>
+
+      <!-- Betreff -->
+      <div class="form-group">
+        <label>Betreff</label>
+        <input bind:value={cfg.betreff_vorlage} placeholder={'Ihre Rechnung {{rechnung_nr}}'} />
       </div>
+
+      {#if vorschauOffen}
+        <!-- Live-Vorschau -->
+        <div class="form-group">
+          <label>Vorschau (mit Beispieldaten)</label>
+          <div class="vorschau-email">
+            <div class="vorschau-email-header">
+              <div><span class="vorschau-label">An:</span> max.mustermann@example.com</div>
+              <div><span class="vorschau-label">Betreff:</span> <strong>{cfg.betreff_vorlage.replace(/\{\{rechnung_nr\}\}/g, 'RE-2026-00042')}</strong></div>
+            </div>
+            <div class="vorschau-email-body">
+              {@html vorschauHtml()}
+            </div>
+          </div>
+        </div>
+      {:else if quellcodeMode}
+        <!-- Quellcode-Editor -->
+        <div class="form-group">
+          <div class="editor-toolbar">
+            <button class="tb-btn tb-btn-active" onclick={wechsleQuellcode} title="Zurück zum Editor">
+              ✏️ Visuell
+            </button>
+            <span class="tb-sep"></span>
+            <span class="tb-label">HTML-Quellcode</span>
+          </div>
+          <textarea class="quellcode-textarea" bind:value={quellcodeText} rows="14"
+            placeholder="HTML-Code hier eingeben..."></textarea>
+        </div>
+      {:else}
+        <!-- WYSIWYG Editor -->
+        <div class="form-group">
+          <div class="editor-toolbar">
+            <button class="tb-btn" onclick={() => editorBefehl('bold')} title="Fett (Strg+B)"><strong>F</strong></button>
+            <button class="tb-btn" onclick={() => editorBefehl('italic')} title="Kursiv (Strg+I)"><em>K</em></button>
+            <button class="tb-btn" onclick={() => editorBefehl('underline')} title="Unterstrichen (Strg+U)"><u>U</u></button>
+            <span class="tb-sep"></span>
+            <div class="tb-dropdown-wrap">
+              <button class="tb-btn" onclick={() => farbauswahlOffen = !farbauswahlOffen} title="Textfarbe">
+                🎨
+              </button>
+              {#if farbauswahlOffen}
+                <div class="tb-dropdown farb-dropdown">
+                  {#each textFarben as f}
+                    <button class="farb-btn" style="background:{f}" onclick={() => setzeTextFarbe(f)}
+                      title={f}></button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            <span class="tb-sep"></span>
+            <button class="tb-btn" onclick={() => editorBefehl('justifyLeft')} title="Linksbündig">⬅</button>
+            <button class="tb-btn" onclick={() => editorBefehl('justifyCenter')} title="Zentriert">⬌</button>
+            <button class="tb-btn" onclick={() => editorBefehl('justifyRight')} title="Rechtsbündig">➡</button>
+            <span class="tb-sep"></span>
+            <button class="tb-btn" onclick={() => linkDialogOffen = !linkDialogOffen} title="Link einfügen">🔗</button>
+            <button class="tb-btn" onclick={() => bildDialogOffen = !bildDialogOffen} title="Bild einfügen">🖼️</button>
+            <button class="tb-btn" onclick={() => editorBefehl('insertHorizontalRule')} title="Trennlinie">―</button>
+            <span class="tb-sep"></span>
+            <button class="tb-btn" onclick={wechsleQuellcode} title="HTML-Quellcode bearbeiten">&lt;/&gt;</button>
+          </div>
+
+          <!-- Link-Dialog -->
+          {#if linkDialogOffen}
+            <div class="inline-dialog">
+              <input bind:value={linkUrl} placeholder="https://example.com" class="dialog-input"
+                onkeydown={(e) => e.key === 'Enter' && linkEinfuegen()} />
+              <button class="btn-primary btn-sm" onclick={linkEinfuegen}>Einfügen</button>
+              <button class="btn-ghost btn-sm" onclick={() => { linkDialogOffen = false; linkUrl = ''; }}>✕</button>
+            </div>
+          {/if}
+
+          <!-- Bild-Dialog -->
+          {#if bildDialogOffen}
+            <div class="inline-dialog">
+              <input bind:value={bildUrl} placeholder="https://example.com/logo.png" class="dialog-input"
+                onkeydown={(e) => e.key === 'Enter' && bildEinfuegen()} />
+              <button class="btn-primary btn-sm" onclick={bildEinfuegen}>Einfügen</button>
+              <button class="btn-ghost btn-sm" onclick={() => { bildDialogOffen = false; bildUrl = ''; }}>✕</button>
+            </div>
+          {/if}
+
+          <!-- contenteditable Bereich -->
+          <div class="editor-area"
+            bind:this={editorEl}
+            contenteditable="true"
+            oninput={editorInhaltSync}
+            onblur={editorInhaltSync}
+          ></div>
+        </div>
+      {/if}
     </div>
 
     <div class="card">
@@ -612,7 +910,7 @@
       <ul class="info-liste">
         <li>Für <strong>Gmail</strong>: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">App-Passwort</a> erstellen (kein normales Google-Passwort)</li>
         <li>Zugangsdaten werden <strong>pro User</strong> separat gespeichert</li>
-        <li>Passwort wird Base64-kodiert gespeichert und nie im Frontend angezeigt</li>
+        <li>Die E-Mail-Vorlage unterstützt jetzt <strong>HTML-Formatierung</strong> — nutze die Toolbar oder wechsle zum Quellcode</li>
         <li>Rechnungen können einzeln oder als Batch per E-Mail gesendet werden</li>
       </ul>
     </div>
@@ -914,6 +1212,8 @@
   .card-test { border-color:var(--primary); }
   .card-info { background:var(--primary-light); border-color:var(--primary); }
   .card-status { background:var(--surface2); }
+  .card-titel-row { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .editor-actions { display:flex; gap:6px; flex-shrink:0; }
 
   .anbieter-grid { display:flex; gap:8px; flex-wrap:wrap; }
   .anbieter-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:6px 14px; border-radius:8px; font-size:0.8rem; cursor:pointer; transition:all 0.15s; }
@@ -949,6 +1249,98 @@
   .var-titel { font-size:0.75rem; font-weight:600; color:var(--text2); white-space:nowrap; }
   .var-chip { background:var(--surface); border:1px solid var(--border); color:var(--primary); padding:2px 8px; border-radius:5px; font-size:0.75rem; font-family:monospace; cursor:pointer; transition:all 0.1s; }
   .var-chip:hover { background:var(--primary); color:#fff; border-color:var(--primary); }
+
+  /* ═══════════════════════════════════════════════ */
+  /* WYSIWYG Editor Styles                           */
+  /* ═══════════════════════════════════════════════ */
+  .editor-toolbar {
+    display:flex; align-items:center; gap:2px; padding:6px 8px;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:8px 8px 0 0; border-bottom:none; flex-wrap:wrap;
+  }
+  .tb-btn {
+    background:transparent; border:1px solid transparent; color:var(--text);
+    width:32px; height:30px; border-radius:5px; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:0.82rem; transition:all 0.1s;
+  }
+  .tb-btn:hover { background:var(--surface); border-color:var(--border); }
+  .tb-btn-active { background:var(--primary); color:#fff !important; border-color:var(--primary); }
+  .tb-btn-active:hover { background:var(--primary); filter:brightness(1.1); }
+  .tb-sep { width:1px; height:20px; background:var(--border); margin:0 4px; flex-shrink:0; }
+  .tb-label { font-size:0.75rem; color:var(--text2); font-weight:500; margin-left:4px; }
+  .tb-dropdown-wrap { position:relative; }
+  .tb-dropdown {
+    position:absolute; top:100%; left:0; z-index:20;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:8px; padding:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12);
+    margin-top:4px;
+  }
+  .farb-dropdown { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; width:140px; }
+  .farb-btn { width:28px; height:28px; border:2px solid transparent; border-radius:5px; cursor:pointer; transition:all 0.1s; }
+  .farb-btn:hover { border-color:var(--text); transform:scale(1.15); }
+
+  .editor-area {
+    min-height:220px; max-height:500px; overflow-y:auto;
+    padding:14px 16px; border:1px solid var(--border);
+    border-radius:0 0 8px 8px; background:var(--surface);
+    color:var(--text); font-size:0.88rem; line-height:1.7;
+    font-family:Arial, sans-serif; outline:none;
+  }
+  .editor-area:focus { border-color:var(--primary); }
+  .editor-area :global(img) { max-width:100%; height:auto; border-radius:4px; margin:4px 0; }
+  .editor-area :global(a) { color:var(--primary); }
+  .editor-area :global(hr) { border:none; border-top:1px solid var(--border); margin:12px 0; }
+
+  .quellcode-textarea {
+    font-family:'Courier New', monospace; font-size:0.82rem;
+    line-height:1.5; min-height:220px; resize:vertical;
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:0 0 8px 8px; color:var(--text);
+    padding:14px 16px; outline:none; width:100%; box-sizing:border-box;
+  }
+  .quellcode-textarea:focus { border-color:var(--primary); }
+
+  .inline-dialog {
+    display:flex; gap:6px; align-items:center; padding:8px 10px;
+    background:var(--surface2); border:1px solid var(--border);
+    border-radius:6px; margin-top:-1px;
+  }
+  .dialog-input {
+    flex:1; background:var(--surface); border:1px solid var(--border);
+    color:var(--text); padding:6px 10px; border-radius:6px;
+    font-size:0.82rem; outline:none; min-width:200px;
+  }
+  .dialog-input:focus { border-color:var(--primary); }
+
+  /* Template-Auswahl */
+  .template-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:10px; }
+  .template-card {
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:14px 10px; background:var(--surface2); border:1px solid var(--border);
+    border-radius:10px; cursor:pointer; transition:all 0.15s; text-align:center;
+  }
+  .template-card:hover { border-color:var(--primary); background:var(--surface); transform:translateY(-1px); }
+  .template-icon { font-size:1.5rem; }
+  .template-name { font-size:0.82rem; font-weight:600; color:var(--text); }
+  .template-desc { font-size:0.7rem; color:var(--text2); line-height:1.4; }
+
+  /* E-Mail Vorschau */
+  .vorschau-email {
+    border:1px solid var(--border); border-radius:10px; overflow:hidden;
+    background:#ffffff;
+  }
+  .vorschau-email-header {
+    padding:12px 16px; background:var(--surface2);
+    border-bottom:1px solid var(--border);
+    font-size:0.82rem; color:var(--text2);
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .vorschau-email-body {
+    padding:20px 24px; font-size:0.88rem; color:#333;
+    line-height:1.7; font-family:Arial, sans-serif;
+  }
+  .vorschau-email-body :global(img) { max-width:100%; height:auto; }
 
   .test-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
   .test-row input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:8px; font-size:0.85rem; outline:none; box-sizing:border-box; }
@@ -997,5 +1389,7 @@
     .form-grid { grid-template-columns:1fr; }
     .form-span2 { grid-column:1; }
     .status-grid { grid-template-columns:1fr; }
+    .template-grid { grid-template-columns:repeat(2, 1fr); }
+    .card-titel-row { flex-direction:column; }
   }
 </style>
