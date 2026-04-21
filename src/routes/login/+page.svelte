@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { login, verify2FA, setAuth } from '$lib/api.js';
   import { currentUser } from '$lib/stores.js';
+  import { sessionExpired } from '$lib/stores.js'
 
   let email = '';
   let password = '';
@@ -64,11 +65,12 @@
   }
 
   function finishLogin(data) {
-    const user = { ...data.user, trial_end: data.trial_end, plan: data.user.plan || 'starter' };
-    setAuth(data.token, user);
-    currentUser.set(user);
-    goto('/');
-  }
+  sessionExpired.set(false);  // ← NEU
+  const user = { ...data.user, trial_end: data.trial_end, plan: data.user.plan || 'starter' };
+  setAuth(data.token, user);
+  currentUser.set(user);
+  goto('/');
+}
 
   function onKeydown(e) {
     if (e.key === 'Enter') {
