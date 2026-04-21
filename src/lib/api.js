@@ -51,9 +51,13 @@ async function apiCall(path, body = {}, method = 'POST') {
 
   const data = await res.json();
 
-  if (data && data.success === false && data.message && /token|autoris|auth/i.test(data.message)) {
-    sessionExpired.set(true);
-    throw new Error('Session abgelaufen');
+  const sessionErrorPhrases = ['nicht autorisiert', 'session abgelaufen', 'nicht authentifiziert'];
+  if (data && data.success === false && data.message) {
+    const msg = data.message.toLowerCase();
+    if (sessionErrorPhrases.some(phrase => msg.includes(phrase))) {
+      sessionExpired.set(true);
+      throw new Error('Session abgelaufen');
+    }
   }
 
   return data;
