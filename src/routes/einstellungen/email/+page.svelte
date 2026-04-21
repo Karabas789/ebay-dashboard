@@ -77,6 +77,45 @@
     }
   }
 
+   async function toggleAutoVersand() {
+    cfg.auto_versand = !cfg.auto_versand;
+    try {
+      await apiCall('email-config-speichern', { user_id: $currentUser.id, ...cfg });
+      showToast(cfg.auto_versand ? '✅ Auto-Versand aktiviert' : 'Auto-Versand deaktiviert');
+    } catch(e) {
+      cfg.auto_versand = !cfg.auto_versand;
+      showToast('Fehler: ' + e.message);
+    }
+  }
+
+  async function toggleImapAktiv() {
+    imap.aktiv = !imap.aktiv;
+    try {
+      await apiCall('imap-config', { user_id: $currentUser.id, action: 'save', ...imap });
+      showToast(imap.aktiv ? '✅ IMAP-Import aktiviert' : 'IMAP-Import deaktiviert');
+    } catch(e) {
+      imap.aktiv = !imap.aktiv;
+      showToast('Fehler: ' + e.message);
+    }
+  }
+
+  async function toggleKaufNachricht() {
+    kauf.kauf_nachricht_aktiv = !kauf.kauf_nachricht_aktiv;
+    try {
+      await apiCall('kauf-nachricht-config', {
+        action: 'save',
+        user_id: $currentUser.id,
+        kauf_nachricht_aktiv: kauf.kauf_nachricht_aktiv,
+        kauf_nachricht_betreff: kauf.kauf_nachricht_betreff,
+        kauf_nachricht_vorlage: kauf.kauf_nachricht_vorlage
+      });
+      showToast(kauf.kauf_nachricht_aktiv ? '✅ Kauf-Nachricht aktiviert' : 'Kauf-Nachricht deaktiviert');
+    } catch(e) {
+      kauf.kauf_nachricht_aktiv = !kauf.kauf_nachricht_aktiv;
+      showToast('Fehler: ' + e.message);
+    }
+  }
+
   async function speichern() {
     if (!cfg.smtp_host || !cfg.smtp_user) {
       showToast('Bitte SMTP-Host und Benutzername ausfüllen.'); return;
@@ -541,7 +580,7 @@
           </div>
         </div>
         <button class="toggle-btn {cfg.auto_versand ? 'toggle-an' : 'toggle-aus'}"
-          onclick={() => cfg.auto_versand = !cfg.auto_versand}>
+          onclick={toggleAutoVersand}>
           <span class="toggle-thumb"></span>
         </button>
       </div>
@@ -680,7 +719,7 @@
           </div>
         </div>
         <button class="toggle-btn {imap.aktiv ? 'toggle-an' : 'toggle-aus'}"
-          onclick={() => imap.aktiv = !imap.aktiv}>
+          onclick={toggleImapAktiv}>
           <span class="toggle-thumb"></span>
         </button>
       </div>
@@ -775,7 +814,7 @@
           </div>
         </div>
         <button class="toggle-btn {kauf.kauf_nachricht_aktiv ? 'toggle-an' : 'toggle-aus'}"
-          onclick={() => kauf.kauf_nachricht_aktiv = !kauf.kauf_nachricht_aktiv}>
+          onclick={toggleKaufNachricht}>
           <span class="toggle-thumb"></span>
         </button>
       </div>
