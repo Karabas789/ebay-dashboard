@@ -757,396 +757,28 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════ -->
-    <!-- E-MAIL BLOCK-BUILDER                             -->
-    <!-- ═══════════════════════════════════════════════ -->
-    <div class="card card-builder">
+    <!-- E-Mail Vorlage (Verweis auf Unterseite) -->
+    <div class="card">
       <div class="card-titel-row">
         <div>
           <div class="card-titel">📝 E-Mail Vorlage</div>
-          <div class="card-sub">Baue deine E-Mail aus Bausteinen zusammen</div>
+          <div class="card-sub">HTML-Vorlage für den Rechnungsversand</div>
         </div>
-        <div class="builder-top-actions">
-          <button class="btn-ghost btn-sm" onclick={() => templateModalOffen = true}>🎨 Vorlagen</button>
-          <button class="btn-ghost btn-sm" onclick={() => { vorschauOffen = !vorschauOffen; htmlCodeOffen = false; }}>
-            {vorschauOffen ? '✏️ Editor' : '👁 Vorschau'}
-          </button>
-          <button class="btn-ghost btn-sm" onclick={() => { htmlCodeOffen = !htmlCodeOffen; vorschauOffen = false; }}>
-            {htmlCodeOffen ? '✏️ Editor' : '⟨/⟩ HTML'}
-          </button>
-        </div>
+        <button class="btn-primary" onclick={() => goto('/einstellungen/email/vorlage')}>
+          ✏️ Vorlage bearbeiten
+        </button>
       </div>
-
-      <!-- Variablen-Chips -->
-      <div class="variablen-bar">
-        <span class="var-titel">Variablen:</span>
-        {#each variablen as v}
-          <button class="var-chip" title={v.beschreibung} onclick={() => { navigator.clipboard.writeText(v.key); showToast('Kopiert: ' + v.key); }}>{v.key}</button>
-        {/each}
-      </div>
-
-      <!-- Betreff -->
-      <div class="form-group" style="padding:0 0 8px">
+      <div class="form-group">
         <label>Betreff</label>
         <input bind:value={cfg.betreff_vorlage} placeholder={'Ihre Rechnung {{rechnung_nr}}'} />
       </div>
-
-      {#if vorschauOffen}
-        <!-- VORSCHAU -->
-        <div class="vorschau-wrap">
-          <div class="vorschau-header">
-            <div><span class="vorschau-label">An:</span> max.mustermann@example.com</div>
-            <div><span class="vorschau-label">Betreff:</span> <strong>{cfg.betreff_vorlage.replace(/\{\{rechnung_nr\}\}/g, 'RE-2026-00042')}</strong></div>
-          </div>
-          <div class="vorschau-canvas">
-            {@html vorschauHtml()}
-          </div>
-        </div>
-      {:else if htmlCodeOffen}
-        <!-- HTML CODE -->
-        <div class="form-group">
-          <textarea class="html-code-area" rows="18" readonly>{generateFullHtml()}</textarea>
-          <button class="btn-ghost btn-sm" style="align-self:flex-start;margin-top:6px" onclick={() => { navigator.clipboard.writeText(generateFullHtml()); showToast('HTML kopiert!'); }}>📋 HTML kopieren</button>
+      {#if blocks.length > 0}
+        <div class="vorlage-preview-info">
+          ✅ Vorlage vorhanden — {blocks.length} {blocks.length === 1 ? 'Baustein' : 'Bausteine'}
         </div>
       {:else}
-        <!-- BLOCK-BUILDER -->
-        <div class="builder-layout">
-          <!-- Palette (links) -->
-          <div class="palette">
-            <div class="palette-section-title">Struktur</div>
-            {#each bausteinListe.filter(b => b.group === 'struktur') as b}
-              <button class="block-item" onclick={() => addBlock(b.type)}>
-                <span class="block-icon">{b.icon}</span>
-                <span class="block-info"><span class="block-name">{b.name}</span><span class="block-desc">{b.desc}</span></span>
-              </button>
-            {/each}
-            <div class="palette-section-title" style="margin-top:14px">Inhalt</div>
-            {#each bausteinListe.filter(b => b.group === 'inhalt') as b}
-              <button class="block-item" onclick={() => addBlock(b.type)}>
-                <span class="block-icon">{b.icon}</span>
-                <span class="block-info"><span class="block-name">{b.name}</span><span class="block-desc">{b.desc}</span></span>
-              </button>
-            {/each}
-          </div>
-
-          <!-- Canvas (mitte) -->
-          <div class="canvas-scroll">
-            <div class="email-frame">
-              <div class="email-canvas">
-                {#if blocks.length === 0}
-                  <div class="drop-empty">
-                    <div class="drop-empty-icon">📧</div>
-                    <div>Klicke links auf Bausteine<br>um deine Vorlage zu erstellen</div>
-                    <button class="btn-ghost btn-sm" style="margin-top:12px" onclick={() => templateModalOffen = true}>🎨 Oder wähle eine Vorlage</button>
-                  </div>
-                {:else}
-                  {#each blocks as block, i (block.id)}
-                    <div class="canvas-block" class:selected={selectedBlockId === block.id}>
-                      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                      <div class="canvas-block-inner" onclick={() => selectBlock(block.id)}>
-                        <div class="block-actions">
-                          {#if i > 0}<button class="ba-btn" onclick={(e) => { e.stopPropagation(); moveBlock(block.id, -1); }} title="Nach oben">↑</button>{/if}
-                          {#if i < blocks.length - 1}<button class="ba-btn" onclick={(e) => { e.stopPropagation(); moveBlock(block.id, 1); }} title="Nach unten">↓</button>{/if}
-                          <button class="ba-btn" onclick={(e) => { e.stopPropagation(); duplicateBlock(block.id); }} title="Duplizieren">⎘</button>
-                          <button class="ba-btn" onclick={(e) => { e.stopPropagation(); deleteBlock(block.id); }} title="Löschen">✕</button>
-                        </div>
-
-                        <!-- Block rendering -->
-                        {#if block.type === 'header'}
-                          <div class="b-header" style="background:{block.bgColor};color:{block.textColor};{block.borderRadius ? 'border-radius:12px 12px 0 0;' : ''}">
-                            {#if block.icon}<div class="b-header-icon">{block.icon}</div>{/if}
-                            <h2>{block.title}</h2>
-                            {#if block.subtitle}<div class="b-header-sub">{block.subtitle}</div>{/if}
-                          </div>
-                        {:else if block.type === 'text'}
-                          <div class="b-text">{@html block.content}</div>
-                        {:else if block.type === 'infobox'}
-                          <div class="b-infobox style-{block.style}">{@html block.content}</div>
-                        {:else if block.type === 'amount'}
-                          <div class="b-amount" style="background:{block.bgColor};border-color:{block.accentColor}">
-                            <div class="amount-label" style="color:{block.accentColor}">{block.label}</div>
-                            <div class="amount-value" style="color:{block.accentColor}">{block.value}</div>
-                            {#if block.sublabel}<div class="amount-sub">{block.sublabel}</div>{/if}
-                          </div>
-                        {:else if block.type === 'button'}
-                          <div class="b-button-wrap">
-                            <span class="b-button" style="background:{block.bgColor};color:{block.textColor};border-radius:{block.borderRadius}px">{block.text}</span>
-                          </div>
-                        {:else if block.type === 'divider'}
-                          <div class="b-divider {block.style === 'bold' ? 'style-bold' : ''} {block.style === 'colored' ? 'style-colored' : ''}"><hr /></div>
-                        {:else if block.type === 'spacer'}
-                          <div class="b-spacer" style="height:{block.height}px"></div>
-                        {:else if block.type === 'image'}
-                          <div class="b-image">
-                            {#if block.url}
-                              <img src={block.url} alt={block.alt} style="max-width:{block.maxWidth}" />
-                            {:else}
-                              <div class="img-placeholder">🖼️ Bild-URL in Eigenschaften eingeben</div>
-                            {/if}
-                          </div>
-                        {:else if block.type === 'signature'}
-                          <div class="b-signature">
-                            <strong>{block.name}</strong><br>
-                            {@html (block.details||'').replace(/\n/g, '<br>')}<br>
-                            {#if block.phone}📞 {block.phone}<br>{/if}
-                            {#if block.email}📧 {block.email}{/if}
-                          </div>
-                        {:else if block.type === 'columns'}
-                          <div class="b-columns">
-                            <div class="col">{block.left}</div>
-                            <div class="col">{block.right}</div>
-                          </div>
-                        {/if}
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-                <!-- Footer immer sichtbar -->
-                <div class="email-footer">
-                  Dieses Schreiben wurde automatisch erstellt, bitte nicht darauf antworten.<br>
-                  © 2026 {'{{firmenname}}'}. Alle Rechte vorbehalten.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Properties (rechts) -->
-          <div class="props-panel">
-            {#if selectedBlock}
-              <div class="props-header">
-                <div class="props-title">⚙️ Eigenschaften</div>
-                <div class="props-sub">
-                  {#if selectedBlock.type === 'header'}🎨 Kopfbereich
-                  {:else if selectedBlock.type === 'text'}📝 Text
-                  {:else if selectedBlock.type === 'infobox'}📋 Info-Box
-                  {:else if selectedBlock.type === 'amount'}💰 Betrag
-                  {:else if selectedBlock.type === 'button'}🔘 Button
-                  {:else if selectedBlock.type === 'divider'}➖ Trennlinie
-                  {:else if selectedBlock.type === 'spacer'}↕️ Abstand
-                  {:else if selectedBlock.type === 'image'}🖼️ Bild
-                  {:else if selectedBlock.type === 'signature'}📇 Signatur
-                  {:else if selectedBlock.type === 'columns'}▥ Spalten
-                  {/if}
-                </div>
-              </div>
-
-              <!-- HEADER PROPS -->
-              {#if selectedBlock.type === 'header'}
-                <div class="props-section">
-                  <div class="ps-title">Inhalt</div>
-                  <div class="prop-row"><label>Icon / Emoji</label><input value={selectedBlock.icon || ''} oninput={(e) => updateBlock(selectedBlock.id, 'icon', e.target.value)} /></div>
-                  <div class="prop-row"><label>Titel</label><input value={selectedBlock.title} oninput={(e) => updateBlock(selectedBlock.id, 'title', e.target.value)} /></div>
-                  <div class="prop-row"><label>Untertitel</label><input value={selectedBlock.subtitle || ''} oninput={(e) => updateBlock(selectedBlock.id, 'subtitle', e.target.value)} /></div>
-                </div>
-                <div class="props-section">
-                  <div class="ps-title">Hintergrund</div>
-                  <div class="color-row">
-                    {#each headerFarben as c}<button class="color-swatch" class:active={selectedBlock.bgColor === c} style="background:{c}" onclick={() => updateBlock(selectedBlock.id, 'bgColor', c)}></button>{/each}
-                  </div>
-                </div>
-
-              <!-- TEXT PROPS (WYSIWYG) -->
-              {:else if selectedBlock.type === 'text'}
-                <div class="props-section">
-                  <div class="ps-title">Text bearbeiten</div>
-                  <!-- Toolbar -->
-                  <div class="ed-toolbar">
-                    <button class="ed-btn" onclick={() => richEditorCmd('bold')} title="Fett"><strong>F</strong></button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('italic')} title="Kursiv"><em>K</em></button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('underline')} title="Unterstrichen"><u>U</u></button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('strikeThrough')} title="Durchgestrichen"><s>S</s></button>
-                    <span class="ed-sep"></span>
-                    <select class="ed-select" onchange={(e) => { richEditorCmd('fontSize', e.target.value); e.target.value = ''; }} title="Schriftgröße">
-                      <option value="" disabled selected>Aa</option>
-                      {#each fontSizes as fs}<option value={fs.value}>{fs.label}</option>{/each}
-                    </select>
-                    <span class="ed-sep"></span>
-                    <div class="ed-dropdown-wrap">
-                      <button class="ed-btn" onclick={() => { showColorPicker = !showColorPicker; showLinkDialog = false; }} title="Textfarbe">🎨</button>
-                      {#if showColorPicker}
-                        <div class="ed-dropdown ed-color-grid">
-                          {#each editorTextFarben as f}
-                            <button class="ed-color-btn" style="background:{f}" onclick={() => setEditorColor(f)}></button>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                    <span class="ed-sep"></span>
-                    <button class="ed-btn" onclick={() => richEditorCmd('justifyLeft')} title="Links">⬅</button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('justifyCenter')} title="Zentriert">⬌</button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('justifyRight')} title="Rechts">➡</button>
-                    <span class="ed-sep"></span>
-                    <button class="ed-btn" onclick={() => richEditorCmd('insertUnorderedList')} title="Aufzählung">•≡</button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('insertOrderedList')} title="Nummerierung">1≡</button>
-                    <span class="ed-sep"></span>
-                    <div class="ed-dropdown-wrap">
-                      <button class="ed-btn" onclick={() => { showLinkDialog = !showLinkDialog; showColorPicker = false; }} title="Link">🔗</button>
-                      {#if showLinkDialog}
-                        <div class="ed-dropdown ed-link-dialog">
-                          <input class="ed-link-input" bind:value={linkInputUrl} placeholder="https://..." onkeydown={(e) => e.key === 'Enter' && insertEditorLink()} />
-                          <button class="btn-primary btn-sm" onclick={insertEditorLink}>OK</button>
-                        </div>
-                      {/if}
-                    </div>
-                    <button class="ed-btn" onclick={() => richEditorCmd('removeFormat')} title="Formatierung entfernen">⊘</button>
-                    <span class="ed-sep"></span>
-                    <button class="ed-btn" class:ed-btn-active={showHtmlMode} onclick={toggleHtmlMode} title="HTML-Quellcode">&lt;/&gt;</button>
-                  </div>
-                  <!-- Variablen schnell einfügen -->
-                  <div class="ed-var-row">
-                    {#each variablen as v}
-                      <button class="ed-var-chip" onclick={() => insertVariable(v.key)} title={v.beschreibung}>{v.key}</button>
-                    {/each}
-                  </div>
-                  <!-- Editor / HTML -->
-                  {#if showHtmlMode}
-                    <textarea class="ed-html-area" rows="10" bind:value={htmlRawText} oninput={() => { if (richEditorBlockId) updateBlock(richEditorBlockId, 'content', htmlRawText); }}></textarea>
-                  {:else}
-                    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                    <div class="ed-richtext"
-                      bind:this={richEditorEl}
-                      contenteditable="true"
-                      oninput={syncRichEditor}
-                      onblur={syncRichEditor}
-                    ></div>
-                  {/if}
-                </div>
-
-              <!-- INFOBOX PROPS -->
-              {:else if selectedBlock.type === 'infobox'}
-                <div class="props-section">
-                  <div class="ps-title">Farbe</div>
-                  <div class="color-row">
-                    <button class="color-swatch" class:active={selectedBlock.style==='blue'} style="background:#2563eb" onclick={() => updateBlock(selectedBlock.id, 'style', 'blue')}></button>
-                    <button class="color-swatch" class:active={selectedBlock.style==='green'} style="background:#10b981" onclick={() => updateBlock(selectedBlock.id, 'style', 'green')}></button>
-                    <button class="color-swatch" class:active={selectedBlock.style==='yellow'} style="background:#f59e0b" onclick={() => updateBlock(selectedBlock.id, 'style', 'yellow')}></button>
-                    <button class="color-swatch" class:active={selectedBlock.style==='red'} style="background:#ef4444" onclick={() => updateBlock(selectedBlock.id, 'style', 'red')}></button>
-                  </div>
-                </div>
-                <div class="props-section">
-                  <div class="ps-title">Inhalt bearbeiten</div>
-                  <div class="ed-toolbar">
-                    <button class="ed-btn" onclick={() => richEditorCmd('bold')} title="Fett"><strong>F</strong></button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('italic')} title="Kursiv"><em>K</em></button>
-                    <button class="ed-btn" onclick={() => richEditorCmd('underline')} title="Unterstrichen"><u>U</u></button>
-                    <span class="ed-sep"></span>
-                    <select class="ed-select" onchange={(e) => { richEditorCmd('fontSize', e.target.value); e.target.value = ''; }} title="Schriftgröße">
-                      <option value="" disabled selected>Aa</option>
-                      {#each fontSizes as fs}<option value={fs.value}>{fs.label}</option>{/each}
-                    </select>
-                    <span class="ed-sep"></span>
-                    <div class="ed-dropdown-wrap">
-                      <button class="ed-btn" onclick={() => { showColorPicker = !showColorPicker; showLinkDialog = false; }} title="Textfarbe">🎨</button>
-                      {#if showColorPicker}
-                        <div class="ed-dropdown ed-color-grid">
-                          {#each editorTextFarben as f}
-                            <button class="ed-color-btn" style="background:{f}" onclick={() => setEditorColor(f)}></button>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                    <span class="ed-sep"></span>
-                    <button class="ed-btn" class:ed-btn-active={showHtmlMode} onclick={toggleHtmlMode} title="HTML">&lt;/&gt;</button>
-                  </div>
-                  <div class="ed-var-row">
-                    {#each variablen as v}
-                      <button class="ed-var-chip" onclick={() => insertVariable(v.key)} title={v.beschreibung}>{v.key}</button>
-                    {/each}
-                  </div>
-                  {#if showHtmlMode}
-                    <textarea class="ed-html-area" rows="6" bind:value={htmlRawText} oninput={() => { if (richEditorBlockId) updateBlock(richEditorBlockId, 'content', htmlRawText); }}></textarea>
-                  {:else}
-                    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-                    <div class="ed-richtext ed-richtext-sm"
-                      bind:this={richEditorEl}
-                      contenteditable="true"
-                      oninput={syncRichEditor}
-                      onblur={syncRichEditor}
-                    ></div>
-                  {/if}
-                </div>
-
-              <!-- AMOUNT PROPS -->
-              {:else if selectedBlock.type === 'amount'}
-                <div class="props-section">
-                  <div class="ps-title">Inhalt</div>
-                  <div class="prop-row"><label>Beschriftung</label><input value={selectedBlock.label} oninput={(e) => updateBlock(selectedBlock.id, 'label', e.target.value)} /></div>
-                  <div class="prop-row"><label>Wert</label><input value={selectedBlock.value} oninput={(e) => updateBlock(selectedBlock.id, 'value', e.target.value)} /></div>
-                  <div class="prop-row"><label>Unterbeschriftung</label><input value={selectedBlock.sublabel || ''} oninput={(e) => updateBlock(selectedBlock.id, 'sublabel', e.target.value)} /></div>
-                </div>
-                <div class="props-section">
-                  <div class="ps-title">Akzentfarbe</div>
-                  <div class="color-row">
-                    {#each accentFarben as c}<button class="color-swatch" class:active={selectedBlock.accentColor === c} style="background:{c}" onclick={() => updateBlock(selectedBlock.id, 'accentColor', c)}></button>{/each}
-                  </div>
-                </div>
-
-              <!-- BUTTON PROPS -->
-              {:else if selectedBlock.type === 'button'}
-                <div class="props-section">
-                  <div class="ps-title">Inhalt</div>
-                  <div class="prop-row"><label>Button-Text</label><input value={selectedBlock.text} oninput={(e) => updateBlock(selectedBlock.id, 'text', e.target.value)} /></div>
-                  <div class="prop-row"><label>Link-URL</label><input value={selectedBlock.url} oninput={(e) => updateBlock(selectedBlock.id, 'url', e.target.value)} /></div>
-                </div>
-                <div class="props-section">
-                  <div class="ps-title">Hintergrund</div>
-                  <div class="color-row">
-                    {#each buttonFarben as c}<button class="color-swatch" class:active={selectedBlock.bgColor === c} style="background:{c}" onclick={() => updateBlock(selectedBlock.id, 'bgColor', c)}></button>{/each}
-                  </div>
-                </div>
-
-              <!-- DIVIDER PROPS -->
-              {:else if selectedBlock.type === 'divider'}
-                <div class="props-section">
-                  <div class="ps-title">Stil</div>
-                  <div class="divider-btns">
-                    <button class="btn-ghost btn-sm" class:btn-active={selectedBlock.style==='normal'} onclick={() => updateBlock(selectedBlock.id, 'style', 'normal')}>Normal</button>
-                    <button class="btn-ghost btn-sm" class:btn-active={selectedBlock.style==='bold'} onclick={() => updateBlock(selectedBlock.id, 'style', 'bold')}>Dick</button>
-                    <button class="btn-ghost btn-sm" class:btn-active={selectedBlock.style==='colored'} onclick={() => updateBlock(selectedBlock.id, 'style', 'colored')}>Farbig</button>
-                  </div>
-                </div>
-
-              <!-- SPACER PROPS -->
-              {:else if selectedBlock.type === 'spacer'}
-                <div class="props-section">
-                  <div class="ps-title">Höhe (px)</div>
-                  <input type="number" value={selectedBlock.height} oninput={(e) => updateBlock(selectedBlock.id, 'height', parseInt(e.target.value) || 24)} />
-                </div>
-
-              <!-- IMAGE PROPS -->
-              {:else if selectedBlock.type === 'image'}
-                <div class="props-section">
-                  <div class="ps-title">Bild</div>
-                  <div class="prop-row"><label>URL</label><input value={selectedBlock.url || ''} oninput={(e) => updateBlock(selectedBlock.id, 'url', e.target.value)} placeholder="https://..." /></div>
-                  <div class="prop-row"><label>Alt-Text</label><input value={selectedBlock.alt || ''} oninput={(e) => updateBlock(selectedBlock.id, 'alt', e.target.value)} /></div>
-                  <div class="prop-row"><label>Max. Breite</label><input value={selectedBlock.maxWidth || '100%'} oninput={(e) => updateBlock(selectedBlock.id, 'maxWidth', e.target.value)} placeholder="200px oder 50%" /></div>
-                </div>
-
-              <!-- SIGNATURE PROPS -->
-              {:else if selectedBlock.type === 'signature'}
-                <div class="props-section">
-                  <div class="ps-title">Firmendaten</div>
-                  <div class="prop-row"><label>Firmenname</label><input value={selectedBlock.name} oninput={(e) => updateBlock(selectedBlock.id, 'name', e.target.value)} /></div>
-                  <div class="prop-row"><label>Details</label><textarea rows="4" oninput={(e) => updateBlock(selectedBlock.id, 'details', e.target.value)}>{selectedBlock.details}</textarea></div>
-                  <div class="prop-row"><label>Telefon</label><input value={selectedBlock.phone || ''} oninput={(e) => updateBlock(selectedBlock.id, 'phone', e.target.value)} /></div>
-                  <div class="prop-row"><label>E-Mail</label><input value={selectedBlock.email || ''} oninput={(e) => updateBlock(selectedBlock.id, 'email', e.target.value)} /></div>
-                </div>
-
-              <!-- COLUMNS PROPS -->
-              {:else if selectedBlock.type === 'columns'}
-                <div class="props-section">
-                  <div class="ps-title">Spalten</div>
-                  <div class="prop-row"><label>Links</label><textarea rows="3" oninput={(e) => updateBlock(selectedBlock.id, 'left', e.target.value)}>{selectedBlock.left}</textarea></div>
-                  <div class="prop-row"><label>Rechts</label><textarea rows="3" oninput={(e) => updateBlock(selectedBlock.id, 'right', e.target.value)}>{selectedBlock.right}</textarea></div>
-                </div>
-              {/if}
-            {:else}
-              <div class="props-empty">
-                <div style="font-size:1.8rem;margin-bottom:10px;opacity:0.3">👈</div>
-                <div>Wähle einen Block auf der Leinwand</div>
-              </div>
-            {/if}
-          </div>
+        <div class="vorlage-preview-info vorlage-leer">
+          Noch keine Vorlage erstellt — klicke auf „Vorlage bearbeiten" um loszulegen
         </div>
       {/if}
     </div>
@@ -1333,30 +965,6 @@
   {/if}
 </div>
 
-<!-- ═══════════════════════════════════════════════ -->
-<!-- TEMPLATE MODAL                                    -->
-<!-- ═══════════════════════════════════════════════ -->
-{#if templateModalOffen}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="modal-overlay" onclick={() => templateModalOffen = false}>
-    <div class="modal-box" style="max-width:680px" onclick={(e) => e.stopPropagation()}>
-      <div class="modal-title">🎨 Vorlage wählen</div>
-      <div class="card-sub" style="margin-bottom:16px">Wähle einen Startpunkt — du kannst danach alles anpassen.</div>
-      <div class="template-grid">
-        {#each starterTemplates as tpl}
-          <button class="template-card" onclick={() => loadTemplate(tpl.key)}>
-            <span class="template-icon">{tpl.icon}</span>
-            <span class="template-name">{tpl.name}</span>
-            <span class="template-desc">{tpl.beschreibung}</span>
-          </button>
-        {/each}
-      </div>
-      <div style="text-align:right;margin-top:18px">
-        <button class="btn-ghost" onclick={() => templateModalOffen = false}>Schließen</button>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <style>
   .page-container { padding: 24px; max-width: 1400px; margin: 0 auto; }
@@ -1535,6 +1143,9 @@
   .vorschau-meta { display:flex; gap:10px; font-size:0.8rem; }
   .vorschau-trenner { height:1px; background:var(--border); margin:8px 0; }
   .vorschau-body { white-space:pre-wrap; font-size:0.84rem; color:var(--text); line-height:1.6; }
+
+  .vorlage-preview-info { padding:10px 14px; border-radius:8px; font-size:0.8rem; background:#f0fdf4; border:1px solid #bbf7d0; color:#16a34a; }
+  .vorlage-preview-info.vorlage-leer { background:var(--surface2); border:1px solid var(--border); color:var(--text2); }
 
   .info-liste { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:5px; }
   .info-liste li { font-size:0.78rem; color:var(--text2); line-height:1.5; }
