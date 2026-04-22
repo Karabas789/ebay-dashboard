@@ -410,6 +410,16 @@
                 <button class="vb-csw" class:act={selectedBlock.style==='red'} style="background:#ef4444" onclick={()=>updateBlock(selectedBlock.id,'style','red')}></button>
               </div></div>
             {/if}
+            {#if selectedBlock.type==='text'}
+              <div class="vb-ps"><div class="vb-ps-t">Zeilenabstand</div>
+                <div class="vb-div-btns">
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='1.2'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','1.2')}>Eng</button>
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='1.5'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','1.5')}>Normal</button>
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='1.7'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','1.7')}>Weit</button>
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='2.0'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','2.0')}>Sehr weit</button>
+                </div>
+              </div>
+            {/if}
             <div class="vb-ps"><div class="vb-ps-t">Text bearbeiten</div>
               <div class="ed-toolbar">
                 <button class="ed-btn" onclick={()=>richEditorCmd('bold')} title="Fett"><strong>F</strong></button>
