@@ -233,11 +233,22 @@
   async function speichern() {
     speichertLaeuft = true;
     try {
+      // Zuerst bestehende Config laden um SMTP-Felder nicht zu verlieren
+      const existing = await apiCall('email-config-laden', { user_id: $currentUser.id });
+      const ec = existing?.config || {};
       await apiCall('email-config-speichern', {
         user_id: $currentUser.id,
+        smtp_host: ec.smtp_host || '',
+        smtp_port: ec.smtp_port || 587,
+        smtp_user: ec.smtp_user || '',
+        smtp_pass: '',
+        smtp_secure: ec.smtp_secure || false,
+        absender_name: ec.absender_name || '',
+        absender_email: ec.absender_email || '',
         betreff_vorlage: betreff,
         text_vorlage: generateFullHtml(),
         email_blocks_json: JSON.stringify(blocks),
+        auto_versand: ec.auto_versand || false,
       });
       showToast('✅ E-Mail-Vorlage gespeichert');
     } catch(e) { showToast('Fehler: ' + e.message); }
