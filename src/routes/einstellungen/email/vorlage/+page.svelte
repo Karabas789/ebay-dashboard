@@ -233,7 +233,7 @@
           try {
             const parsed = JSON.parse(blocksJson);
             if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type) {
-              blocks = parsed.map((b, i) => ({ ...b, id: b.id || 'b_'+(i+1) }));
+              blocks = parsed.map((b, i) => ({ ...b, id: 'bl_'+(i+1) }));
               blockIdCounter = blocks.length + 100;
             } else throw 0;
           } catch { if (htmlVorlage) { blocks = [{ type:'text', content:htmlVorlage, id:'b_1' }]; blockIdCounter=2; } }
