@@ -238,8 +238,10 @@
   }
 
   function generateFullHtml() {
-    let html = '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden">';
+    let html = '<div style="background:#f0f0f0;padding:32px 16px;font-family:Arial,sans-serif">';
+    html += '<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">';
     blocks.forEach(b => { html += blockToEmailHtml(b); });
+    html += '</div>';
     html += '</div>';
     return html;
   }
