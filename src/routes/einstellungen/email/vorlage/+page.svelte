@@ -122,6 +122,9 @@
       const html = richEditorEl.innerHTML;
       if (richEditorField === 'details') {
         updateBlock(richEditorBlockId, 'details', html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''));
+      } else if (richEditorField === 'title') {
+        // Titel als HTML speichern (für Formatierung)
+        updateBlock(richEditorBlockId, 'title', html);
       } else {
         updateBlock(richEditorBlockId, richEditorField, html);
       }
@@ -348,7 +351,7 @@
                       <h2 style="margin:0;font-size:1.3rem;font-weight:700">{block.title}</h2>
                       {#if block.subtitle}<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">{block.subtitle}</div>{/if}
                     </div>
-                  {:else if block.type==='text'}<div class="b-text">{@html block.content}</div>
+                  {:else if block.type==='text'}<div class="b-text" style="line-height:{block.lineHeight||'1.7'}">{@html block.content}</div>
                   {:else if block.type==='infobox'}<div class="b-infobox style-{block.style}">{@html block.content}</div>
                   {:else if block.type==='amount'}
                     <div class="b-amount" style="background:{block.bgColor};border-color:{block.accentColor}">
