@@ -29,6 +29,9 @@
     { key:'{{datum}}', label:'Datum' },
     { key:'{{brutto_betrag}}', label:'Betrag' },
     { key:'{{firmenname}}', label:'Firmenname' },
+    { key:'{{bestellnummer}}', label:'Bestell-ID' },
+    { key:'{{artikelname}}', label:'Artikelname' },
+    { key:'{{variante}}', label:'Variante' },
   ];
 
   const editorFarben = [
@@ -55,7 +58,7 @@
     divider: { type:'divider', style:'normal' },
     spacer: { type:'spacer', height:24 },
     image: { type:'image', url:'', alt:'Bild', maxWidth:'100%' },
-    signature: { type:'signature', name:'{{firmenname}}', details:'Auf der Schläfe 1\n57078 Siegen\nUSt-ID: DE815720228', email:'ov-shop@mail.de', phone:'+49 271 50149974' },
+    signature: { type:'signature', name:'{{firmenname}}', details:'Auf der Schläfe 1\n57078 Siegen\nUSt-ID: DE815720228', email:'ov-shop@mail.de', phone:'+49 271 50149974', logoUrl:'https://assets.zyrosite.com/sKFGVgrqCU2eVSWO/bildschirmfoto-2024-10-23-um-20.44.12-KsnpbGM6T6pk07Fh.png', logoWidth:'120' },
     columns: { type:'columns', left:'Linke Spalte', right:'Rechte Spalte' }
   };
 
@@ -73,7 +76,7 @@
     { type:'amount', icon:'💰', name:'Betrag-Box', desc:'Hervorgehobener Wert', group:'inhalt' },
     { type:'button', icon:'🔘', name:'Button', desc:'Aktion-Link', group:'inhalt' },
     { type:'image', icon:'🖼️', name:'Bild', desc:'Logo/Grafik (URL)', group:'inhalt' },
-    { type:'signature', icon:'📇', name:'Signatur', desc:'Firmendaten', group:'inhalt' },
+    { type:'signature', icon:'📇', name:'Signatur', desc:'Firmendaten & Logo', group:'inhalt' },
   ];
 
   const starterTemplates = [
@@ -159,18 +162,19 @@
     } else if (key==='bestätigung') {
       addBlock('header'); updateBlock(blocks.at(-1).id,'title','Bestellung bestätigt'); updateBlock(blocks.at(-1).id,'icon','🎉'); updateBlock(blocks.at(-1).id,'bgColor','#10b981');
       addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Hallo {{kaeufer_name}},</p><p>Ihre Bestellung wurde erfolgreich aufgenommen.</p>');
-      addBlock('infobox'); updateBlock(blocks.at(-1).id,'style','green'); updateBlock(blocks.at(-1).id,'content','<strong>Bestellnr.:</strong> {{rechnung_nr}}<br>Betrag: {{brutto_betrag}} EUR');
+      addBlock('infobox'); updateBlock(blocks.at(-1).id,'style','green'); updateBlock(blocks.at(-1).id,'content','<strong>Bestellnr.:</strong> {{bestellnummer}}<br>Artikel: {{artikelname}}<br>Betrag: {{brutto_betrag}} EUR');
       addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Viel Spaß!</p>'); addBlock('signature');
     } else if (key==='schlicht') {
-      addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei Ihre Rechnung {{rechnung_nr}} vom {{datum}}.</p><p>Betrag: <strong>{{brutto_betrag}} EUR</strong></p><p>Vielen Dank!</p><p>Beste Grüße</p>');
+      addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei Ihre Rechnung {{rechnung_nr}} vom {{datum}}.</p><p>Artikel: {{artikelname}}</p><p>Betrag: <strong>{{brutto_betrag}} EUR</strong></p><p>Vielen Dank!</p><p>Beste Grüße</p>');
       addBlock('divider'); addBlock('signature');
     } else if (key==='key') {
       addBlock('header'); updateBlock(blocks.at(-1).id,'title','Ihr Aktivierungsschlüssel'); updateBlock(blocks.at(-1).id,'subtitle','Vielen Dank für Ihre Bestellung'); updateBlock(blocks.at(-1).id,'icon','✅'); updateBlock(blocks.at(-1).id,'bgColor','#7c3aed');
-      addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>hiermit übersenden wir Ihren Produktschlüssel:</p>');
-      addBlock('infobox'); updateBlock(blocks.at(-1).id,'content','<strong>Produktname</strong><br><br>Schlüssel:<br><span style="font-size:1.3em;font-family:monospace;color:#6366f1;font-weight:700">XXXX-XXXX-XXXX-XXXX</span><br><br>💡 Tipp: Key sicher aufbewahren.');
+      addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>hiermit übersenden wir Ihren Produktschlüssel (Bestellung {{bestellnummer}}):</p>');
+      addBlock('infobox'); updateBlock(blocks.at(-1).id,'content','<strong>{{artikelname}}</strong><br><br>Schlüssel:<br><span style="font-size:1.3em;font-family:monospace;color:#6366f1;font-weight:700">XXXX-XXXX-XXXX-XXXX</span><br><br>💡 Tipp: Key sicher aufbewahren.');
       addBlock('text'); updateBlock(blocks.at(-1).id,'content','<p>Bei Fragen stehen wir gerne zur Verfügung.</p><p><strong>Schöne Grüße</strong></p>'); addBlock('signature');
     }
     selectedBlockId=null; templateModalOffen=false;
+    showToast('✅ Vorlage geladen');
   }
 
   // HTML Export
@@ -184,12 +188,13 @@
       case 'divider': { const h=b.style==='bold'?'2px':'1px'; const dc=b.style==='colored'?'#2563eb':'#e2e5ea'; return `<div style="padding:8px 32px"><hr style="border:none;height:${h};background:${dc}"></div>`; }
       case 'spacer': return `<div style="height:${b.height}px"></div>`;
       case 'image': return b.url?`<div style="padding:8px 32px;text-align:center"><img src="${b.url}" alt="${b.alt}" style="max-width:${b.maxWidth};height:auto;border-radius:8px"></div>`:'';
-      case 'signature': { const d=(b.details||'').replace(/\n/g,'<br>'); return `<div style="margin:8px 32px;padding:16px 0;border-top:1px solid #e2e5ea;font-size:13px;color:#555;line-height:1.5"><strong style="font-size:14px;color:#1a1d23">${b.name}</strong><br>${d}<br>`+(b.phone?`📞 ${b.phone}<br>`:'')+(b.email?`📧 ${b.email}`:'')+`</div>`; }
+      case 'signature': { const d=(b.details||'').replace(/\n/g,'<br>'); let html=`<div style="margin:8px 32px;padding:16px 0;border-top:1px solid #e2e5ea;font-size:13px;color:#555;line-height:1.5"><strong style="font-size:14px;color:#1a1d23">${b.name}</strong><br>${d}<br>`+(b.phone?`📞 ${b.phone}<br>`:'')+(b.email?`📧 <a href="mailto:${b.email}" style="color:#555">${b.email}</a><br>`:''); if(b.logoUrl){html+=`<img src="${b.logoUrl}" width="${b.logoWidth||120}" style="max-width:100%;height:auto;display:block;margin-top:8px" alt="Logo">`}; html+=`</div>`; return html; }
       case 'columns': return `<table width="100%" cellpadding="0" cellspacing="0" style="padding:12px 32px"><tr><td width="48%" style="padding:14px;background:#f7f8fa;border-radius:8px;vertical-align:top">${b.left}</td><td width="4%"></td><td width="48%" style="padding:14px;background:#f7f8fa;border-radius:8px;vertical-align:top">${b.right}</td></tr></table>`;
       default: return '';
     }
   }
 
+  // FIX 3: grauer Hintergrund + Footer im generierten HTML
   function generateFullHtml() {
     let h='<div style="background:#f0f0f0;padding:32px 16px;font-family:Arial,sans-serif">';
     h+='<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">';
@@ -200,10 +205,18 @@
   }
 
   function vorschauHtml() {
-    return generateFullHtml().replace(/\{\{rechnung_nr\}\}/g,'RE-2026-00042').replace(/\{\{kaeufer_name\}\}/g,'Max Mustermann').replace(/\{\{datum\}\}/g,'22.04.2026').replace(/\{\{brutto_betrag\}\}/g,'49,99').replace(/\{\{firmenname\}\}/g,'Import & Produkte Vertrieb');
+    return generateFullHtml()
+      .replace(/\{\{rechnung_nr\}\}/g,'RE-2026-00042')
+      .replace(/\{\{kaeufer_name\}\}/g,'Max Mustermann')
+      .replace(/\{\{datum\}\}/g,'22.04.2026')
+      .replace(/\{\{brutto_betrag\}\}/g,'49,99')
+      .replace(/\{\{firmenname\}\}/g,'Import & Produkte Vertrieb')
+      .replace(/\{\{bestellnummer\}\}/g,'12-34567-89012')
+      .replace(/\{\{artikelname\}\}/g,'Windows 11 Pro Produktschlüssel')
+      .replace(/\{\{variante\}\}/g,'Download-Version');
   }
 
-  // Laden / Speichern
+  // FIX 1: Laden — email_blocks_json verwenden
   async function laden() {
     if (!$currentUser) return;
     configLaeuft = true;
@@ -213,7 +226,6 @@
         betreff = data.config.betreff_vorlage || betreff;
         const blocksJson = data.config.email_blocks_json || '';
         const htmlVorlage = data.config.text_vorlage || '';
-        // Zuerst Blocks aus email_blocks_json laden
         if (blocksJson) {
           try {
             const parsed = JSON.parse(blocksJson);
@@ -222,7 +234,6 @@
             } else throw 0;
           } catch { if (htmlVorlage) { blocks = [{ type:'text', content:htmlVorlage, id:'b_1' }]; blockIdCounter=2; } }
         } else if (htmlVorlage) {
-          // Fallback: alte HTML-Vorlage als einzelnen Text-Block
           blocks = [{ type:'text', content:htmlVorlage, id:'b_1' }]; blockIdCounter=2;
         }
       }
@@ -230,10 +241,10 @@
     finally { configLaeuft = false; }
   }
 
+  // FIX 2: Speichern — alle SMTP-Felder mitsenden + text_vorlage=HTML, email_blocks_json=JSON
   async function speichern() {
     speichertLaeuft = true;
     try {
-      // Zuerst bestehende Config laden um SMTP-Felder nicht zu verlieren
       const existing = await apiCall('email-config-laden', { user_id: $currentUser.id });
       const ec = existing?.config || {};
       await apiCall('email-config-speichern', {
@@ -341,7 +352,8 @@
               </div>
             {:else}
               {#each blocks as block, i (block.id)}
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="vb-block" class:sel={selectedBlockId===block.id} onclick={() => selectBlock(block.id)}>
                   <div class="vb-block-actions">
                     {#if i>0}<button class="vb-ba" onclick={(e)=>{e.stopPropagation();moveBlock(block.id,-1)}}>↑</button>{/if}
@@ -373,8 +385,13 @@
                       {:else}<div class="vb-img-ph">🖼️ Bild-URL in Eigenschaften eingeben</div>{/if}
                     </div>
                   {:else if block.type==='signature'}
-                    <div class="b-signature"><strong>{block.name}</strong><br>{@html (block.details||'').replace(/\n/g,'<br>')}<br>
-                      {#if block.phone}📞 {block.phone}<br>{/if}{#if block.email}📧 {block.email}{/if}</div>
+                    <div class="b-signature">
+                      <strong>{block.name}</strong><br>
+                      {@html (block.details||'').replace(/\n/g,'<br>')}<br>
+                      {#if block.phone}📞 {block.phone}<br>{/if}
+                      {#if block.email}📧 {block.email}<br>{/if}
+                      {#if block.logoUrl}<img src={block.logoUrl} width={block.logoWidth||120} style="max-width:100%;height:auto;display:block;margin-top:8px" alt="Logo" />{/if}
+                    </div>
                   {:else if block.type==='columns'}
                     <div class="b-columns"><div class="b-col">{block.left}</div><div class="b-col">{block.right}</div></div>
                   {/if}
@@ -449,7 +466,8 @@
               {#if showHtmlMode}
                 <textarea class="ed-html" rows="12" bind:value={htmlRawText} oninput={()=>{if(richEditorBlockId)updateBlock(richEditorBlockId,'content',htmlRawText)}}></textarea>
               {:else}
-                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="ed-rich" bind:this={richEditorEl} contenteditable="true" oninput={syncRichEditor} onblur={syncRichEditor}></div>
               {/if}
             </div>
@@ -493,6 +511,10 @@
               <div class="vb-pr"><label>Telefon</label><input value={selectedBlock.phone||''} oninput={(e)=>updateBlock(selectedBlock.id,'phone',e.target.value)}/></div>
               <div class="vb-pr"><label>E-Mail</label><input value={selectedBlock.email||''} oninput={(e)=>updateBlock(selectedBlock.id,'email',e.target.value)}/></div>
             </div>
+            <div class="vb-ps"><div class="vb-ps-t">Logo</div>
+              <div class="vb-pr"><label>Logo-URL</label><input value={selectedBlock.logoUrl||''} oninput={(e)=>updateBlock(selectedBlock.id,'logoUrl',e.target.value)} placeholder="https://..."/></div>
+              <div class="vb-pr"><label>Breite (px)</label><input type="number" value={selectedBlock.logoWidth||120} oninput={(e)=>updateBlock(selectedBlock.id,'logoWidth',e.target.value)}/></div>
+            </div>
 
           {:else if selectedBlock.type==='columns'}
             <div class="vb-ps"><div class="vb-ps-t">Spalten</div>
@@ -513,9 +535,11 @@
 
 <!-- Template Modal -->
 {#if templateModalOffen}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="vb-modal-bg" onclick={()=>templateModalOffen=false}>
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="vb-modal" onclick={(e)=>e.stopPropagation()}>
       <div class="vb-modal-t">🎨 Vorlage wählen</div>
       <div class="vb-tpl-grid">
@@ -533,7 +557,6 @@
 {/if}
 
 <style>
-  /* ═══ FULLPAGE BUILDER LAYOUT ═══ */
   .vb-wrap { display:flex; flex-direction:column; height:calc(100vh - 52px); overflow:hidden; }
   .vb-topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 20px; background:var(--surface); border-bottom:1px solid var(--border); gap:12px; flex-shrink:0; }
   .vb-topbar-left { display:flex; align-items:center; gap:14px; }
@@ -549,7 +572,6 @@
   .vb-save-btn { background:var(--primary); color:#fff; border:none; padding:6px 18px; border-radius:7px; font-size:0.8rem; font-weight:600; cursor:pointer; }
   .vb-save-btn:hover:not(:disabled) { filter:brightness(1.08); }
   .vb-save-btn:disabled { opacity:0.6; cursor:not-allowed; }
-
   .vb-var-bar { display:flex; align-items:center; gap:8px; padding:8px 20px; background:var(--surface2); border-bottom:1px solid var(--border); flex-wrap:wrap; flex-shrink:0; }
   .vb-var-label { font-size:0.68rem; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:0.04em; }
   .vb-var-chip { background:var(--surface); border:1px solid var(--border); color:var(--primary); padding:2px 8px; border-radius:5px; font-size:0.7rem; font-family:monospace; cursor:pointer; transition:all 0.1s; }
@@ -557,12 +579,9 @@
   .vb-betreff-wrap { display:flex; align-items:center; gap:8px; margin-left:auto; }
   .vb-betreff-input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:5px 10px; border-radius:6px; font-size:0.8rem; width:280px; outline:none; }
   .vb-betreff-input:focus { border-color:var(--primary); }
-
   .vb-loading { display:flex; align-items:center; justify-content:center; gap:10px; padding:40px; color:var(--text2); font-size:0.85rem; flex:1; }
   .spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--primary); border-radius:50%; animation:spin 0.7s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
-
-  /* ═══ 3-COLUMN BUILDER ═══ */
   .vb-builder { display:flex; flex:1; overflow:hidden; }
   .vb-palette { width:200px; background:var(--surface); border-right:1px solid var(--border); padding:16px 12px; overflow-y:auto; flex-shrink:0; }
   .vb-pal-title { font-size:0.64rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text3); margin-bottom:8px; }
@@ -572,8 +591,6 @@
   .vb-pal-info { display:flex; flex-direction:column; min-width:0; }
   .vb-pal-name { font-size:0.74rem; font-weight:600; color:var(--text); }
   .vb-pal-desc { font-size:0.6rem; color:var(--text3); }
-
-  /* Canvas */
   .vb-canvas { flex:1; overflow-y:auto; padding:28px; background:#e5e7eb; display:flex; justify-content:center; }
   :global([data-theme="dark"]) .vb-canvas { background:#1a1e28; }
   .vb-email-frame { width:620px; flex-shrink:0; }
@@ -582,7 +599,6 @@
   .vb-footer { padding:20px 32px; text-align:center; font-size:0.7rem; color:#999; border-top:1px solid #e5e7eb; background:#f4f5f7; border-radius:0 0 12px 12px; margin-top:8px; }
   .vb-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:350px; color:var(--text3); font-size:0.85rem; text-align:center; padding:40px; }
   .vb-empty-link { background:none; border:none; color:var(--primary); cursor:pointer; text-decoration:underline; font-size:0.85rem; padding:0; }
-
   .vb-block { position:relative; cursor:pointer; outline:2px solid transparent; outline-offset:-2px; transition:outline 0.1s; }
   .vb-block:hover { outline:2px solid var(--primary); }
   .vb-block.sel { outline:2px solid var(--primary); }
@@ -590,8 +606,6 @@
   .vb-block:hover .vb-block-actions, .vb-block.sel .vb-block-actions { display:flex; }
   .vb-ba { width:24px; height:24px; border:none; background:transparent; color:#fff; border-radius:4px; cursor:pointer; font-size:0.7rem; display:flex; align-items:center; justify-content:center; }
   .vb-ba:hover { background:rgba(255,255,255,0.2); }
-
-  /* Block styles */
   .b-header { padding:28px 32px; text-align:center; }
   .b-text { padding:16px 32px; font-size:0.88rem; line-height:1.7; color:#333; }
   .b-infobox { margin:12px 32px; padding:14px 18px; border-radius:8px; font-size:0.82rem; line-height:1.6; border-left:4px solid; }
@@ -606,12 +620,11 @@
   .b-divider.style-colored hr { height:2px; background:var(--primary); }
   .b-signature { margin:8px 32px; padding:16px 0; border-top:1px solid #e5e7eb; font-size:0.8rem; color:#555; line-height:1.5; }
   .b-signature strong { color:#1a2233; font-size:0.86rem; }
+  .b-signature img { border-radius:4px; }
   .b-columns { display:flex; gap:16px; padding:12px 32px; }
   .b-col { flex:1; padding:14px; background:#f7f8fa; border-radius:8px; border:1px dashed #e5e7eb; font-size:0.8rem; color:#666; min-height:50px; }
   .vb-img-ph { background:#f7f8fa; border:2px dashed #e5e7eb; border-radius:8px; padding:28px; color:#999; font-size:0.8rem; }
-
-  /* Properties */
-  .vb-props { width:600px; background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; flex-shrink:0; }
+  .vb-props { width:320px; background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; flex-shrink:0; }
   .vb-props-hdr { padding:16px 18px; border-bottom:1px solid var(--border); }
   .vb-props-title { font-size:0.88rem; font-weight:700; }
   .vb-props-type { font-size:0.72rem; color:var(--text2); margin-top:2px; }
@@ -630,8 +643,6 @@
   .vb-div-btns { display:flex; gap:4px; }
   .vb-div-b { background:var(--surface2); border:1px solid var(--border); padding:5px 12px; border-radius:6px; font-size:0.76rem; cursor:pointer; color:var(--text2); }
   .vb-div-b.act { background:var(--primary); color:#fff; border-color:var(--primary); }
-
-  /* ═══ WYSIWYG EDITOR ═══ */
   .ed-toolbar { display:flex; align-items:center; gap:1px; padding:6px 8px; background:var(--surface2); border:1px solid var(--border); border-radius:7px 7px 0 0; flex-wrap:wrap; }
   .ed-btn { background:transparent; border:1px solid transparent; color:var(--text); width:28px; height:28px; border-radius:4px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; font-size:0.74rem; transition:all 0.1s; padding:0; }
   .ed-btn:hover { background:var(--surface); border-color:var(--border); }
@@ -656,8 +667,6 @@
   .ed-rich :global(a) { color:#2563eb; }
   .ed-rich :global(img) { max-width:100%; height:auto; }
   .ed-html { font-family:'Courier New',monospace; font-size:0.76rem; line-height:1.5; min-height:160px; resize:vertical; background:var(--surface2); border:1px solid var(--border); border-radius:0 0 7px 7px; border-top:none; color:var(--text); padding:12px; width:100%; box-sizing:border-box; outline:none; }
-
-  /* ═══ VORSCHAU / HTML ═══ */
   .vb-preview-scroll { flex:1; overflow-y:auto; padding:28px; background:#e5e7eb; display:flex; justify-content:center; }
   :global([data-theme="dark"]) .vb-preview-scroll { background:#1a1e28; }
   .vb-preview-frame { width:660px; }
@@ -668,8 +677,6 @@
   .vb-html-area { flex:1; font-family:'Courier New',monospace; font-size:0.78rem; line-height:1.5; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:16px; resize:none; outline:none; }
   .vb-copy-btn { align-self:flex-start; background:var(--surface); border:1px solid var(--border); color:var(--text2); padding:6px 14px; border-radius:7px; font-size:0.78rem; cursor:pointer; }
   .vb-copy-btn:hover { border-color:var(--primary); color:var(--primary); }
-
-  /* ═══ MODAL ═══ */
   .vb-modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.4); backdrop-filter:blur(4px); z-index:200; display:flex; align-items:center; justify-content:center; }
   .vb-modal { background:var(--surface); border-radius:16px; box-shadow:0 24px 64px rgba(0,0,0,0.2); width:640px; max-height:85vh; overflow-y:auto; padding:28px; }
   .vb-modal-t { font-size:1.1rem; font-weight:700; margin-bottom:16px; }
@@ -678,7 +685,6 @@
   .vb-tpl-card:hover { border-color:var(--primary); transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.08); }
   .vb-tpl-name { font-size:0.84rem; font-weight:600; color:var(--text); }
   .vb-tpl-desc { font-size:0.7rem; color:var(--text2); }
-
   @media(max-width:1000px) {
     .vb-builder { flex-direction:column; }
     .vb-palette { width:100%; flex-direction:row; flex-wrap:wrap; border-right:none; border-bottom:1px solid var(--border); padding:10px; gap:4px; }
