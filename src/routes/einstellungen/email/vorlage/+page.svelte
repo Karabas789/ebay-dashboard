@@ -191,9 +191,11 @@
   }
 
   function generateFullHtml() {
-    let h='<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden">';
+    let h='<div style="background:#f0f0f0;padding:32px 16px;font-family:Arial,sans-serif">';
+    h+='<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">';
     blocks.forEach(b => { h += blockToHtml(b); });
-    h+='</div><div style="text-align:center;padding:16px;font-size:12px;color:#999">Dieses Schreiben wurde automatisch erstellt.<br>© 2026 {{firmenname}}</div>';
+    h+='<div style="padding:20px 32px;text-align:center;font-size:12px;color:#999;border-top:1px solid #e5e7eb;background:#f4f5f7;border-radius:0 0 12px 12px">Dieses Schreiben wurde automatisch erstellt.<br>\u00a9 2026 {{firmenname}}</div>';
+    h+='</div></div>';
     return h;
   }
 
@@ -209,13 +211,20 @@
       const data = await apiCall('email-config-laden', { user_id: $currentUser.id });
       if (data?.config) {
         betreff = data.config.betreff_vorlage || betreff;
-        const vorlage = data.config.text_vorlage || '';
-        try {
-          const parsed = JSON.parse(vorlage);
-          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type) {
-            blocks = parsed; blockIdCounter = parsed.length + 10;
-          } else throw 0;
-        } catch { if (vorlage) { blocks = [{ type:'text', content:vorlage, id:'b_1' }]; blockIdCounter=2; } }
+        const blocksJson = data.config.email_blocks_json || '';
+        const htmlVorlage = data.config.text_vorlage || '';
+        // Zuerst Blocks aus email_blocks_json laden
+        if (blocksJson) {
+          try {
+            const parsed = JSON.parse(blocksJson);
+            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type) {
+              blocks = parsed; blockIdCounter = parsed.length + 10;
+            } else throw 0;
+          } catch { if (htmlVorlage) { blocks = [{ type:'text', content:htmlVorlage, id:'b_1' }]; blockIdCounter=2; } }
+        } else if (htmlVorlage) {
+          // Fallback: alte HTML-Vorlage als einzelnen Text-Block
+          blocks = [{ type:'text', content:htmlVorlage, id:'b_1' }]; blockIdCounter=2;
+        }
       }
     } catch(e) { console.warn('Vorlage nicht geladen:', e?.message); }
     finally { configLaeuft = false; }
@@ -227,8 +236,8 @@
       await apiCall('email-config-speichern', {
         user_id: $currentUser.id,
         betreff_vorlage: betreff,
-        text_vorlage: JSON.stringify(blocks),
-        email_html: generateFullHtml(),
+        text_vorlage: generateFullHtml(),
+        email_blocks_json: JSON.stringify(blocks),
       });
       showToast('✅ E-Mail-Vorlage gespeichert');
     } catch(e) { showToast('Fehler: ' + e.message); }
