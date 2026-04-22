@@ -84,6 +84,8 @@
       const block = blocks.find(b => b.id === selectedBlockId);
       if (block && (block.type === 'text' || block.type === 'infobox')) {
         initRichEditor(block.id, block.content, 'content');
+       else if (block && block.type === 'header') {
+        initRichEditor(block.id, block.title, 'title');
       } else if (block && block.type === 'columns') {
         initRichEditor(block.id, block.left, 'left');
       } else if (block && block.type === 'signature') {
@@ -349,7 +351,7 @@
                     <div class="b-header" style="background:{block.bgColor};color:{block.textColor};{block.borderRadius?'border-radius:12px 12px 0 0;':''}">
                       <div style="display:flex;align-items:center;justify-content:center;gap:10px">
                         {#if block.icon}<span style="font-size:1.6rem">{block.icon}</span>{/if}
-                        <span style="font-size:1.3rem;font-weight:700">{block.title}</span>
+                        <span style="font-size:1.3rem;font-weight:700">{@html block.title}</span>
                       </div>
                       {#if block.subtitle}<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">{block.subtitle}</div>{/if}
                     </div>
