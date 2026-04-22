@@ -40,7 +40,7 @@
   ];
   const blockDefaults = {
     header:{type:'header',icon:'✉️',title:'Ihre Rechnung',subtitle:'',bgColor:'#6366f1',textColor:'#ffffff',borderRadius:true},
-    text:{type:'text',content:'<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p>'},
+    text:{type:'text',content:'<p>Sehr geehrte(r) {{kaeufer_name}},</p><p>anbei erhalten Sie Ihre Rechnung {{rechnung_nr}} vom {{datum}} als PDF-Anhang.</p>',lineHeight:'1.7'},
     infobox:{type:'infobox',style:'blue',content:'<strong>Hinweis:</strong> Hier können Sie einen Hinweis einfügen.'},
     amount:{type:'amount',label:'Rechnungsbetrag',value:'{{brutto_betrag}} EUR',sublabel:'',bgColor:'#eff6ff',accentColor:'#2563eb'},
     button:{type:'button',text:'Rechnung ansehen',url:'https://example.com',bgColor:'#6366f1',textColor:'#ffffff',borderRadius:'8'},
@@ -84,6 +84,8 @@
       const block = blocks.find(b => b.id === selectedBlockId);
       if (block && (block.type === 'text' || block.type === 'infobox')) {
         initRichEditor(block.id, block.content, 'content');
+      } else if (block && block.type === 'header') {
+        initRichEditor(block.id, block.title, 'title');
       } else if (block && block.type === 'columns') {
         initRichEditor(block.id, block.left, 'left');
       } else if (block && block.type === 'signature') {
@@ -186,7 +188,7 @@
   function blockToHtml(b) {
     switch(b.type) {
       case 'header': { const r=b.borderRadius?'border-radius:12px 12px 0 0;':''; return `<div style="background:${b.bgColor};color:${b.textColor};padding:28px 32px;text-align:center;${r}">`+(b.icon?`<div style="font-size:2.2rem;margin-bottom:8px">${b.icon}</div>`:'')+`<h2 style="margin:0;font-size:1.3rem;font-weight:700">${b.title}</h2>`+(b.subtitle?`<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">${b.subtitle}</div>`:'')+`</div>`; }
-      case 'text': return `<div style="padding:16px 32px;font-size:15px;line-height:1.7;color:#333">${b.content}</div>`;
+      case 'text': return `<div style="padding:16px 32px;font-size:15px;line-height:${b.lineHeight||'1.7'};color:#333">${b.content}</div>`;
       case 'infobox': { const cs={blue:['#eff6ff','#2563eb','#1e40af'],green:['#f0fdf4','#10b981','#166534'],yellow:['#fffbeb','#f59e0b','#92400e'],red:['#fef2f2','#ef4444','#991b1b']}; const c=cs[b.style]||cs.blue; return `<div style="margin:12px 32px;padding:14px 18px;border-radius:8px;background:${c[0]};border-left:4px solid ${c[1]};color:${c[2]};font-size:14px;line-height:1.6">${b.content}</div>`; }
       case 'amount': return `<div style="margin:16px 32px;padding:20px;text-align:center;border-radius:10px;background:${b.bgColor};border-left:4px solid ${b.accentColor}"><div style="font-size:13px;color:${b.accentColor};opacity:0.7">${b.label}</div><div style="font-size:1.8rem;font-weight:700;color:${b.accentColor}">${b.value}</div>`+(b.sublabel?`<div style="font-size:12px;opacity:0.6;margin-top:4px">${b.sublabel}</div>`:'')+`</div>`;
       case 'button': return `<div style="padding:16px 32px;text-align:center"><a href="${b.url}" style="display:inline-block;padding:13px 36px;border-radius:${b.borderRadius}px;background:${b.bgColor};color:${b.textColor};font-weight:700;font-size:15px;text-decoration:none">${b.text}</a></div>`;
@@ -396,8 +398,26 @@
           {#if selectedBlock.type==='header'}
             <div class="vb-ps"><div class="vb-ps-t">Inhalt</div>
               <div class="vb-pr"><label>Icon</label><input value={selectedBlock.icon||''} oninput={(e)=>updateBlock(selectedBlock.id,'icon',e.target.value)}/></div>
-              <div class="vb-pr"><label>Titel</label><input value={selectedBlock.title} oninput={(e)=>updateBlock(selectedBlock.id,'title',e.target.value)}/></div>
               <div class="vb-pr"><label>Untertitel</label><input value={selectedBlock.subtitle||''} oninput={(e)=>updateBlock(selectedBlock.id,'subtitle',e.target.value)}/></div>
+            </div>
+            <div class="vb-ps"><div class="vb-ps-t">Titel bearbeiten</div>
+              <div class="ed-toolbar">
+                <button class="ed-btn" onclick={()=>richEditorCmd('bold')} title="Fett"><strong>F</strong></button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('italic')} title="Kursiv"><em>K</em></button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('underline')} title="Unterstrichen"><u>U</u></button>
+                <span class="ed-sep"></span>
+                <select class="ed-select" onchange={(e)=>{richEditorCmd('fontSize',e.target.value);e.target.value='';}} title="Schriftgröße">
+                  <option value="" disabled selected>Aa</option>
+                  {#each fontSizes as fs}<option value={fs.value}>{fs.label}</option>{/each}
+                </select>
+                <span class="ed-sep"></span>
+                <div class="ed-dd"><button class="ed-btn" onclick={()=>{showColorPicker=!showColorPicker;showLinkDialog=false}} title="Farbe">🎨</button>
+                  {#if showColorPicker}<div class="ed-drop ed-cgrid">{#each editorFarben as f}<button class="ed-cbtn" style="background:{f}" onclick={()=>setEditorColor(f)}></button>{/each}</div>{/if}
+                </div>
+              </div>
+              <div class="ed-vars">{#each variablen as v}<button class="ed-vchip" onclick={()=>insertVariable(v.key)}>{v.key}</button>{/each}</div>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+              <div class="ed-rich" style="min-height:60px;color:#333" bind:this={richEditorEl} contenteditable="true" oninput={syncRichEditor} onblur={syncRichEditor}></div>
             </div>
             <div class="vb-ps"><div class="vb-ps-t">Hintergrund</div><div class="vb-colors">{#each headerFarben as c}<button class="vb-csw" class:act={selectedBlock.bgColor===c} style="background:{c}" onclick={()=>updateBlock(selectedBlock.id,'bgColor',c)}></button>{/each}</div></div>
 
@@ -409,6 +429,16 @@
                 <button class="vb-csw" class:act={selectedBlock.style==='yellow'} style="background:#f59e0b" onclick={()=>updateBlock(selectedBlock.id,'style','yellow')}></button>
                 <button class="vb-csw" class:act={selectedBlock.style==='red'} style="background:#ef4444" onclick={()=>updateBlock(selectedBlock.id,'style','red')}></button>
               </div></div>
+            {/if}
+            {#if selectedBlock.type==='text'}
+              <div class="vb-ps"><div class="vb-ps-t">Zeilenabstand</div>
+                <div class="vb-div-btns">
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='1.2'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','1.2')}>Eng</button>
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='1.5'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','1.5')}>Normal</button>
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='1.7'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','1.7')}>Weit</button>
+                  <button class="vb-div-b" class:act={(selectedBlock.lineHeight||'1.7')==='2.0'} onclick={()=>updateBlock(selectedBlock.id,'lineHeight','2.0')}>Sehr weit</button>
+                </div>
+              </div>
             {/if}
             <div class="vb-ps"><div class="vb-ps-t">Text bearbeiten</div>
               <div class="ed-toolbar">
