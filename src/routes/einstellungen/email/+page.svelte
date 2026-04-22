@@ -241,8 +241,8 @@
     let html = '<div style="background:#f0f0f0;padding:32px 16px;font-family:Arial,sans-serif">';
     html += '<div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">';
     blocks.forEach(b => { html += blockToEmailHtml(b); });
-    html += '</div>';
-    html += '</div>';
+    html += '<div style="padding:20px 32px;text-align:center;font-size:12px;color:#999;border-top:1px solid #e5e7eb;background:#f4f5f7;border-radius:0 0 12px 12px">Dieses Schreiben wurde automatisch erstellt.<br>\u00a9 2026 {{firmenname}}</div>';
+    html += '</div></div>';
     return html;
   }
 
@@ -353,9 +353,10 @@
     if (!cfg.smtp_host || !cfg.smtp_user) { showToast('Bitte SMTP-Host und Benutzername ausfüllen.'); return; }
     speichertLaeuft = true;
     try {
+      const emailHtml = htmlCodeOffen ? (cfg.text_vorlage || generateFullHtml()) : generateFullHtml();
       await apiCall('email-config-speichern', {
         user_id: $currentUser.id, ...cfg,
-        text_vorlage: generateFullHtml(),
+        text_vorlage: emailHtml,
         email_blocks_json: blocksToJson()
       });
       showToast('✅ E-Mail-Einstellungen gespeichert');
@@ -508,8 +509,12 @@
         </div>
       {:else if htmlCodeOffen}
         <div class="form-group">
-          <textarea class="html-code-area" rows="18" readonly>{generateFullHtml()}</textarea>
-          <button class="btn-ghost btn-sm" style="align-self:flex-start;margin-top:6px" onclick={() => { navigator.clipboard.writeText(generateFullHtml()); showToast('HTML kopiert!'); }}>📋 Kopieren</button>
+          <textarea class="html-code-area" rows="18" bind:value={cfg.text_vorlage}></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="btn-ghost btn-sm" onclick={() => { navigator.clipboard.writeText(cfg.text_vorlage || generateFullHtml()); showToast('HTML kopiert!'); }}>📋 Kopieren</button>
+            <button class="btn-primary btn-sm" onclick={() => { cfg.text_vorlage = generateFullHtml(); showToast('HTML aus Blöcken neu generiert'); }}>🔄 Aus Blöcken generieren</button>
+          </div>
+          <span class="prop-hint" style="margin-top:4px">⚠️ Änderungen hier überschreiben das Block-HTML beim Speichern. Klick „Aus Blöcken generieren" um den Block-Stand zu laden.</span>
         </div>
       {:else}
         <div class="builder-layout">
@@ -539,8 +544,16 @@
                     {#if block.type==='header'}
                       <div class="b-header" style="background:{block.bgColor};color:{block.textColor};{block.borderRadius?'border-radius:12px 12px 0 0;':''}">
                         {#if block.icon}<div class="b-header-icon">{block.icon}</div>{/if}
-                        <h2>{block.title}</h2>
-                        {#if block.subtitle}<div class="b-header-sub">{block.subtitle}</div>{/if}
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <h2 contenteditable="true" class="editable-inline"
+                          onblur={(e)=>updateBlock(block.id,'title',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.title}</h2>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="b-header-sub editable-inline" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'subtitle',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.subtitle || 'Untertitel...'}</div>
                       </div>
                     {:else if block.type==='text'}
                       <!-- FIX 5: Inline-Editing -->
@@ -551,15 +564,33 @@
                         onclick={(e)=>e.stopPropagation()}
                       >{block.content}</div>
                     {:else if block.type==='infobox'}
-                      <div class="b-infobox style-{block.style}">{@html block.content}</div>
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div class="b-infobox style-{block.style} editable-inline" contenteditable="true"
+                        onblur={(e)=>updateBlock(block.id,'content',e.target.innerHTML)}
+                        onclick={(e)=>e.stopPropagation()}
+                      >{@html block.content}</div>
                     {:else if block.type==='amount'}
                       <div class="b-amount" style="background:{block.bgColor};border-color:{block.accentColor}">
-                        <div class="amount-label" style="color:{block.accentColor}">{block.label}</div>
-                        <div class="amount-value" style="color:{block.accentColor}">{block.value}</div>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="amount-label editable-inline" style="color:{block.accentColor}" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'label',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.label}</div>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="amount-value editable-inline" style="color:{block.accentColor}" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'value',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.value}</div>
                         {#if block.sublabel}<div class="amount-sub">{block.sublabel}</div>{/if}
                       </div>
                     {:else if block.type==='button'}
-                      <div class="b-button-wrap"><span class="b-button" style="background:{block.bgColor};color:{block.textColor};border-radius:{block.borderRadius}px">{block.text}</span></div>
+                      <div class="b-button-wrap">
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <span class="b-button editable-inline" style="background:{block.bgColor};color:{block.textColor};border-radius:{block.borderRadius}px" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'text',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.text}</span>
+                      </div>
                     {:else if block.type==='divider'}
                       <div class="b-divider {block.style==='bold'?'style-bold':''} {block.style==='colored'?'style-colored':''}"><hr /></div>
                     {:else if block.type==='spacer'}
@@ -571,14 +602,33 @@
                       </div>
                     {:else if block.type==='signature'}
                       <div class="b-signature">
-                        <strong>{block.name}</strong><br>
-                        {@html (block.details||'').replace(/\n/g,'<br>')}<br>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <strong class="editable-inline" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'name',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.name}</strong><br>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <span class="editable-inline" contenteditable="true" style="display:inline-block;min-width:100px"
+                          onblur={(e)=>updateBlock(block.id,'details',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.details}</span><br>
                         {#if block.phone}📞 {block.phone}<br>{/if}
                         {#if block.email}📧 {block.email}<br>{/if}
                         {#if block.logoUrl}<img src={block.logoUrl} width={block.logoWidth||120} style="max-width:100%;height:auto;display:block;margin-top:8px" alt="Logo" />{/if}
                       </div>
                     {:else if block.type==='columns'}
-                      <div class="b-columns"><div class="col">{block.left}</div><div class="col">{block.right}</div></div>
+                      <div class="b-columns">
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="col editable-inline" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'left',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.left}</div>
+                        <!-- svelte-ignore a11y_no_static_element_interactions -->
+                        <div class="col editable-inline" contenteditable="true"
+                          onblur={(e)=>updateBlock(block.id,'right',e.target.innerText)}
+                          onclick={(e)=>e.stopPropagation()}
+                        >{block.right}</div>
+                      </div>
                     {/if}
                   </div>
                 </div>
@@ -830,6 +880,9 @@
   .b-header .b-header-sub { font-size:.82rem; opacity:.85; margin-top:4px; }
   .b-text { padding:16px 32px; line-height:1.7; color:#333; white-space:pre-wrap; outline:none; min-height:40px; cursor:text; }
   .b-text:focus { background:#fffbeb; outline:1px dashed #f59e0b; outline-offset:-1px; }
+  .editable-inline { outline:none; cursor:text; border-radius:3px; transition:background 0.15s; }
+  .editable-inline:hover { background:rgba(99,102,241,0.06); }
+  .editable-inline:focus { background:#fffbeb; outline:1px dashed #f59e0b; outline-offset:2px; }
   .b-infobox { margin:12px 32px; padding:14px 18px; border-radius:8px; font-size:.82rem; line-height:1.6; border-left:4px solid; }
   .b-infobox.style-blue { background:#eff6ff; border-color:#2563eb; color:#1e40af; }
   .b-infobox.style-green { background:#f0fdf4; border-color:#10b981; color:#166534; }
