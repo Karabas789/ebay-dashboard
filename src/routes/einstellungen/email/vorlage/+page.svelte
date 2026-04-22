@@ -84,8 +84,6 @@
       const block = blocks.find(b => b.id === selectedBlockId);
       if (block && (block.type === 'text' || block.type === 'infobox')) {
         initRichEditor(block.id, block.content, 'content');
-      } else if (block && block.type === 'header') {
-        initRichEditor(block.id, block.title, 'title');
       } else if (block && block.type === 'columns') {
         initRichEditor(block.id, block.left, 'left');
       } else if (block && block.type === 'signature') {
@@ -190,7 +188,7 @@
 
   function blockToHtml(b) {
     switch(b.type) {
-      case 'header': { const r=b.borderRadius?'border-radius:12px 12px 0 0;':''; return `<div style="background:${b.bgColor};color:${b.textColor};padding:28px 32px;text-align:center;${r}">`+(b.icon?`<div style="font-size:2.2rem;margin-bottom:8px">${b.icon}</div>`:'')+`<h2 style="margin:0;font-size:1.3rem;font-weight:700">{@html block.title}</h2>`+(b.subtitle?`<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">${b.subtitle}</div>`:'')+`</div>`; }
+      case 'header': { const r=b.borderRadius?'border-radius:12px 12px 0 0;':''; return `<div style="background:${b.bgColor};color:${b.textColor};padding:28px 32px;text-align:center;${r}">`+(b.icon?`<div style="font-size:2.2rem;margin-bottom:8px">${b.icon}</div>`:'')+`<h2 style="margin:0;font-size:1.3rem;font-weight:700">{block.title}</h2>`+(b.subtitle?`<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">${b.subtitle}</div>`:'')+`</div>`; }
       case 'text': return `<div style="padding:16px 32px;font-size:15px;line-height:${b.lineHeight||'1.7'};color:#333">${b.content}</div>`;
       case 'infobox': { const cs={blue:['#eff6ff','#2563eb','#1e40af'],green:['#f0fdf4','#10b981','#166534'],yellow:['#fffbeb','#f59e0b','#92400e'],red:['#fef2f2','#ef4444','#991b1b']}; const c=cs[b.style]||cs.blue; return `<div style="margin:12px 32px;padding:14px 18px;border-radius:8px;background:${c[0]};border-left:4px solid ${c[1]};color:${c[2]};font-size:14px;line-height:1.6">${b.content}</div>`; }
       case 'amount': return `<div style="margin:16px 32px;padding:20px;text-align:center;border-radius:10px;background:${b.bgColor};border-left:4px solid ${b.accentColor}"><div style="font-size:13px;color:${b.accentColor};opacity:0.7">${b.label}</div><div style="font-size:1.8rem;font-weight:700;color:${b.accentColor}">${b.value}</div>`+(b.sublabel?`<div style="font-size:12px;opacity:0.6;margin-top:4px">${b.sublabel}</div>`:'')+`</div>`;
@@ -400,8 +398,7 @@
 
           {#if selectedBlock.type==='header'}
             <div class="vb-ps"><div class="vb-ps-t">Inhalt</div>
-              <div class="vb-pr"><label>Icon</label><input value={selectedBlock.icon||''} oninput={(e)=>updateBlock(selectedBlock.id,'icon',e.target.value)}/></div>
-              <div class="vb-pr"><label>Untertitel</label><input value={selectedBlock.subtitle||''} oninput={(e)=>updateBlock(selectedBlock.id,'subtitle',e.target.value)}/></div>
+              <div class="vb-pr"><label>Icon + Titel</label><input value={(selectedBlock.icon||'') + ' ' + (selectedBlock.title||'')} oninput={(e)=>{const v=e.target.value; const emoji=v.match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F?)/u); if(emoji&&emoji[0]){updateBlock(selectedBlock.id,'icon',emoji[0]);updateBlock(selectedBlock.id,'title',v.slice(emoji[0].length).trim())}else{updateBlock(selectedBlock.id,'icon','');updateBlock(selectedBlock.id,'title',v.trim())}}} style="font-weight:700"/></div>
             </div>
             <div class="vb-ps"><div class="vb-ps-t">Titel bearbeiten</div>
               <div class="ed-toolbar">
