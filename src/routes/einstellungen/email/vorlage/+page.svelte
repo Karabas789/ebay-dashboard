@@ -591,7 +591,7 @@
   .vb-img-ph { background:#f7f8fa; border:2px dashed #e5e7eb; border-radius:8px; padding:28px; color:#999; font-size:0.8rem; }
 
   /* Properties */
-  .vb-props { width:320px; background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; flex-shrink:0; }
+  .vb-props { width:420px; background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; flex-shrink:0; }
   .vb-props-hdr { padding:16px 18px; border-bottom:1px solid var(--border); }
   .vb-props-title { font-size:0.88rem; font-weight:700; }
   .vb-props-type { font-size:0.72rem; color:var(--text2); margin-top:2px; }
