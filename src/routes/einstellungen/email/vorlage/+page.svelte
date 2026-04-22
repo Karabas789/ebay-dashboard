@@ -186,18 +186,23 @@
     showToast('✅ Vorlage geladen');
   }
 
+  function cleanHtmlContent(html) {
+  return (html || '')
+    .replace(/<p>/gi, '<p style="margin:0 0 2px 0">')
+    .replace(/<div>/gi, '<div style="margin:0">');
+  }
   function blockToHtml(b) {
     switch(b.type) {
       case 'header': { const r=b.borderRadius?'border-radius:12px 12px 0 0;':''; return `<div style="background:${b.bgColor};color:${b.textColor};padding:28px 32px;text-align:center;${r}">`+(b.icon?`<div style="font-size:2.2rem;margin-bottom:8px">${b.icon}</div>`:'')+`<h2 style="margin:0;font-size:1.3rem;font-weight:900">${b.title}</h2>`+(b.subtitle?`<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">${b.subtitle}</div>`:'')+`</div>`; }
-      case 'text': return `<div style="padding:16px 32px;font-size:15px;line-height:1.7;color:#333">${b.content}</div>`;
-      case 'infobox': { const cs={blue:['#eff6ff','#2563eb','#1e40af'],green:['#f0fdf4','#10b981','#166534'],yellow:['#fffbeb','#f59e0b','#92400e'],red:['#fef2f2','#ef4444','#991b1b']}; const c=cs[b.style]||cs.blue; return `<div style="margin:12px 32px;padding:14px 18px;border-radius:8px;background:${c[0]};border-left:4px solid ${c[1]};color:${c[2]};font-size:14px;line-height:1.6">${b.content}</div>`; }
+      case 'text': return `<div style="padding:16px 32px;font-size:15px;line-height:${b.lineHeight||'1.7'};color:#333">${cleanHtmlContent(b.content)}</div>`;
+      case 'infobox': { const cs={blue:['#eff6ff','#2563eb','#1e40af'],green:['#f0fdf4','#10b981','#166534'],yellow:['#fffbeb','#f59e0b','#92400e'],red:['#fef2f2','#ef4444','#991b1b']}; const c=cs[b.style]||cs.blue; return `<div style="margin:12px 32px;padding:14px 18px;border-radius:8px;background:${c[0]};border-left:4px solid ${c[1]};color:${c[2]};font-size:14px;line-height:1.6">${cleanHtmlContent(b.content)}</div>`;
       case 'amount': return `<div style="margin:16px 32px;padding:20px;text-align:center;border-radius:10px;background:${b.bgColor};border-left:4px solid ${b.accentColor}"><div style="font-size:13px;color:${b.accentColor};opacity:0.7">${b.label}</div><div style="font-size:1.8rem;font-weight:700;color:${b.accentColor}">${b.value}</div>`+(b.sublabel?`<div style="font-size:12px;opacity:0.6;margin-top:4px">${b.sublabel}</div>`:'')+`</div>`;
       case 'button': return `<div style="padding:16px 32px;text-align:center"><a href="${b.url}" style="display:inline-block;padding:13px 36px;border-radius:${b.borderRadius}px;background:${b.bgColor};color:${b.textColor};font-weight:700;font-size:15px;text-decoration:none">${b.text}</a></div>`;
       case 'divider': { const h=b.style==='bold'?'2px':'1px'; const dc=b.style==='colored'?'#2563eb':'#e2e5ea'; return `<div style="padding:8px 32px"><hr style="border:none;height:${h};background:${dc}"></div>`; }
       case 'spacer': return `<div style="height:${b.height}px"></div>`;
       case 'image': return b.url?`<div style="padding:8px 32px;text-align:center"><img src="${b.url}" alt="${b.alt}" style="max-width:${b.maxWidth};height:auto;border-radius:8px"></div>`:'';
       case 'signature': { const d=(b.details||'').replace(/\n/g,'<br>'); let html=`<div style="margin:8px 32px;padding:16px 0;border-top:1px solid #e2e5ea;font-size:13px;color:#555;line-height:1.5"><strong style="font-size:14px;color:#1a1d23">${b.name}</strong><br>${d}<br>`+(b.phone?`📞 ${b.phone}<br>`:'')+(b.email?`📧 <a href="mailto:${b.email}" style="color:#555">${b.email}</a><br>`:''); if(b.logoUrl){html+=`<img src="${b.logoUrl}" width="${b.logoWidth||120}" style="max-width:100%;height:auto;display:block;margin-top:8px" alt="Logo">`}; html+=`</div>`; return html; }
-      case 'columns': return `<table width="100%" cellpadding="0" cellspacing="0" style="padding:12px 32px"><tr><td width="48%" style="padding:14px;background:#f7f8fa;border-radius:8px;vertical-align:top">${b.left}</td><td width="4%"></td><td width="48%" style="padding:14px;background:#f7f8fa;border-radius:8px;vertical-align:top">${b.right}</td></tr></table>`;
+      case 'columns': return `<table width="100%" cellpadding="0" cellspacing="0" style="padding:12px 32px"><tr><td width="48%" style="padding:14px;background:#f7f8fa;border-radius:8px;vertical-align:top">${cleanHtmlContent(b.left)}</td><td width="4%"></td><td width="48%" style="padding:14px;background:#f7f8fa;border-radius:8px;vertical-align:top">${cleanHtmlContent(b.right)}</td></tr></table>`;
       default: return '';
     }
   }
