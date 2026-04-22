@@ -33,7 +33,7 @@
     { key:'{{artikelname}}', label:'Artikelname' },
     { key:'{{variante}}', label:'Variante' },
   ];
-  const editorFarben = ['#000000','#333333','#666666','#999999','#1d4ed8','#2563eb','#3b82f6','#60a5fa','#dc2626','#ef4444','#16a34a','#22c55e','#d97706','#f59e0b','#9333ea','#a855f7'];
+  const editorFarben = ['#ffffff','#000000','#333333','#666666','#999999','#1d4ed8','#2563eb','#3b82f6','#60a5fa','#dc2626','#ef4444','#16a34a','#22c55e','#d97706','#f59e0b','#9333ea','#a855f7'];
   const fontSizes = [
     { label:'10px', value:'1' },{ label:'13px', value:'2' },{ label:'16px', value:'3' },
     { label:'18px', value:'4' },{ label:'22px', value:'5' },{ label:'28px', value:'6' },{ label:'36px', value:'7' },
@@ -124,6 +124,9 @@
       const html = richEditorEl.innerHTML;
       if (richEditorField === 'details') {
         updateBlock(richEditorBlockId, 'details', html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''));
+      } else if (richEditorField === 'title') {
+        // Titel als HTML speichern (für Formatierung)
+        updateBlock(richEditorBlockId, 'title', html);
       } else {
         updateBlock(richEditorBlockId, richEditorField, html);
       }
@@ -187,7 +190,7 @@
 
   function blockToHtml(b) {
     switch(b.type) {
-      case 'header': { const r=b.borderRadius?'border-radius:12px 12px 0 0;':''; return `<div style="background:${b.bgColor};color:${b.textColor};padding:28px 32px;text-align:center;${r}">`+(b.icon?`<div style="font-size:2.2rem;margin-bottom:8px">${b.icon}</div>`:'')+`<h2 style="margin:0;font-size:1.3rem;font-weight:700">${b.title}</h2>`+(b.subtitle?`<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">${b.subtitle}</div>`:'')+`</div>`; }
+      case 'header': { const r=b.borderRadius?'border-radius:12px 12px 0 0;':''; return `<div style="background:${b.bgColor};color:${b.textColor};padding:28px 32px;text-align:center;${r}">`+(b.icon?`<div style="font-size:2.2rem;margin-bottom:8px">${b.icon}</div>`:'')+`<h2 style="margin:0;font-size:1.3rem;font-weight:700">{@html block.title}</h2>`+(b.subtitle?`<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">${b.subtitle}</div>`:'')+`</div>`; }
       case 'text': return `<div style="padding:16px 32px;font-size:15px;line-height:${b.lineHeight||'1.7'};color:#333">${b.content}</div>`;
       case 'infobox': { const cs={blue:['#eff6ff','#2563eb','#1e40af'],green:['#f0fdf4','#10b981','#166534'],yellow:['#fffbeb','#f59e0b','#92400e'],red:['#fef2f2','#ef4444','#991b1b']}; const c=cs[b.style]||cs.blue; return `<div style="margin:12px 32px;padding:14px 18px;border-radius:8px;background:${c[0]};border-left:4px solid ${c[1]};color:${c[2]};font-size:14px;line-height:1.6">${b.content}</div>`; }
       case 'amount': return `<div style="margin:16px 32px;padding:20px;text-align:center;border-radius:10px;background:${b.bgColor};border-left:4px solid ${b.accentColor}"><div style="font-size:13px;color:${b.accentColor};opacity:0.7">${b.label}</div><div style="font-size:1.8rem;font-weight:700;color:${b.accentColor}">${b.value}</div>`+(b.sublabel?`<div style="font-size:12px;opacity:0.6;margin-top:4px">${b.sublabel}</div>`:'')+`</div>`;
@@ -350,7 +353,7 @@
                       <h2 style="margin:0;font-size:1.3rem;font-weight:700">{block.title}</h2>
                       {#if block.subtitle}<div style="font-size:0.82rem;opacity:0.85;margin-top:4px">{block.subtitle}</div>{/if}
                     </div>
-                  {:else if block.type==='text'}<div class="b-text">{@html block.content}</div>
+                  {:else if block.type==='text'}<div class="b-text" style="line-height:{block.lineHeight||'1.7'}">{@html block.content}</div>
                   {:else if block.type==='infobox'}<div class="b-infobox style-{block.style}">{@html block.content}</div>
                   {:else if block.type==='amount'}
                     <div class="b-amount" style="background:{block.bgColor};border-color:{block.accentColor}">
@@ -713,7 +716,7 @@
   .ed-dd{position:relative}
   .ed-drop{position:absolute;top:100%;left:0;z-index:30;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;box-shadow:0 4px 16px rgba(0,0,0,0.12);margin-top:4px}
   .ed-cgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;width:124px}
-  .ed-cbtn{width:26px;height:26px;border:2px solid transparent;border-radius:4px;cursor:pointer;transition:all 0.1s}
+  .ed-cbtn{width:26px;height:26px;border:2px solid var(--border);border-radius:4px;cursor:pointer;transition:all 0.1s}
   .ed-cbtn:hover{border-color:var(--text);transform:scale(1.12)}
   .ed-link{display:flex;gap:4px;align-items:center;width:240px;padding:8px}
   .ed-linkin{flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:0.78rem;color:var(--text);background:var(--surface);outline:none}
