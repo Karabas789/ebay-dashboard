@@ -17,6 +17,7 @@
   // WYSIWYG
   let richEditorEl = $state(null);
   let richEditorBlockId = $state(null);
+  let richEditorField = $state('content');
   let showColorPicker = $state(false);
   let showLinkDialog = $state(false);
   let linkInputUrl = $state('');
@@ -42,11 +43,15 @@
   ];
 
   const fontSizes = [
-    { label:'Klein', value:'2' },
-    { label:'Normal', value:'3' },
-    { label:'Mittel', value:'4' },
-    { label:'Groß', value:'5' },
-    { label:'Sehr groß', value:'6' },
+    { label:'8px', value:'1' },
+    { label:'10px', value:'1' },
+    { label:'12px', value:'1' },
+    { label:'14px', value:'2' },
+    { label:'16px', value:'3' },
+    { label:'18px', value:'4' },
+    { label:'22px', value:'5' },
+    { label:'28px', value:'6' },
+    { label:'36px', value:'7' },
   ];
 
   const blockDefaults = {
@@ -99,9 +104,13 @@
     if (selectedBlockId) {
       const block = blocks.find(b => b.id === selectedBlockId);
       if (block && (block.type === 'text' || block.type === 'infobox')) {
-        initRichEditor(block.id, block.content);
+        initRichEditor(block.id, block.content, 'content');
+      } else if (block && block.type === 'columns') {
+        initRichEditor(block.id, block.left, 'left');
+      } else if (block && block.type === 'signature') {
+        const htmlDetails = (block.details || '').replace(/\n/g, '<br>');
+        initRichEditor(block.id, htmlDetails, 'details');
       } else { richEditorBlockId = null; }
-    } else { richEditorBlockId = null; }
   }
 
   function moveBlock(id, dir) {
@@ -128,10 +137,24 @@
 
   // WYSIWYG
   function richEditorCmd(cmd, val) { richEditorEl?.focus(); document.execCommand(cmd, false, val||null); syncRichEditor(); }
-  function syncRichEditor() { if (richEditorEl && richEditorBlockId) updateBlock(richEditorBlockId, 'content', richEditorEl.innerHTML); }
-  function initRichEditor(blockId, content) {
-    richEditorBlockId = blockId; showHtmlMode = false; showColorPicker = false; showLinkDialog = false;
+  function syncRichEditor() {
+    if (richEditorEl && richEditorBlockId) {
+      const html = richEditorEl.innerHTML;
+      if (richEditorField === 'details') {
+        updateBlock(richEditorBlockId, 'details', html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ''));
+      } else {
+        updateBlock(richEditorBlockId, richEditorField, html);
+      }
+    }
+  }
+  function initRichEditor(blockId, content, field) {
+    richEditorBlockId = blockId; richEditorField = field || 'content';
+    showHtmlMode = false; showColorPicker = false; showLinkDialog = false;
     setTimeout(() => { if (richEditorEl) richEditorEl.innerHTML = content || ''; }, 30);
+  }
+  function switchColumnEditor(field) {
+    if (!selectedBlock || selectedBlock.type !== 'columns') return;
+    initRichEditor(selectedBlock.id, field === 'left' ? selectedBlock.left : selectedBlock.right, field);
   }
   function setEditorColor(c) { richEditorCmd('foreColor', c); showColorPicker = false; }
   function insertEditorLink() {
@@ -144,10 +167,11 @@
       if (richEditorBlockId) updateBlock(richEditorBlockId, 'content', htmlRawText);
       if (richEditorEl) richEditorEl.innerHTML = htmlRawText;
       showHtmlMode = false;
-    } else { htmlRawText = selectedBlock?.content || ''; showHtmlMode = true; }
+    } else { const block = blocks.find(b => b.id === richEditorBlockId);
+      htmlRawText = block ? (block[richEditorField] || '') : ''; showHtmlMode = true; }
   }
   function insertVariable(key) {
-    if (showHtmlMode) { htmlRawText += key; if (richEditorBlockId) updateBlock(richEditorBlockId, 'content', htmlRawText); return; }
+    if (showHtmlMode) { htmlRawText += key; if (richEditorBlockId) updateBlock(richEditorBlockId, richEditorField, htmlRawText); return; }
     richEditorEl?.focus(); document.execCommand('insertHTML', false, '<span>'+key+'</span>'); syncRichEditor();
   }
 
@@ -393,7 +417,7 @@
                       {#if block.logoUrl}<img src={block.logoUrl} width={block.logoWidth||120} style="max-width:100%;height:auto;display:block;margin-top:8px" alt="Logo" />{/if}
                     </div>
                   {:else if block.type==='columns'}
-                    <div class="b-columns"><div class="b-col">{block.left}</div><div class="b-col">{block.right}</div></div>
+                    <div class="b-columns"><div class="b-col">{@html block.left}</div><div class="b-col">{@html block.right}</div></div>
                   {/if}
                 </div>
               {/each}
@@ -507,7 +531,43 @@
           {:else if selectedBlock.type==='signature'}
             <div class="vb-ps"><div class="vb-ps-t">Firma</div>
               <div class="vb-pr"><label>Name</label><input value={selectedBlock.name} oninput={(e)=>updateBlock(selectedBlock.id,'name',e.target.value)}/></div>
-              <div class="vb-pr"><label>Details</label><textarea rows="4" oninput={(e)=>updateBlock(selectedBlock.id,'details',e.target.value)}>{selectedBlock.details}</textarea></div>
+              {:else if selectedBlock.type==='signature'}
+            <div class="vb-ps"><div class="vb-ps-t">Firma</div>
+              <div class="vb-pr"><label>Name</label><input value={selectedBlock.name} oninput={(e)=>updateBlock(selectedBlock.id,'name',e.target.value)}/></div>
+              <div class="vb-pr"><label>Telefon</label><input value={selectedBlock.phone||''} oninput={(e)=>updateBlock(selectedBlock.id,'phone',e.target.value)}/></div>
+              <div class="vb-pr"><label>E-Mail</label><input value={selectedBlock.email||''} oninput={(e)=>updateBlock(selectedBlock.id,'email',e.target.value)}/></div>
+            </div>
+            <div class="vb-ps"><div class="vb-ps-t">Details bearbeiten</div>
+              <!-- WYSIWYG Toolbar (kompakt) -->
+              <div class="ed-toolbar">
+                <button class="ed-btn" onclick={()=>richEditorCmd('bold')} title="Fett"><strong>F</strong></button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('italic')} title="Kursiv"><em>K</em></button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('underline')} title="Unterstrichen"><u>U</u></button>
+                <span class="ed-sep"></span>
+                <select class="ed-select" onchange={(e)=>{richEditorCmd('fontSize',e.target.value);e.target.value='';}} title="Schriftgröße">
+                  <option value="" disabled selected>Aa</option>
+                  {#each fontSizes as fs}<option value={fs.value}>{fs.label}</option>{/each}
+                </select>
+                <span class="ed-sep"></span>
+                <div class="ed-dd">
+                  <button class="ed-btn" onclick={()=>{showColorPicker=!showColorPicker;showLinkDialog=false}} title="Farbe">🎨</button>
+                  {#if showColorPicker}<div class="ed-drop ed-cgrid">{#each editorFarben as f}<button class="ed-cbtn" style="background:{f}" onclick={()=>setEditorColor(f)}></button>{/each}</div>{/if}
+                </div>
+                <span class="ed-sep"></span>
+                <button class="ed-btn" class:ed-act={showHtmlMode} onclick={toggleHtmlMode} title="HTML">&lt;/&gt;</button>
+              </div>
+              <div class="ed-vars">{#each variablen as v}<button class="ed-vchip" onclick={()=>insertVariable(v.key)}>{v.key}</button>{/each}</div>
+              {#if showHtmlMode}
+                <textarea class="ed-html" rows="6" bind:value={htmlRawText} oninput={()=>{if(richEditorBlockId)updateBlock(richEditorBlockId,'details',htmlRawText)}}></textarea>
+              {:else}
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <div class="ed-rich" style="min-height:120px" bind:this={richEditorEl} contenteditable="true" oninput={syncRichEditor} onblur={syncRichEditor}></div>
+              {/if}
+            </div>
+            <div class="vb-ps"><div class="vb-ps-t">Logo</div>
+              <div class="vb-pr"><label>Logo-URL</label><input value={selectedBlock.logoUrl||''} oninput={(e)=>updateBlock(selectedBlock.id,'logoUrl',e.target.value)} placeholder="https://..."/></div>
+              <div class="vb-pr"><label>Breite (px)</label><input type="number" value={selectedBlock.logoWidth||120} oninput={(e)=>updateBlock(selectedBlock.id,'logoWidth',e.target.value)}/></div>
+            </div>
               <div class="vb-pr"><label>Telefon</label><input value={selectedBlock.phone||''} oninput={(e)=>updateBlock(selectedBlock.id,'phone',e.target.value)}/></div>
               <div class="vb-pr"><label>E-Mail</label><input value={selectedBlock.email||''} oninput={(e)=>updateBlock(selectedBlock.id,'email',e.target.value)}/></div>
             </div>
@@ -517,9 +577,47 @@
             </div>
 
           {:else if selectedBlock.type==='columns'}
-            <div class="vb-ps"><div class="vb-ps-t">Spalten</div>
-              <div class="vb-pr"><label>Links</label><textarea rows="3" oninput={(e)=>updateBlock(selectedBlock.id,'left',e.target.value)}>{selectedBlock.left}</textarea></div>
-              <div class="vb-pr"><label>Rechts</label><textarea rows="3" oninput={(e)=>updateBlock(selectedBlock.id,'right',e.target.value)}>{selectedBlock.right}</textarea></div>
+            <div class="vb-ps"><div class="vb-ps-t">Spalte wählen</div>
+              <div class="vb-div-btns">
+                <button class="vb-div-b" class:act={richEditorField==='left'} onclick={()=>switchColumnEditor('left')}>⬅ Links</button>
+                <button class="vb-div-b" class:act={richEditorField==='right'} onclick={()=>switchColumnEditor('right')}>Rechts ➡</button>
+              </div>
+            </div>
+            <div class="vb-ps"><div class="vb-ps-t">{richEditorField === 'left' ? 'Linke' : 'Rechte'} Spalte</div>
+              <div class="ed-toolbar">
+                <button class="ed-btn" onclick={()=>richEditorCmd('bold')} title="Fett"><strong>F</strong></button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('italic')} title="Kursiv"><em>K</em></button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('underline')} title="Unterstrichen"><u>U</u></button>
+                <span class="ed-sep"></span>
+                <select class="ed-select" onchange={(e)=>{richEditorCmd('fontSize',e.target.value);e.target.value='';}} title="Schriftgröße">
+                  <option value="" disabled selected>Aa</option>
+                  {#each fontSizes as fs}<option value={fs.value}>{fs.label}</option>{/each}
+                </select>
+                <span class="ed-sep"></span>
+                <div class="ed-dd">
+                  <button class="ed-btn" onclick={()=>{showColorPicker=!showColorPicker;showLinkDialog=false}} title="Farbe">🎨</button>
+                  {#if showColorPicker}<div class="ed-drop ed-cgrid">{#each editorFarben as f}<button class="ed-cbtn" style="background:{f}" onclick={()=>setEditorColor(f)}></button>{/each}</div>{/if}
+                </div>
+                <span class="ed-sep"></span>
+                <button class="ed-btn" onclick={()=>richEditorCmd('justifyLeft')} title="Links">⬅</button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('justifyCenter')} title="Mitte">⬌</button>
+                <button class="ed-btn" onclick={()=>richEditorCmd('justifyRight')} title="Rechts">➡</button>
+                <span class="ed-sep"></span>
+                <div class="ed-dd">
+                  <button class="ed-btn" onclick={()=>{showLinkDialog=!showLinkDialog;showColorPicker=false}} title="Link">🔗</button>
+                  {#if showLinkDialog}<div class="ed-drop ed-link"><input class="ed-linkin" bind:value={linkInputUrl} placeholder="https://..." onkeydown={(e)=>e.key==='Enter'&&insertEditorLink()}/><button class="ed-linkgo" onclick={insertEditorLink}>OK</button></div>{/if}
+                </div>
+                <button class="ed-btn" onclick={()=>richEditorCmd('removeFormat')} title="Format entfernen">⊘</button>
+                <span class="ed-sep"></span>
+                <button class="ed-btn" class:ed-act={showHtmlMode} onclick={toggleHtmlMode} title="HTML">&lt;/&gt;</button>
+              </div>
+              <div class="ed-vars">{#each variablen as v}<button class="ed-vchip" onclick={()=>insertVariable(v.key)}>{v.key}</button>{/each}</div>
+              {#if showHtmlMode}
+                <textarea class="ed-html" rows="8" bind:value={htmlRawText} oninput={()=>{if(richEditorBlockId)updateBlock(richEditorBlockId,richEditorField,htmlRawText)}}></textarea>
+              {:else}
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+                <div class="ed-rich" style="min-height:160px" bind:this={richEditorEl} contenteditable="true" oninput={syncRichEditor} onblur={syncRichEditor}></div>
+              {/if}
             </div>
           {/if}
         {:else}
