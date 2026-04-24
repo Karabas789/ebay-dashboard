@@ -967,7 +967,7 @@
 
 
 <style>
-  .page-container { padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .page-container { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .page-hdr { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; flex-wrap:wrap; }
   .page-title { font-size:1.3rem; font-weight:700; color:var(--text); }
   .page-sub { font-size:0.8rem; color:var(--text2); margin-top:2px; }
