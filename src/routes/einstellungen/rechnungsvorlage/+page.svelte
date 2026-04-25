@@ -77,10 +77,9 @@
   }
   function scheduleAutoSave() {
     hatUngespeicherteAenderungen = true;
-    saveToLocalStorage();
-    clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(autoSave, 2000);
-  }
+    saveToLocalStorage();   // localStorage-Draft bleibt zur Wiederherstellung
+    // Auto-Save zur DB deaktiviert — nur noch über expliziten "Speichern"-Button
+}
   async function autoSave() {
     if (!$currentUser) return;
     collectDom();
@@ -94,11 +93,10 @@
     } catch(e) { autoSaveStatus = ''; }
   }
   function saveNow() {
-    if (!hatUngespeicherteAenderungen) return;
-    clearTimeout(autoSaveTimer);
-    saveToLocalStorage();
-    if ($currentUser) apiCall('vorlage-speichern', { user_id: $currentUser.id, vorlage: v }).catch(()=>{});
-    hatUngespeicherteAenderungen = false;
+    // Bei Navigation/Tab-Wechsel/Browser-Schließen NUR LocalStorage —
+    // KEIN automatisches Speichern in DB. Verhindert Datenverlust durch
+    // versehentliches Verlassen oder unvollständige Daten.
+    if (hatUngespeicherteAenderungen) saveToLocalStorage();
   }
 
   onMount(async () => {
